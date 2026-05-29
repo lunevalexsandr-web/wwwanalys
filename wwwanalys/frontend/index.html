@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WWWAnalys - Анализ производства</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">WWWAnalys</a>
+            <div class="navbar-nav ms-auto">
+                <span id="user-info" class="navbar-text"></span>
+                <button id="logout-btn" class="btn btn-outline-light ms-2" style="display: none;">Выйти</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Меню</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        <a href="#" class="list-group-item list-group-item-action" data-section="login">Вход</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-section="analysis-types" style="display: none;">Типы анализов</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-section="process-logs" style="display: none;">Журнал процессов</a>
+                        <a href="#" class="list-group-item list-group-item-action" data-section="users" style="display: none;">Пользователи</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div id="login-section" class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Вход в систему</h5>
+                        <form id="login-form">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">Имя пользователя</label>
+                                <input type="text" class="form-control" id="username" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Пароль</label>
+                                <input type="password" class="form-control" id="password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Войти</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="analysis-types-section" class="card" style="display: none;">
+                    <div class="card-body">
+                        <h5 class="card-title">Типы анализов</h5>
+                        <div class="mb-3">
+                            <button id="create-analysis-type-btn" class="btn btn-primary">Создать тип анализа</button>
+                        </div>
+                        <div id="analysis-types-list"></div>
+                    </div>
+                </div>
+
+                <div id="process-logs-section" class="card" style="display: none;">
+                    <div class="card-body">
+                        <h5 class="card-title">Журнал процессов</h5>
+                        <div class="mb-3">
+                            <button id="create-process-log-btn" class="btn btn-primary">Создать запись</button>
+                        </div>
+                        <div id="process-logs-list"></div>
+                    </div>
+                </div>
+
+                <div id="users-section" class="card" style="display: none;">
+                    <div class="card-body">
+                        <h5 class="card-title">Пользователи</h5>
+                        <div class="mb-3">
+                            <button id="create-user-btn" class="btn btn-primary">Создать пользователя</button>
+                        </div>
+                        <div id="users-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальные окна -->
+    <div class="modal fade" id="create-analysis-type-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Создать тип анализа</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-analysis-type-form">
+                        <div class="mb-3">
+                            <label for="analysis-type-name" class="form-label">Название</label>
+                            <input type="text" class="form-control" id="analysis-type-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="analysis-type-description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="analysis-type-description" rows="3"></textarea>
+                        </div>
+                        <div id="indicators-container">
+                            <h6>Индикаторы</h6>
+                            <div class="mb-3">
+                                <button type="button" id="add-indicator-btn" class="btn btn-sm btn-outline-primary">Добавить индикатор</button>
+                            </div>
+                            <div id="indicators-list"></div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="save-analysis-type-btn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="create-process-log-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Создать запись журнала</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-process-log-form">
+                        <div class="mb-3">
+                            <label for="process-log-analysis-type" class="form-label">Тип анализа</label>
+                            <select class="form-select" id="process-log-analysis-type" required>
+                                <option value="">Выберите тип анализа</option>
+                            </select>
+                        </div>
+                        <div id="indicator-values-container">
+                            <h6>Значения индикаторов</h6>
+                            <div id="indicator-values-list"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="process-log-notes" class="form-label">Примечания</label>
+                            <textarea class="form-control" id="process-log-notes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" id="save-process-log-btn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
