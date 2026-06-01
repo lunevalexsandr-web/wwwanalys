@@ -16,7 +16,7 @@ class Indicator(IndicatorBase):
     analysis_type_id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class AnalysisTypeBase(BaseModel):
     name: str
@@ -28,12 +28,14 @@ class AnalysisTypeCreate(AnalysisTypeBase):
 class AnalysisTypeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class AnalysisType(AnalysisTypeBase):
     id: int
     created_at: datetime
     created_by: int
+    is_active: bool
     indicators: List[Indicator] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True

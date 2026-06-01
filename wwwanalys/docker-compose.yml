@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15
@@ -8,9 +6,43 @@ services:
       POSTGRES_USER: wwwanalys_user
       POSTGRES_PASSWORD: wwwanalys_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wwwanalys_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    image: las84/wwwanalys-backend:latest
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://wwwanalys_user:wwwanalys_password@db:5432/wwwanalys
+      SECRET_KEY: your-secret-key-here
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "python seed.py && uvicorn main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./frontend
+    image: las84/wwwanalys-frontend:latest
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      VITE_BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   postgres_data:

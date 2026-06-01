@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 def verify_password(plain_password, hashed_password):

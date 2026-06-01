@@ -1,42 +1,43 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-from app.models.process_log import Status
+from enum import Enum
+
+class StatusEnum(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class IndicatorValueCreate(BaseModel):
+    indicator_id: int
+    value: float
+
+class IndicatorValueSchema(BaseModel):
+    indicator_id: int
+    value: float
+    is_normal: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
 
 class ProcessLogBase(BaseModel):
+    batch_number: str
     analysis_type_id: int
-    status: Status = Status.PENDING
+    status: StatusEnum = StatusEnum.PENDING
     notes: Optional[str] = None
 
 class ProcessLogCreate(ProcessLogBase):
-    pass
+    indicator_values: List[IndicatorValueCreate] = []
 
 class ProcessLogUpdate(BaseModel):
-    status: Optional[Status] = None
+    status: Optional[StatusEnum] = None
     notes: Optional[str] = None
-
-class IndicatorValueBase(BaseModel):
-    indicator_id: int
-    value: float
-    notes: Optional[str] = None
-
-class IndicatorValueCreate(IndicatorValueBase):
-    pass
-
-class IndicatorValue(IndicatorValueBase):
-    id: int
-    process_log_id: int
-    measured_at: datetime
-    
-    class Config:
-        orm_mode = True
 
 class ProcessLog(ProcessLogBase):
     id: int
-    user_id: int
-    started_at: datetime
+    created_at: datetime
     completed_at: Optional[datetime] = None
-    indicator_values: List[IndicatorValue] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True

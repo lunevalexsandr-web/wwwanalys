@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from datetime import datetime
@@ -11,6 +11,7 @@ class AnalysisType(Base):
     description = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"))
+    is_active = Column(Boolean, default=True)
     
     # Связь с моделью User
     creator = relationship("User", back_populates="created_analysis_types")

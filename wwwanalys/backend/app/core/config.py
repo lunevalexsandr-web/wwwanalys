@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -9,5 +9,6 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

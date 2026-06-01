@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from datetime import datetime
@@ -10,6 +10,7 @@ class IndicatorValue(Base):
     process_log_id = Column(Integer, ForeignKey("process_logs.id"))
     indicator_id = Column(Integer, ForeignKey("indicators.id"))
     value = Column(Float)
+    is_normal = Column(Boolean, default=True)
     measured_at = Column(DateTime, default=datetime.utcnow)
     notes = Column(String)
     

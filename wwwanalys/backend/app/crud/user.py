@@ -32,7 +32,7 @@ def create_user(db: Session, user: UserCreate):
 def update_user(db: Session, user_id: int, user: UserUpdate):
     db_user = get_user(db, user_id=user_id)
     if db_user:
-        update_data = user.dict(exclude_unset=True)
+        update_data = user.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_user, field, value)
         db.commit()
