@@ -14,10 +14,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean 
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen d-flex align-items-center justify-content-center bg-light">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка...</p>
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Загрузка...</span>
+          </div>
+          <p className="mt-4 text-muted">Загрузка...</p>
         </div>
       </div>
     );
@@ -29,10 +31,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean 
 
   if (adminOnly && !user.is_admin) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Доступ запрещен</h2>
-          <p className="text-gray-600">У вас нет прав администратора для доступа к этой странице.</p>
+      <div className="min-h-screen d-flex align-items-center justify-content-center bg-light">
+        <div className="max-w-md w-full bg-white p-5 rounded shadow">
+          <h2 className="h3 text-danger mb-3">Доступ запрещен</h2>
+          <p className="text-muted">У вас нет прав администратора для доступа к этой страницы.</p>
         </div>
       </div>
     );
@@ -46,10 +48,12 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen d-flex align-items-center justify-content-center bg-light">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Загрузка...</p>
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Загрузка...</span>
+          </div>
+          <p className="mt-4 text-muted">Загрузка...</p>
         </div>
       </div>
     );

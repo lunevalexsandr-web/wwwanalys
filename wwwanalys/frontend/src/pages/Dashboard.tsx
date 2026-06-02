@@ -205,32 +205,32 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-gray-900">WWWAnalys</h1>
+    <div className="min-h-screen bg-light">
+      <header className="bg-white shadow-sm">
+        <div className="container-fluid">
+          <div className="d-flex justify-content-between align-items-center h-16">
+            <div className="d-flex">
+              <div className="flex-shrink-0 d-flex align-items-center">
+                <h1 className="h4 mb-0 text-dark">WWWAnalys</h1>
               </div>
-              <nav className="ml-10 flex space-x-8">
+              <nav className="ms-4 d-flex gap-3">
                 {user?.is_admin && (
                   <a
                     href="/admin"
-                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                    className="text-decoration-none text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm"
                   >
                     Админ-панель
                   </a>
                 )}
               </nav>
             </div>
-            <div className="flex items-center">
-              <span className="mr-4 text-gray-700">
+            <div className="d-flex align-items-center">
+              <span className="me-3 text-dark">
                 {user?.email} ({user?.is_admin ? 'ADMIN' : 'USER'})
               </span>
               <button
                 onClick={logout}
-                className="ml-4 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                className="btn btn-danger"
               >
                 Выйти
               </button>
@@ -239,187 +239,179 @@ const Dashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="border-4 border-dashed border-gray-200 rounded-lg p-6">
-            {/* Tabs */}
-            <div className="mb-6">
-              <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8">
-                  <button
-                    onClick={() => setActiveTab('new-report')}
-                    className={`${activeTab === 'new-report' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
-                  >
-                    Новый отчет
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('history')}
-                    className={`${activeTab === 'history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm`}
-                  >
-                    История отчетов
-                  </button>
-                </nav>
-              </div>
-            </div>
+      <main className="container-fluid py-4">
+        <div className="p-4 border-4 border-dashed border-secondary rounded">
+          {/* Tabs */}
+          <div className="mb-4">
+            <nav className="nav nav-tabs">
+              <button
+                onClick={() => setActiveTab('new-report')}
+                className={`nav-link ${activeTab === 'new-report' ? 'active' : ''}`}
+              >
+                Новый отчет
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`nav-link ${activeTab === 'history' ? 'active' : ''}`}
+              >
+                История отчетов
+              </button>
+            </nav>
+          </div>
 
-            {activeTab === 'new-report' && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Панель внесения анализов</h2>
-                <p className="text-gray-600 mb-6">
-                  Выберите шаблон анализа, заполните показатели и отправьте отчет
-                </p>
+          {activeTab === 'new-report' && (
+            <div>
+              <h2 className="h3 mb-3">Панель внесения анализов</h2>
+              <p className="text-muted mb-4">
+                Выберите шаблон анализа, заполните показатели и отправьте отчет
+              </p>
 
-                {/* Template Selection */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Выберите шаблон анализа
-                  </label>
-                  {templates.length === 0 ? (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <p className="text-yellow-800">
-                        Нет доступных шаблонов. Обратитесь к администратору для создания шаблонов.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <select
-                        value={selectedTemplate?.id || ''}
-                        onChange={(e) => {
-                          const template = templates.find(t => t.id === parseInt(e.target.value));
-                          if (template) handleTemplateSelect(template);
-                        }}
-                        className="block w-full px-4 py-3 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border-2"
-                      >
-                        <option value="" disabled>
-                          -- Выберите шаблон --
-                        </option>
-                        {templates.map((template) => (
-                          <option key={template.id} value={template.id}>
-                            {template.name} ({template.indicators.length} показателей)
-                          </option>
-                        ))}
-                      </select>
-                      
-                      {selectedTemplate && selectedTemplate.description && (
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                          <h4 className="font-medium text-indigo-900">{selectedTemplate.name}</h4>
-                          <p className="text-sm text-indigo-700 mt-1">{selectedTemplate.description}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {selectedTemplate && (
+              {/* Template Selection */}
+              <div className="mb-4">
+                <label className="form-label">Выберите шаблон анализа</label>
+                {templates.length === 0 ? (
+                  <div className="alert alert-warning">
+                    Нет доступных шаблонов. Обратитесь к администратору для создания шаблонов.
+                  </div>
+                ) : (
                   <div>
-                    {/* Batch Number */}
-                    <div className="mb-6">
-                      <label htmlFor="batch-number" className="block text-sm font-medium text-gray-700 mb-2">
-                        Номер партии
-                      </label>
-                      <input
-                        type="text"
-                        id="batch-number"
-                        value={batchNumber}
-                        onChange={(e) => setBatchNumber(e.target.value)}
-                        className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border"
-                        placeholder="Введите номер партии"
-                      />
-                    </div>
+                    <select
+                      value={selectedTemplate?.id || ''}
+                      onChange={(e) => {
+                        const template = templates.find(t => t.id === parseInt(e.target.value));
+                        if (template) handleTemplateSelect(template);
+                      }}
+                      className="form-select"
+                    >
+                      <option value="" disabled>-- Выберите шаблон --</option>
+                      {templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name} ({template.indicators.length} показателей)
+                        </option>
+                      ))}
+                    </select>
+                    
+                    {selectedTemplate && selectedTemplate.description && (
+                      <div className="alert alert-info mt-3">
+                        <h4 className="alert-heading">{selectedTemplate.name}</h4>
+                        <p className="mb-0">{selectedTemplate.description}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                    {/* Form */}
-                    <form onSubmit={handleSubmit}>
-                      <div className="mb-6">
-                        <h3 className="text-lg font-medium text-gray-900 mb-4">
-                          Показатели для анализа: {selectedTemplate.name}
-                        </h3>
-                        
-                        <div className="space-y-4">
-                          {selectedTemplate.indicators.map((indicator) => {
-                            const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
-                            const isOutOfRange = indicatorValue && 
-                                indicator.min_value !== undefined && 
-                                indicator.max_value !== undefined &&
-                                !isNaN(parseFloat(indicatorValue.value as string)) &&
-                                (parseFloat(indicatorValue.value as string) < indicator.min_value || 
-                                 parseFloat(indicatorValue.value as string) > indicator.max_value);
-                            
-                            return (
-                              <div key={indicator.id} className="bg-white p-4 rounded-lg shadow">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                  <div className="md:col-span-1">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                      {indicator.name}, {indicator.unit}
-                                    </label>
-                                    {indicator.min_value !== undefined && indicator.max_value !== undefined && (
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Норма: {indicator.min_value} - {indicator.max_value}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="md:col-span-2">
-                                    {indicatorValue && (
-                                      <input
-                                        type={indicator.type === 'FLOAT' ? 'number' : 'text'}
-                                        value={indicatorValue.value}
-                                        onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
-                                        step={indicator.type === 'FLOAT' ? '0.01' : undefined}
-                                        className={`shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border rounded-md p-2 ${
-                                          isOutOfRange 
-                                            ? 'border-red-300 bg-red-50' 
-                                            : 'border-gray-300'
-                                        }`}
-                                        placeholder={`Введите значение (${indicator.type})`}
-                                      />
-                                    )}
-                                    {isOutOfRange && (
-                                      <p className="text-xs text-red-600 mt-1">
-                                        Значение вне нормы!
-                                      </p>
-                                    )}
+              {selectedTemplate && (
+                <div>
+                  {/* Batch Number */}
+                  <div className="mb-4">
+                    <label htmlFor="batch-number" className="form-label">
+                      Номер партии
+                    </label>
+                    <input
+                      type="text"
+                      id="batch-number"
+                      className="form-control"
+                      value={batchNumber}
+                      onChange={(e) => setBatchNumber(e.target.value)}
+                      placeholder="Введите номер партии"
+                    />
+                  </div>
+
+                  {/* Form */}
+                  <form onSubmit={handleSubmit}>
+                    <div className="mb-4">
+                      <h3 className="h5 mb-3">
+                        Показатели для анализа: {selectedTemplate.name}
+                      </h3>
+                      
+                      <div className="row g-3">
+                        {selectedTemplate.indicators.map((indicator) => {
+                          const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
+                          const isOutOfRange = indicatorValue && 
+                              indicator.min_value !== undefined && 
+                              indicator.max_value !== undefined &&
+                              !isNaN(parseFloat(indicatorValue.value as string)) &&
+                              (parseFloat(indicatorValue.value as string) < indicator.min_value || 
+                               parseFloat(indicatorValue.value as string) > indicator.max_value);
+                          
+                          return (
+                            <div key={indicator.id} className="col-12">
+                              <div className="card">
+                                <div className="card-body">
+                                  <div className="row g-3">
+                                    <div className="col-md-4">
+                                      <label className="form-label">
+                                        {indicator.name}, {indicator.unit}
+                                      </label>
+                                      {indicator.min_value !== undefined && indicator.max_value !== undefined && (
+                                        <small className="text-muted d-block">
+                                          Норма: {indicator.min_value} - {indicator.max_value}
+                                        </small>
+                                      )}
+                                    </div>
+                                    <div className="col-md-8">
+                                      {indicatorValue && (
+                                        <input
+                                          type={indicator.type === 'FLOAT' ? 'number' : 'text'}
+                                          className={`form-control ${isOutOfRange ? 'is-invalid' : ''}`}
+                                          value={indicatorValue.value}
+                                          onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
+                                          step={indicator.type === 'FLOAT' ? '0.01' : undefined}
+                                          placeholder={`Введите значение (${indicator.type})`}
+                                        />
+                                      )}
+                                      {isOutOfRange && (
+                                        <div className="invalid-feedback">
+                                          Значение вне нормы!
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    </div>
 
-                      <div className="flex justify-end">
-                        <button
-                          type="submit"
-                          disabled={isSubmitting}
-                          className="bg-indigo-600 text-white py-2 px-6 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                        >
-                          {isSubmitting ? 'Отправка...' : 'Отправить отчет'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )}
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="btn btn-primary"
+                      >
+                        {isSubmitting ? 'Отправка...' : 'Отправить отчет'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
-                {!templates.length && (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">Нет доступных шаблонов анализа</p>
-                  </div>
-                )}
-              </div>
-            )}
+              {!templates.length && (
+                <div className="text-center py-4">
+                  <p className="text-muted">Нет доступных шаблонов анализа</p>
+                </div>
+              )}
+            </div>
+          )}
 
-            {activeTab === 'history' && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">История отчетов</h2>
-                
-                {/* Filters */}
-                <div className="bg-white p-4 rounded-lg shadow mb-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Фильтры</h3>
-                  <div className="flex flex-wrap items-end gap-4">
-                    <div className="flex-1 min-w-[200px]">
-                      <label className="block text-sm text-gray-600 mb-1">Шаблон</label>
+          {activeTab === 'history' && (
+            <div>
+              <h2 className="h3 mb-3">История отчетов</h2>
+              
+              {/* Filters */}
+              <div className="card mb-4">
+                <div className="card-body">
+                  <h5 className="card-title">Фильтры</h5>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">Шаблон</label>
                       <select
                         value={filterTemplateId || ''}
                         onChange={(e) => setFilterTemplateId(e.target.value ? parseInt(e.target.value) : null)}
-                        className="w-full border border-gray-300 rounded-md p-2 text-sm"
+                        className="form-select"
                       >
                         <option value="">Все шаблоны</option>
                         {templates.map((t) => (
@@ -427,97 +419,106 @@ const Dashboard: React.FC = () => {
                         ))}
                       </select>
                     </div>
-                    <div className="flex items-end gap-2">
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Дата с</label>
-                        <input
-                          type="date"
-                          value={filterDateFrom}
-                          onChange={(e) => setFilterDateFrom(e.target.value)}
-                          className="border border-gray-300 rounded-md p-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">по</label>
-                        <input
-                          type="date"
-                          value={filterDateTo}
-                          onChange={(e) => setFilterDateTo(e.target.value)}
-                          className="border border-gray-300 rounded-md p-2 text-sm"
-                        />
-                      </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Дата с</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={filterDateFrom}
+                        onChange={(e) => setFilterDateFrom(e.target.value)}
+                      />
                     </div>
-                    <div className="flex items-end gap-2">
-                      <button
-                        onClick={handleFilterApply}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
-                      >
-                        Применить
-                      </button>
-                      <button
-                        onClick={handleFilterReset}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
-                      >
-                        Сбросить
-                      </button>
+                    <div className="col-md-3">
+                      <label className="form-label">по</label>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={filterDateTo}
+                        onChange={(e) => setFilterDateTo(e.target.value)}
+                      />
                     </div>
                   </div>
-                </div>
-
-                {/* Reports List */}
-                {isLoadingHistory ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">Загрузка...</p>
-                  </div>
-                ) : reports.length === 0 ? (
-                  <div className="text-center py-8 bg-white rounded-lg shadow">
-                    <p className="text-gray-600">Нет отчетов для отображения</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {reports.map((report) => (
-                      <div key={report.id} className="bg-white p-4 rounded-lg shadow">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-medium text-gray-900">Партия: {report.batch_number}</h3>
-                            <p className="text-sm text-gray-600">
-                              Шаблон: {getTemplateName(report.analysis_type_id)}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Дата: {new Date(report.started_at).toLocaleString('ru-RU')}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Статус: {report.status}
-                            </p>
-                          </div>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            report.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {report.status === 'completed' ? 'Завершен' : 
-                             report.status === 'pending' ? 'В ожидании' : report.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Clear History Button */}
-                {reports.length > 0 && (
-                  <div className="mt-6 flex justify-end">
+                  <div className="mt-3 d-flex gap-2">
                     <button
-                      onClick={handleClearHistory}
-                      className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                      onClick={handleFilterApply}
+                      className="btn btn-primary"
                     >
-                      Очистить всю историю
+                      Применить
+                    </button>
+                    <button
+                      onClick={handleFilterReset}
+                      className="btn btn-secondary"
+                    >
+                      Сбросить
                     </button>
                   </div>
-                )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Reports List */}
+              {isLoadingHistory ? (
+                <div className="text-center py-4">
+                  <p className="text-muted">Загрузка...</p>
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="text-center py-4 card">
+                  <p className="text-muted">Нет отчетов для отображения</p>
+                </div>
+              ) : (
+                <div className="accordion" id="reportsAccordion">
+                  {reports.map((report, index) => (
+                    <div key={report.id} className="accordion-item">
+                      <h2 className="accordion-header">
+                        <button
+                          className="accordion-button"
+                          type="button"
+                          data-bs-toggle="collapse"
+                          data-bs-target={`#collapse${index}`}
+                        >
+                          <div className="d-flex justify-content-between align-items-center w-100">
+                            <div>
+                              <h5 className="mb-1">Партия: {report.batch_number}</h5>
+                              <p className="mb-0 text-muted">
+                                Шаблон: {getTemplateName(report.analysis_type_id)}
+                              </p>
+                            </div>
+                            <span className={`badge ${report.status === 'completed' ? 'bg-success' : 
+                                           report.status === 'pending' ? 'bg-warning' : 'bg-secondary'}`}>
+                              {report.status === 'completed' ? 'Завершен' : 
+                               report.status === 'pending' ? 'В ожидании' : report.status}
+                            </span>
+                          </div>
+                        </button>
+                      </h2>
+                      <div
+                        id={`collapse${index}`}
+                        className="accordion-collapse collapse"
+                        data-bs-parent="#reportsAccordion"
+                      >
+                        <div className="accordion-body">
+                          <p><strong>Дата:</strong> {new Date(report.started_at).toLocaleString('ru-RU')}</p>
+                          <p><strong>Статус:</strong> {report.status}</p>
+                          {report.notes && <p><strong>Примечания:</strong> {report.notes}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Clear History Button */}
+              {reports.length > 0 && (
+                <div className="mt-4 d-flex justify-content-end">
+                  <button
+                    onClick={handleClearHistory}
+                    className="btn btn-danger"
+                  >
+                    Очистить всю историю
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>
