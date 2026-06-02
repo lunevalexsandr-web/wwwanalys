@@ -46,3 +46,40 @@ def get_active_templates(
     """Получить список активных шаблонов (для Admin и User)"""
     templates = crud_template.get_active_templates(db)
     return templates
+
+@router.get("/{template_id}", response_model=AnalysisType)
+def get_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Получить конкретный шаблон (только для Admin)"""
+    db_template = crud_template.get_analysis_type(db, analysis_type_id=template_id)
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return db_template
+
+@router.put("/{template_id}", response_model=AnalysisType)
+def update_template(
+    template_id: int,
+    template: AnalysisTypeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Обновить шаблон (только для Admin)"""
+    db_template = crud_template.update_template(db, template_id=template_id, template=template)
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return db_template
+
+@router.delete("/{template_id}")
+def delete_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Удалить шаблон (только для Admin)"""
+    db_template = crud_template.delete_template(db, template_id=template_id)
+    if not db_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"message": "Template deleted successfully"}

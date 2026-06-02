@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from datetime import date
 from app.core.database import SessionLocal
 from app.crud import report as crud_report
 from app.crud import user as crud_user
@@ -17,7 +18,7 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/", response_model=Report)
+@router.post("/")
 def create_report(
     report: ReportCreate,
     db: Session = Depends(get_db),
@@ -27,7 +28,15 @@ def create_report(
     db_report = crud_report.create_report(db=db, report=report, user_id=current_user.id)
     if not db_report:
         raise HTTPException(status_code=404, detail="Template not found")
-    return db_report
+    return {
+        "id": db_report.id,
+        "batch_number": db_report.batch_number,
+        "analysis_type_id": db_report.analysis_type_id,
+        "started_at": db_report.started_at,
+        "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
+        "notes": db_report.notes,
+        "values": []
+    }
 
 @router.get("/", response_model=List[Report])
 def get_reports(
@@ -69,3 +78,34 @@ def get_reports_by_template(
     """Получить отчеты по шаблону (для Admin и User)"""
     reports = crud_report.get_reports_by_template(db, template_id=template_id)
     return reports
+
+@router.get("/filtered/list", response_model=List[Report])
+def get_reports_filtered(
+    template_id: Optional[int] = Query(None, description="Фильтр по ID шаблона"),
+    date_from: Optional[date] = Query(None, description="Дата начала (формат: YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="Дата окончания (формат: YYYY-MM-DD)"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получить отчеты с фильтрацией по шаблону и дате (для Admin и User)"""
+    reports = crud_report.get_reports_filtered(
+        db, 
+        user_id=current_user.id,
+        template_id=template_id,
+        date_from=date_from,
+        date_to=date_to,
+        skip=skip,
+        limit=limit
+    )
+    return reports
+
+@router.delete("/history/clear")
+def clear_reports_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Очистить всю историю отчетов пользователя"""
+    result = crud_report.delete_all_reports_by_user(db, user_id=current_user.id)
+    return result

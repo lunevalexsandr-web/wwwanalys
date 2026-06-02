@@ -2,7 +2,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
 from app.models import AnalysisType, Indicator
+from app.models.indicator import DataType
 from app.schemas import AnalysisTypeCreate, AnalysisTypeUpdate
+import json
 
 def get_analysis_type(db: Session, analysis_type_id: int):
     return db.query(AnalysisType).options(joinedload(AnalysisType.indicators)).filter(AnalysisType.id == analysis_type_id).first()
@@ -36,11 +38,19 @@ def create_template(db: Session, template: AnalysisTypeCreate, user_id: int):
     
     # Добавляем индикаторы, если они есть
     for indicator_data in template.indicators:
+        # Конвертируем options в JSON-строку для SELECT типа
+        options_json = None
+        data_type_str = indicator_data.data_type.value if hasattr(indicator_data.data_type, 'value') else str(indicator_data.data_type)
+        if indicator_data.options and data_type_str == 'select':
+            options_json = json.dumps(indicator_data.options)
+        
         indicator = Indicator(
             name=indicator_data.name,
             unit=indicator_data.unit,
             min_value=indicator_data.min_value,
             max_value=indicator_data.max_value,
+            data_type=indicator_data.data_type,
+            options=options_json,
             analysis_type_id=db_template.id
         )
         db.add(indicator)
@@ -51,12 +61,45 @@ def create_template(db: Session, template: AnalysisTypeCreate, user_id: int):
 
 def update_template(db: Session, template_id: int, template: AnalysisTypeUpdate):
     db_template = get_analysis_type(db, analysis_type_id=template_id)
-    if db_template:
-        update_data = template.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(db_template, field, value)
-        db.commit()
-        db.refresh(db_template)
+    if not db_template:
+        return None
+    
+    # Обновляем основные поля
+    if template.name is not None:
+        db_template.name = template.name
+    if template.description is not None:
+        db_template.description = template.description
+    if template.is_active is not None:
+        db_template.is_active = template.is_active
+    
+    # Если переданы индикаторы, обновляем их
+    if template.indicators is not None and len(template.indicators) > 0:
+        # Удаляем старые индикаторы
+        for indicator in db_template.indicators:
+            db.delete(indicator)
+        db.flush()
+        
+        # Добавляем новые индикаторы
+        for indicator_data in template.indicators:
+            # Конвертируем options в JSON-строку для SELECT типа
+            options_json = None
+            data_type_str = indicator_data.data_type.value if hasattr(indicator_data.data_type, 'value') else str(indicator_data.data_type)
+            if indicator_data.options and data_type_str == 'select':
+                options_json = json.dumps(indicator_data.options)
+            
+            indicator = Indicator(
+                name=indicator_data.name,
+                unit=indicator_data.unit,
+                min_value=indicator_data.min_value,
+                max_value=indicator_data.max_value,
+                data_type=indicator_data.data_type,
+                options=options_json,
+                analysis_type_id=db_template.id
+            )
+            db.add(indicator)
+    
+    db.commit()
+    db.refresh(db_template)
     return db_template
 
 def delete_template(db: Session, template_id: int):

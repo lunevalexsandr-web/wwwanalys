@@ -33,6 +33,10 @@ def update_user(db: Session, user_id: int, user: UserUpdate):
     db_user = get_user(db, user_id=user_id)
     if db_user:
         update_data = user.model_dump(exclude_unset=True)
+        # Если передан пароль, хешируем его
+        if 'password' in update_data and update_data['password']:
+            update_data['hashed_password'] = get_password_hash(update_data['password'])
+            del update_data['password']
         for field, value in update_data.items():
             setattr(db_user, field, value)
         db.commit()
