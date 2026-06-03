@@ -15,3 +15,4 @@ class User(Base):
     # Связи с другими моделями
     created_analysis_types = relationship("AnalysisType", back_populates="creator")
     process_logs = relationship("ProcessLog", back_populates="creator")
+    created_presets = relationship("Preset", back_populates="creator")

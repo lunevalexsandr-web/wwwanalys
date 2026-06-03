@@ -1,155 +1,252 @@
-# WWWAnalys - Анализ производства
+# WWWAnalys v3.0.0
 
-Веб-приложение для учета производственных анализов на базе Python (FastAPI) + PostgreSQL с фронтендом на HTML/CSS (Tailwind) + JavaScript.
+Система для управления анализами и шаблонами показателей.
 
-## Стек технологий
+## Описание
 
-### Бэкенд
-- Python 3.9+
-- FastAPI
-- SQLAlchemy
-- PostgreSQL (через Docker)
-- Pydantic
-- JWT-аутентификация
+Проект представляет собой веб-приложение для создания шаблонов анализов, заполнения показателей и просмотра истории отчётов. Состоит из бэкенда на FastAPI и фронтенда на React с Bootstrap 5.
 
-### Фронтенд
-- HTML5
-- CSS3
-- JavaScript (ES6+)
-- Bootstrap 5
-- Tailwind CSS
+### Основные возможности
+
+- 📊 Создание и управление шаблонами анализов
+- 📝 Заполнение показателей с поддержкой числовых, текстовых и select типов
+- 📈 Просмотр истории отчётов с фильтрацией
+- 👤 Аутентификация пользователей (админ/пользователь)
+- 🗄️ PostgreSQL база данных
+- 🐳 Docker-контейнеризация
 
 ## Структура проекта
 
 ```
 wwwanalys/
-├── backend/                  # Бэкенд на FastAPI
+├── backend/                 # Бэкенд на FastAPI
 │   ├── app/
-│   │   ├── api/             # API роуты
-│   │   ├── auth/            # Аутентификация
-│   │   ├── core/            # Конфигурация и база данных
-│   │   ├── crud/            # CRUD операции
-│   │   ├── models/          # SQLAlchemy модели
-│   │   └── schemas/         # Pydantic схемы
-│   ├── main.py              # Основной файл приложения
-│   ├── requirements.txt     # Зависимости
-│   └── .env.example        # Пример переменных окружения
-├── frontend/                # Фронтенд
-│   ├── index.html          # Главный HTML файл
-│   └── app.js              # JavaScript код
-├── docker-compose.yml       # Конфигурация Docker
-└── plan.md                 # План проекта
+│   │   ├── api/            # API эндпоинты
+│   │   ├── auth/           # Аутентификация
+│   │   ├── core/           # Конфигурация и зависимости
+│   │   ├── crud/           # Бизнес-логика
+│   │   ├── models/         # SQLAlchemy модели
+│   │   └── schemas/        # Pydantic схемы
+│   ├── main.py             # Точка входа
+│   ├── requirements.txt    # Зависимости
+│   └── .env.example       # Пример конфигурации
+├── frontend/               # Фронтенд на React
+│   ├── src/
+│   │   ├── components/     # UI компоненты
+│   │   ├── pages/         # Страницы
+│   │   ├── hooks/         # Кастомные хуки
+│   │   ├── types/         # TypeScript типы
+│   │   └── api/           # API клиент
+│   ├── package.json       # Зависимости
+│   └── vite.config.ts     # Конфигурация Vite
+├── docker-compose.yml     # Docker Compose
+└── README.md              # Документация
 ```
 
-## Функциональность
+## Технологии
 
-### Роли пользователей
-- **Администратор**: Может создавать типы анализов, добавлять индикаторы, управлять пользователями
-- **Пользователь**: Может выбирать типы анализов, заполнять значения показателей, просматривать журнал процессов
+### Бэкенд
+- **FastAPI** — асинхронный веб-фреймворк
+- **SQLAlchemy** — ORM для работы с PostgreSQL
+- **Pydantic** — валидация данных
+- **PostgreSQL** — база данных
+- **JWT** — аутентификация
+- **Uvicorn** — ASGI сервер
 
-### Основные возможности
-1. **Управление типами анализов**
-   - Создание типов анализов
-   - Динамическое добавление индикаторов (название, единица измерения, мин/макс значения)
-   - Просмотр списка типов анализов
+### Фронтенд
+- **React 18** — UI библиотека
+- **TypeScript** — статическая типизация
+- **Bootstrap 5** — CSS фреймворк
+- **Vite** — сборщик проектов
+- **Axios** — HTTP клиент
 
-2. **Управление процессами**
-   - Создание записей в журнале процессов
-   - Выбор типа анализа и ввод значений показателей
-   - Отслеживание статуса процессов
+## Быстрый старт
 
-3. **Пользователи**
-   - Регистрация и аутентификация
-   - Управление пользователями (только для администраторов)
+### Требования
+- Docker и Docker Compose
+- Node.js 18+ (для разработки фронтенда)
 
-## Запуск проекта
+### Запуск через Docker
 
-### 1. Запуск базы данных (PostgreSQL)
+1. Клонируйте репозиторий:
+```bash
+git clone <repository-url>
+cd wwwanalys
+```
 
+2. Настройте окружение:
+```bash
+cp backend/.env.example backend/.env
+# Редактируйте .env при необходимости
+```
+
+3. Запустите контейнеры:
 ```bash
 docker-compose up -d
 ```
 
-### 2. Установка зависимостей бэкенда
+4. Проверьте работу:
+- Бэкенд: http://localhost:8000
+- Фронтенд: http://localhost:3000
+- API документация: http://localhost:8000/docs
 
+### Ручной запуск (для разработки)
+
+#### Бэкенд
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate  # Для Linux/Mac
-# или
-venv\Scripts\activate     # Для Windows
 pip install -r requirements.txt
-```
-
-### 3. Настройка переменных окружения
-
-Скопируйте `.env.example` в `.env` и заполните необходимые значения:
-
-```bash
-cp .env.example .env
-```
-
-### 4. Запуск бэкенд-приложения
-
-```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. Запуск фронтенда
-
-Просто откройте файл `frontend/index.html` в браузере.
-
-## API документация
-
-После запуска бэкенда, документация API доступна по адресу:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Примеры использования
-
-### 1. Регистрация пользователя
-
+#### Фронтенд
 ```bash
-curl -X POST "http://localhost:8000/auth/register" \
-     -H "Content-Type: application/json" \
-     -d '{"username": "testuser", "email": "test@example.com", "password": "password123", "is_active": true, "is_admin": false}'
+cd frontend
+npm install
+npm run dev
 ```
 
-### 2. Аутентификация
+## API Эндпоинты
 
+### Аутентификация
+- `POST /auth/token` — Получение JWT токена
+- `POST /auth/register` — Регистрация пользователя
+
+### Шаблоны
+- `GET /api/templates/` — Получение всех шаблонов
+- `POST /api/templates/` — Создание шаблона
+- `PUT /api/templates/{id}` — Обновление шаблона
+- `DELETE /api/templates/{id}` — Удаление шаблона
+- `DELETE /api/templates/clear-all` — Очистка всех шаблонов
+
+### Отчёты
+- `GET /api/reports/` — Получение списка отчётов
+- `POST /api/reports/` — Создание отчёта
+- `GET /api/reports/{id}` — Получение детальной информации об отчёте
+- `GET /api/reports/filtered/list` — Отчёты с фильтрацией
+- `DELETE /api/reports/history/clear` — Очистка истории
+
+## Модели данных
+
+### Пользователь (User)
+- id: int
+- username: str
+- email: str
+- is_admin: bool
+- hashed_password: str
+
+### Шаблон анализа (AnalysisType)
+- id: int
+- name: str
+- description: str
+- created_by: int
+- is_active: bool
+- indicators: List[Indicator]
+
+### Показатель (Indicator)
+- id: int
+- name: str
+- unit: str
+- min_value: float | null
+- max_value: float | null
+- data_type: str ('number', 'text', 'select')
+- options: str | null (JSON для select)
+- analysis_type_id: int
+
+### Отчёт (ProcessLog)
+- id: int
+- batch_number: str
+- analysis_type_id: int
+- created_by: int
+- status: str ('pending', 'completed', 'failed')
+- started_at: datetime
+- notes: str | null
+
+### Значение показателя (IndicatorValue)
+- id: int
+- indicator_id: int
+- value: float | null
+- text_value: str | null
+- is_normal: bool
+- process_log_id: int
+
+## Роли пользователей
+
+### Администратор
+- Доступ ко всем шаблонам
+- Управление пользователями
+- Полный доступ к отчётам
+
+### Пользователь
+- Доступ только к своим отчётам
+- Создание шаблонов (если разрешено)
+- Просмотр истории своих отчётов
+
+## Разработка
+
+### Добавление нового API эндпоинта
+1. Создайте схему в `app/schemas/`
+2. Реализуйте CRUD операции в `app/crud/`
+3. Добавьте эндпоинт в `app/api/`
+4. Обновите фронтенд в `frontend/src/`
+
+### Изменение моделей
+1. Измените SQLAlchemy модель в `app/models/`
+2. Обновите Pydantic схему в `app/schemas/`
+3. Примените миграции (если используется Alembic)
+
+### Фронтенд разработка
+- Компоненты находятся в `frontend/src/components/`
+- Страницы в `frontend/src/pages/`
+- Типы в `frontend/src/types/`
+- API запросы в `frontend/src/api/`
+
+## Тестирование
+
+### API тесты
 ```bash
-curl -X POST "http://localhost:8000/auth/token" \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -d "username=testuser&password=password123"
+cd backend
+pytest
 ```
 
-### 3. Создание типа анализа (только администратор)
-
+### Интеграционные тесты
 ```bash
-curl -X POST "http://localhost:8000/analysis-types/" \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -d '{"name": "Анализ партии", "description": "Анализ производственной партии", "indicators": [{"name": "Температура", "unit": "°C", "min_value": 20.0, "max_value": 25.0}]}'
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 ```
 
-### 4. Создание записи в журнале процессов
+## Деплой
 
+### Docker
 ```bash
-curl -X POST "http://localhost:8000/process-logs/" \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -d '{"analysis_type_id": 1, "notes": "Тестовая запись", "indicator_values": [{"indicator_id": 1, "value": 22.5}]}'
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-## Дальнейшее развитие
+### Ручной деплой
+1. Соберите образы:
+```bash
+docker build -t wwwanalys-backend ./backend
+docker build -t wwwanalys-frontend ./frontend
+```
 
-1. Добавить тесты (Unit и Integration)
-2. Реализовать систему уведомлений
-3. Добавить графическую визуализацию данных
-4. Реализовать импорт/экспорт данных
-5. Добавить поддержку нескольких языков
-6. Реализовать систему прав доступа более детально
+2. Запустите контейнеры с продакшн конфигурацией
+
+## Версии
+
+- **v1.0.0** — Initial release with admin panel and analysis constructor
+- **v2.0.0** — Save current version
+- **v3.0.0** — Full fix for reports and templates with UI improvements
+- **v3.0.0-bootstrap** — feat: migrate frontend from Tailwind CSS to Bootstrap 5
 
 ## Лицензия
 
-Этот проект распространяется под лицензией MIT.
+[MIT License](LICENSE)
+
+## Контакты
+
+Для вопросов и предложений:
+- Email: your-email@example.com
+- GitHub Issues: [Ссылка на issues]
+
+---
+
+**WWWAnalys v3.0.0** — Система для управления анализами и шаблонами показателей

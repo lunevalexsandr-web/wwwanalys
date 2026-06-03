@@ -4,10 +4,12 @@ from datetime import datetime
 from enum import Enum
 import json
 
+
 class DataType(str, Enum):
     NUMBER = "number"
     TEXT = "text"
     SELECT = "select"
+
 
 class IndicatorBase(BaseModel):
     name: str
@@ -16,6 +18,7 @@ class IndicatorBase(BaseModel):
     max_value: Optional[float] = None
     data_type: DataType = DataType.NUMBER
     options: Optional[List[str]] = None  # Список вариантов для SELECT типа
+
 
 class IndicatorCreate(IndicatorBase):
     @field_validator('data_type', mode='before')
@@ -43,6 +46,7 @@ class IndicatorCreate(IndicatorBase):
                 # Если это не JSON, пробуем разделить по запятой
                 return [x.strip() for x in v.split(',') if x.strip()]
         return v
+
 
 class Indicator(IndicatorBase):
     id: int
@@ -77,25 +81,106 @@ class Indicator(IndicatorBase):
                 return None
         return v
 
+
+# Новые схемы для работы со справочником показателей
+class LibraryIndicatorRef(BaseModel):
+    """Ссылка на показатель из библиотеки с нормами для шаблона."""
+    indicator_id: int
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    sort_order: int = 0
+
+
+class TemplateIndicatorDetail(BaseModel):
+    """Детальная информация о показателе в шаблоне (для ответа API)."""
+    id: int
+    indicator_id: int
+    name: str
+    unit: str
+    data_type: str = "number"
+    options: Optional[List[str]] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    sort_order: int = 0
+    is_custom: bool = False
+    template_notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+    @field_validator('options', mode='before')
+    @classmethod
+    def parse_options(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
+
+
 class AnalysisTypeBase(BaseModel):
     name: str
     description: Optional[str] = None
 
+
 class AnalysisTypeCreate(AnalysisTypeBase):
     indicators: List[IndicatorCreate] = []
+    # Новое поле: список ссылок на показатели из библиотеки
+    library_indicators: List[LibraryIndicatorRef] = []
+    # Тип шаблона: 'pure' | 'hybrid'
+    template_type: str = 'hybrid'
+
+    @field_validator('template_type')
+    @classmethod
+    def validate_template_type(cls, v):
+        if v not in ('pure', 'hybrid'):
+            return 'hybrid'
+        return v
+
 
 class AnalysisTypeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
     indicators: Optional[List[IndicatorCreate]] = None
+    library_indicators: Optional[List[LibraryIndicatorRef]] = None
+    template_type: Optional[str] = None
+
+    @field_validator('template_type')
+    @classmethod
+    def validate_template_type(cls, v):
+        if v is not None and v not in ('pure', 'hybrid'):
+            raise ValueError('template_type must be "pure" or "hybrid"')
+        return v
+
 
 class AnalysisType(AnalysisTypeBase):
     id: int
     created_at: datetime
     created_by: int
     is_active: bool
+    template_type: str = 'hybrid'
     indicators: List[Indicator] = []
+    # Новое поле: показатели из библиотеки (детальная информация)
+    template_indicators: List[TemplateIndicatorDetail] = []
     
     class Config:
         from_attributes = True
+
+
+# ---- Схемы для копирования шаблона ----
+class CopyTemplateRequest(BaseModel):
+    """Запрос на копирование шаблона."""
+    new_name: str
+    new_description: Optional[str] = None
+
+
+# ---- Схемы для создания шаблона из пресета ----
+class CreateFromPresetRequest(BaseModel):
+    """Запрос на создание шаблона из пресета."""
+    preset_id: int
+    template_name: str
+    template_description: Optional[str] = None

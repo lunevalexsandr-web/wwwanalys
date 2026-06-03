@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, IndicatorValue, Report, ToastState } from '../types';
+import type { AnalysisType, IndicatorValue, Report, ToastState, TemplateIndicator } from '../types';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-report');
@@ -37,19 +37,6 @@ const Dashboard: React.FC = () => {
     fetchReports();
   }, []);
 
-  const fetchTemplates = async () => {
-    try {
-      const response = await api.get('/api/templates/active');
-      setTemplates(response.data);
-      if (response.data.length > 0) {
-        handleTemplateSelect(response.data[0]);
-      }
-    } catch (error) {
-      console.error('Error fetching templates:', error);
-      showToast('Ошибка при загрузке шаблонов', 'danger');
-    }
-  };
-
   const fetchReports = async () => {
     setIsLoadingHistory(true);
     try {
@@ -68,10 +55,49 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const fetchTemplates = async () => {
+    try {
+      const response = await api.get('/api/templates/active');
+      setTemplates(response.data);
+      if (response.data.length > 0) {
+        handleTemplateSelect(response.data[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      showToast('Ошибка при загрузке шаблонов', 'danger');
+    }
+  };
+
+  /**
+   * Получить все показатели шаблона (объединяет обычные + из справочника).
+   */
+  const getAllIndicators = (template: AnalysisType): (any)[] => {
+    // Из справочника (template_indicators)
+    const libInds = (template.template_indicators || []).map(ti => ({
+      id: ti.indicator_id,  // используем indicator_id как id для matching
+      name: ti.name,
+      unit: ti.unit,
+      min_value: ti.min_value,
+      max_value: ti.max_value,
+      data_type: ti.data_type,
+      options: ti.options,
+      is_library: true
+    }));
+    
+    // Обычные
+    const regularInds = (template.indicators || []).map(ind => ({
+      ...ind,
+      is_library: false
+    }));
+    
+    return [...libInds, ...regularInds];
+  };
+
   const handleTemplateSelect = (template: AnalysisType) => {
     setSelectedTemplate(template);
     setBatchNumber('');
-    const values = template.indicators.map(indicator => ({
+    const allIndicators = getAllIndicators(template);
+    const values = allIndicators.map(indicator => ({
       indicator_id: indicator.id,
       value: '',
       is_normal: undefined
@@ -87,7 +113,8 @@ const Dashboard: React.FC = () => {
       if (index !== -1) {
         updated[index] = { ...updated[index], value };
         
-        const indicator = selectedTemplate?.indicators.find(ind => ind.id === indicatorId);
+        const allIndicators = selectedTemplate ? getAllIndicators(selectedTemplate) : [];
+        const indicator = allIndicators.find(ind => ind.id === indicatorId);
         if (indicator && indicator.min_value !== null && indicator.max_value !== null) {
           const numValue = parseFloat(value);
           if (!isNaN(numValue)) {
@@ -133,11 +160,14 @@ const Dashboard: React.FC = () => {
       
       // Reset form
       setBatchNumber('');
-      setIndicatorValues(selectedTemplate.indicators.map(indicator => ({
-        indicator_id: indicator.id,
-        value: '',
-        is_normal: undefined
-      })));
+      if (selectedTemplate) {
+        const allIndicators = getAllIndicators(selectedTemplate);
+        setIndicatorValues(allIndicators.map(indicator => ({
+          indicator_id: indicator.id,
+          value: '',
+          is_normal: undefined
+        })));
+      }
       
       fetchReports();
     } catch (error) {
@@ -156,11 +186,11 @@ const Dashboard: React.FC = () => {
       
       // Find the template to get indicator names
       const template = templates.find(t => t.id === reportData.analysis_type_id);
-      const indicators = template?.indicators || [];
+      const allIndicators = template ? getAllIndicators(template) : [];
       
       // Map indicator values with names
       const enrichedValues = (reportData.values || []).map((v: any) => {
-        const indicator = indicators.find((ind: any) => ind.id === v.indicator_id);
+        const indicator = allIndicators.find((ind: any) => ind.id === v.indicator_id);
         return {
           ...v,
           indicator_name: indicator?.name || `#${v.indicator_id}`,
@@ -224,6 +254,10 @@ const Dashboard: React.FC = () => {
     return textMap[status] || status;
   };
 
+  const getTotalIndicators = (template: AnalysisType): number => {
+    return (template.indicators?.length || 0) + (template.template_indicators?.length || 0);
+  };
+
   return (
     <div className="min-vh-100 bg-light">
       <AppHeader showAdminLink />
@@ -272,7 +306,7 @@ const Dashboard: React.FC = () => {
                             <option value="" disabled>-- Выберите шаблон --</option>
                             {templates.map((template) => (
                               <option key={template.id} value={template.id}>
-                                {template.name} ({template.indicators.length} показателей)
+                                {template.name} ({getTotalIndicators(template)} показателей)
                               </option>
                             ))}
                           </Form.Select>
@@ -309,51 +343,80 @@ const Dashboard: React.FC = () => {
                           </h5>
                           
                           <div className="row g-3">
-                            {selectedTemplate.indicators.map((indicator) => {
-                              const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
-                              const isOutOfRange = indicatorValue && 
-                                  indicator.min_value !== null && 
-                                  indicator.max_value !== null &&
-                                  !isNaN(parseFloat(indicatorValue.value as string)) &&
-                                  (parseFloat(indicatorValue.value as string) < indicator.min_value || 
-                                   parseFloat(indicatorValue.value as string) > indicator.max_value);
-                              
-                              return (
-                                <div key={indicator.id} className="col-12">
-                                  <Card>
-                                    <CardBody>
-                                      <div className="row g-3">
-                                        <div className="col-md-4">
-                                          <Form.Label>{indicator.name}, {indicator.unit}</Form.Label>
-                                          {indicator.min_value !== null && indicator.max_value !== null && (
-                                            <small className="text-muted d-block">
-                                              Норма: {indicator.min_value} - {indicator.max_value}
-                                            </small>
-                                          )}
+                            {(() => {
+                              const allIndicators = getAllIndicators(selectedTemplate);
+                              return allIndicators.map((indicator: any) => {
+                                const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
+                                const isOutOfRange = indicatorValue && 
+                                    indicator.min_value !== null && 
+                                    indicator.max_value !== null &&
+                                    !isNaN(parseFloat(indicatorValue.value as string)) &&
+                                    (parseFloat(indicatorValue.value as string) < indicator.min_value || 
+                                     parseFloat(indicatorValue.value as string) > indicator.max_value);
+                                
+                                return (
+                                  <div key={indicator.id} className="col-12">
+                                    <Card>
+                                      <CardBody>
+                                        <div className="row g-3">
+                                          <div className="col-md-4">
+                                            <Form.Label>
+                                              {indicator.name}, {indicator.unit}
+                                              {indicator.is_library && (
+                                                <Badge bg="info" className="ms-1" pill>Справочник</Badge>
+                                              )}
+                                            </Form.Label>
+                                            {indicator.min_value !== null && indicator.max_value !== null && (
+                                              <small className="text-muted d-block">
+                                                Норма: {indicator.min_value} - {indicator.max_value}
+                                              </small>
+                                            )}
+                                          </div>
+                                          <div className="col-md-8">
+                                            {indicator.data_type === 'select' ? (
+                                              <Form.Select
+                                                className={isOutOfRange ? 'is-invalid' : ''}
+                                                value={indicatorValue?.value || ''}
+                                                onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
+                                                required
+                                              >
+                                                <option value="">-- Выберите --</option>
+                                                {(indicator.options || []).map((opt: string, i: number) => (
+                                                  <option key={i} value={opt}>{opt}</option>
+                                                ))}
+                                              </Form.Select>
+                                            ) : (
+                                              <Form.Control
+                                                type={indicator.data_type === 'number' ? 'number' : 'text'}
+                                                className={isOutOfRange ? 'is-invalid' : ''}
+                                                value={indicatorValue?.value || ''}
+                                                onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
+                                                step={indicator.data_type === 'number' ? '0.01' : undefined}
+                                                placeholder={`Введите значение (${indicator.data_type})`}
+                                                required
+                                              />
+                                            )}
+                                            
+                                            {indicatorValue?.value && indicator.data_type === 'select' && indicator.options && (
+                                              <small className="text-muted d-block mt-1">
+                                                Варианты: {indicator.options.join(', ')}
+                                              </small>
+                                            )}
+                                            
+                                            {isOutOfRange && (
+                                              <div className="invalid-feedback d-block">
+                                                <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                                Значение вне нормы!
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                        <div className="col-md-8">
-                                          <Form.Control
-                                            type={indicator.data_type === 'number' ? 'number' : 'text'}
-                                            className={isOutOfRange ? 'is-invalid' : ''}
-                                            value={indicatorValue?.value || ''}
-                                            onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
-                                            step={indicator.data_type === 'number' ? '0.01' : undefined}
-                                            placeholder={`Введите значение (${indicator.data_type})`}
-                                            required
-                                          />
-                                          {isOutOfRange && (
-                                            <div className="invalid-feedback">
-                                              <i className="bi bi-exclamation-circle-fill me-1"></i>
-                                              Значение вне нормы!
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </CardBody>
-                                  </Card>
-                                </div>
-                              );
-                            })}
+                                      </CardBody>
+                                    </Card>
+                                  </div>
+                                );
+                              });
+                            })()}
                           </div>
                         </div>
 

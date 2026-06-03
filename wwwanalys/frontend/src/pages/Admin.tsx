@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, Indicator, User as UserType } from '../types';
+import type { AnalysisType, Indicator, User as UserType, IndicatorLibrary, TemplateIndicator, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
 
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('templates');
@@ -23,7 +23,23 @@ const Admin: React.FC = () => {
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
+  const [templateType, setTemplateType] = useState<'pure' | 'hybrid'>('hybrid');
   const [templateIndicators, setTemplateIndicators] = useState<Indicator[]>([]);
+  const [templateLibIndicators, setTemplateLibIndicators] = useState<LibraryIndicatorRef[]>([]);
+
+  // Preview template state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<AnalysisType | null>(null);
+
+  // Copy template state
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyTemplateId, setCopyTemplateId] = useState<number | null>(null);
+  const [copyTemplateName, setCopyTemplateName] = useState('');
+
+  // Create from preset state
+  const [showCreateFromPresetModal, setShowCreateFromPresetModal] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
 
   // Indicator form state
   const [showIndicatorModal, setShowIndicatorModal] = useState(false);
@@ -35,9 +51,42 @@ const Admin: React.FC = () => {
   const [indicatorType, setIndicatorType] = useState<'number' | 'text' | 'select'>('number');
   const [indicatorOptions, setIndicatorOptions] = useState('');
 
+  // Library state
+  const [libIndicators, setLibIndicators] = useState<IndicatorLibrary[]>([]);
+  const [showLibModal, setShowLibModal] = useState(false);
+  const [editingLibIndicator, setEditingLibIndicator] = useState<IndicatorLibrary | null>(null);
+  const [libIndicatorName, setLibIndicatorName] = useState('');
+  const [libIndicatorUnit, setLibIndicatorUnit] = useState('');
+  const [libIndicatorType, setLibIndicatorType] = useState<'number' | 'text' | 'select'>('number');
+  const [libIndicatorOptions, setLibIndicatorOptions] = useState('');
+  const [isLoadingLib, setIsLoadingLib] = useState(false);
+  const [libIndicatorDescription, setLibIndicatorDescription] = useState('');
+  const [libIndicatorCategory, setLibIndicatorCategory] = useState('');
+  const [libIndicatorRequired, setLibIndicatorRequired] = useState(false);
+  const [libIndicatorDefaultValue, setLibIndicatorDefaultValue] = useState('');
+
+  // Select from library state
+  const [showSelectLibModal, setShowSelectLibModal] = useState(false);
+  const [selectedLibIndicators, setSelectedLibIndicators] = useState<number[]>([]);
+  const [libIndicatorNorms, setLibIndicatorNorms] = useState<Record<number, { min: number | null; max: number | null }>>({});
+
+  // Library search & filter state
+  const [libSearch, setLibSearch] = useState('');
+  const [libFilterCategory, setLibFilterCategory] = useState('');
+  const [libFilterType, setLibFilterType] = useState('');
+  const [libIsSearching, setLibIsSearching] = useState(false);
+  const [libDebounceTimer, setLibDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // Presets state
+  const [presets, setPresets] = useState<PresetListItem[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
+  const [presetDetail, setPresetDetail] = useState<Preset | null>(null);
+
   useEffect(() => {
     fetchTemplates();
     fetchUsers();
+    fetchLibraryIndicators();
+    fetchPresets();
   }, []);
 
   const fetchTemplates = async () => {
@@ -63,6 +112,48 @@ const Admin: React.FC = () => {
     }
   };
 
+  const fetchLibraryIndicators = async (search?: string, category?: string, dataType?: string) => {
+    setLibIsSearching(true);
+    try {
+      const params: any = {};
+      if (search) params.search = search;
+      if (category) params.category = category;
+      if (dataType) params.data_type = dataType;
+      const response = await api.get('/api/indicators/library', { params });
+      setLibIndicators(response.data);
+    } catch (error) {
+      console.error('Error fetching library indicators:', error);
+      showToast('Ошибка при загрузке справочника показателей', 'danger');
+    } finally {
+      setLibIsSearching(false);
+    }
+  };
+
+  // Debounced search for library
+  const handleLibSearchChange = (value: string) => {
+    setLibSearch(value);
+    if (libDebounceTimer) clearTimeout(libDebounceTimer);
+    const timer = setTimeout(() => {
+      fetchLibraryIndicators(value || undefined, libFilterCategory || undefined, libFilterType || undefined);
+    }, 300);
+    setLibDebounceTimer(timer);
+  };
+
+  const handleLibFilterChange = (field: 'category' | 'type', value: string) => {
+    if (field === 'category') setLibFilterCategory(value);
+    else setLibFilterType(value);
+    fetchLibraryIndicators(libSearch || undefined, field === 'category' ? (value || undefined) : (libFilterCategory || undefined), field === 'type' ? (value || undefined) : (libFilterType || undefined));
+  };
+
+  const fetchPresets = async () => {
+    try {
+      const response = await api.get('/api/presets/');
+      setPresets(response.data);
+    } catch (error) {
+      console.error('Error fetching presets:', error);
+    }
+  };
+
   const handleTemplateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -72,19 +163,34 @@ const Admin: React.FC = () => {
     }
 
     try {
-      const templateData = {
+      const templateData: any = {
         name: templateName,
         description: templateDescription,
         is_active: templateActive,
-        indicators: templateIndicators.map(ind => ({
+        template_type: templateType
+      };
+
+      // Добавляем обычные индикаторы, если они есть
+      if (templateIndicators && templateIndicators.length > 0) {
+        templateData.indicators = templateIndicators.map(ind => ({
           name: ind.name,
           unit: ind.unit,
           min_value: ind.min_value,
           max_value: ind.max_value,
           data_type: ind.data_type,
           options: ind.options
-        }))
-      };
+        }));
+      }
+
+      // Добавляем индикаторы из библиотеки, если они есть
+      if (templateLibIndicators && templateLibIndicators.length > 0) {
+        templateData.library_indicators = templateLibIndicators.map(ref => ({
+          indicator_id: ref.indicator_id,
+          min_value: ref.min_value,
+          max_value: ref.max_value,
+          sort_order: ref.sort_order
+        }));
+      }
 
       if (editingTemplate) {
         await api.put(`/api/templates/${editingTemplate.id}`, templateData);
@@ -100,6 +206,49 @@ const Admin: React.FC = () => {
     } catch (error) {
       console.error('Error saving template:', error);
       showToast('Ошибка при сохранении шаблона', 'danger');
+    }
+  };
+
+  const handleCopyTemplate = async () => {
+    if (!copyTemplateId || !copyTemplateName.trim()) {
+      showToast('Введите название для копии', 'warning');
+      return;
+    }
+
+    try {
+      await api.post(`/api/templates/${copyTemplateId}/copy`, {
+        new_name: copyTemplateName,
+      });
+      showToast('Шаблон скопирован успешно', 'success');
+      setShowCopyModal(false);
+      setCopyTemplateName('');
+      fetchTemplates();
+    } catch (error) {
+      console.error('Error copying template:', error);
+      showToast('Ошибка при копировании шаблона', 'danger');
+    }
+  };
+
+  const handleCreateFromPreset = async () => {
+    if (!selectedPresetId || !newTemplateName.trim()) {
+      showToast('Выберите пресет и введите название', 'warning');
+      return;
+    }
+
+    try {
+      await api.post('/api/templates/from-preset', {
+        preset_id: selectedPresetId,
+        template_name: newTemplateName,
+      });
+      showToast('Шаблон создан из пресета', 'success');
+      setShowCreateFromPresetModal(false);
+      setNewTemplateName('');
+      setSelectedPresetId(null);
+      setPresetDetail(null);
+      fetchTemplates();
+    } catch (error) {
+      console.error('Error creating from preset:', error);
+      showToast('Ошибка при создании шаблона из пресета', 'danger');
     }
   };
 
@@ -149,7 +298,18 @@ const Admin: React.FC = () => {
     setTemplateName(template.name);
     setTemplateDescription(template.description);
     setTemplateActive(template.is_active);
+    setTemplateType(template.template_type || 'hybrid');
     setTemplateIndicators(template.indicators);
+    
+    // Конвертируем template_indicators в LibraryIndicatorRef
+    const libRefs: LibraryIndicatorRef[] = (template.template_indicators || []).map(ti => ({
+      indicator_id: ti.indicator_id,
+      min_value: ti.min_value,
+      max_value: ti.max_value,
+      sort_order: ti.sort_order
+    }));
+    setTemplateLibIndicators(libRefs);
+    
     setShowTemplateModal(true);
   };
 
@@ -158,8 +318,35 @@ const Admin: React.FC = () => {
     setTemplateName('');
     setTemplateDescription('');
     setTemplateActive(true);
+    setTemplateType('hybrid');
     setTemplateIndicators([]);
+    setTemplateLibIndicators([]);
   };
+
+  const handleOpenPreview = (template: AnalysisType) => {
+    setPreviewTemplate(template);
+    setShowPreviewModal(true);
+  };
+
+  const handleOpenCopyModal = (template: AnalysisType) => {
+    setCopyTemplateId(template.id);
+    setCopyTemplateName(`${template.name} (копия)`);
+    setShowCopyModal(true);
+  };
+
+  const handleOpenCreateFromPresetModal = async (presetId: number) => {
+    setSelectedPresetId(presetId);
+    try {
+      const response = await api.get(`/api/presets/${presetId}`);
+      setPresetDetail(response.data);
+      setNewTemplateName(response.data.name);
+    } catch (error) {
+      console.error('Error fetching preset detail:', error);
+    }
+    setShowCreateFromPresetModal(true);
+  };
+
+  // ---- Обычные индикаторы (старый подход) ----
 
   const handleIndicatorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +401,234 @@ const Admin: React.FC = () => {
     setIndicatorOptions('');
   };
 
+  // ---- Справочник показателей (новый подход) ----
+
+  const handleEditLibIndicator = (indicator: IndicatorLibrary) => {
+    setEditingLibIndicator(indicator);
+    setLibIndicatorName(indicator.name);
+    setLibIndicatorUnit(indicator.unit);
+    setLibIndicatorType(indicator.data_type);
+    setLibIndicatorOptions(indicator.options?.join(', ') || '');
+    setLibIndicatorDescription(indicator.description || '');
+    setLibIndicatorCategory(indicator.category || '');
+    setLibIndicatorRequired(indicator.is_required || false);
+    setLibIndicatorDefaultValue(indicator.default_value || '');
+    setShowLibModal(true);
+  };
+
+  const resetLibIndicatorForm = () => {
+    setEditingLibIndicator(null);
+    setLibIndicatorName('');
+    setLibIndicatorUnit('');
+    setLibIndicatorType('number');
+    setLibIndicatorOptions('');
+    setLibIndicatorDescription('');
+    setLibIndicatorCategory('');
+    setLibIndicatorRequired(false);
+    setLibIndicatorDefaultValue('');
+  };
+
+  const handleLibIndicatorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!libIndicatorName.trim() || !libIndicatorUnit.trim()) {
+      showToast('Название и единица измерения обязательны', 'warning');
+      return;
+    }
+
+    try {
+      const data: any = {
+        name: libIndicatorName,
+        unit: libIndicatorUnit,
+        data_type: libIndicatorType,
+        description: libIndicatorDescription || null,
+        category: libIndicatorCategory || null,
+        is_required: libIndicatorRequired,
+        default_value: libIndicatorDefaultValue || null,
+      };
+
+      if (libIndicatorType === 'select') {
+        data.options = libIndicatorOptions.split(',').map(opt => opt.trim()).filter(opt => opt);
+      }
+
+      if (editingLibIndicator) {
+        await api.put(`/api/indicators/library/${editingLibIndicator.id}`, data);
+        showToast('Показатель обновлен', 'success');
+      } else {
+        await api.post('/api/indicators/library', data);
+        showToast('Показатель создан', 'success');
+      }
+
+      setShowLibModal(false);
+      resetLibIndicatorForm();
+      fetchLibraryIndicators();
+    } catch (error) {
+      console.error('Error saving library indicator:', error);
+      showToast('Ошибка при сохранении показателя', 'danger');
+    }
+  };
+
+  const handleDeleteLibIndicator = async (id: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот показатель из справочника?')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/indicators/library/${id}`);
+      showToast('Показатель удален из справочника', 'success');
+      fetchLibraryIndicators();
+    } catch (error) {
+      console.error('Error deleting library indicator:', error);
+      showToast('Ошибка при удалении показателя', 'danger');
+    }
+  };
+
+  // ---- Выбор показателей из библиотеки в шаблон ----
+
+  const handleOpenSelectLibModal = () => {
+    // Инициализируем нормы из уже выбранных показателей
+    const norms: Record<number, { min: number | null; max: number | null }> = {};
+    templateLibIndicators.forEach(ref => {
+      norms[ref.indicator_id] = { min: ref.min_value, max: ref.max_value };
+    });
+    setLibIndicatorNorms(norms);
+    setSelectedLibIndicators(templateLibIndicators.map(ref => ref.indicator_id));
+    setShowSelectLibModal(true);
+  };
+
+  const handleToggleLibSelection = (indicatorId: number) => {
+    setSelectedLibIndicators(prev => {
+      if (prev.includes(indicatorId)) {
+        return prev.filter(id => id !== indicatorId);
+      }
+      return [...prev, indicatorId];
+    });
+  };
+
+  const handleLibNormChange = (indicatorId: number, field: 'min' | 'max', value: string) => {
+    setLibIndicatorNorms(prev => ({
+      ...prev,
+      [indicatorId]: {
+        ...prev[indicatorId],
+        [field]: value ? parseFloat(value) : null
+      }
+    }));
+  };
+
+  const handleConfirmLibSelection = () => {
+    const refs: LibraryIndicatorRef[] = selectedLibIndicators.map((indicatorId, index) => {
+      const norm = libIndicatorNorms[indicatorId] || { min: null, max: null };
+      return {
+        indicator_id: indicatorId,
+        min_value: norm.min,
+        max_value: norm.max,
+        sort_order: index
+      };
+    });
+    setTemplateLibIndicators(refs);
+    setShowSelectLibModal(false);
+  };
+
+  const handleRemoveLibIndicator = (indicatorId: number) => {
+    setTemplateLibIndicators(prev => prev.filter(ref => ref.indicator_id !== indicatorId));
+  };
+
+  // ---- Reorder indicators ----
+
+  const handleMoveLibIndicator = (indicatorId: number, direction: 'up' | 'down') => {
+    setTemplateLibIndicators(prev => {
+      const idx = prev.findIndex(ref => ref.indicator_id === indicatorId);
+      if (idx === -1) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === prev.length - 1) return prev;
+      
+      const next = [...prev];
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      // Обновляем sort_order
+      return next.map((ref, i) => ({ ...ref, sort_order: i }));
+    });
+  };
+
+  const handleMoveIndicator = (id: number, direction: 'up' | 'down') => {
+    setTemplateIndicators(prev => {
+      const idx = prev.findIndex(ind => ind.id === id);
+      if (idx === -1) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === prev.length - 1) return prev;
+      
+      const next = [...prev];
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+      return next;
+    });
+  };
+
+  // ---- Import / Export справочника ----
+
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+      const response = await api.get(`/api/indicators/library/export/${format}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `indicator_library.${format === 'excel' ? 'xlsx' : 'csv'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showToast(`Справочник экспортирован в ${format.toUpperCase()}`, 'success');
+    } catch (error) {
+      console.error('Error exporting:', error);
+      showToast('Ошибка при экспорте справочника', 'danger');
+    }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>, format: 'csv' | 'json') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const endpoint = format === 'csv' ? '/api/indicators/library/import/csv' : '/api/indicators/library/import/json';
+      const response = await api.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const { created, errors } = response.data;
+      if (created?.length > 0) {
+        showToast(`Импортировано показателей: ${created.length}`, 'success');
+      }
+      if (errors?.length > 0) {
+        console.warn('Import errors:', errors);
+        showToast(`Импорт завершён с ${errors.length} ошибками`, errors.length > created?.length ? 'danger' : 'warning');
+      }
+      fetchLibraryIndicators();
+    } catch (error) {
+      console.error('Error importing:', error);
+      showToast('Ошибка при импорте справочника', 'danger');
+    }
+
+    // Сбросим input
+    e.target.value = '';
+  };
+
+  const getLibIndicatorName = (indicatorId: number): string => {
+    const libInd = libIndicators.find(i => i.id === indicatorId);
+    return libInd ? `${libInd.name}, ${libInd.unit}` : `#${indicatorId}`;
+  };
+
+  const getLibIndicator = (indicatorId: number): IndicatorLibrary | undefined => {
+    return libIndicators.find(i => i.id === indicatorId);
+  };
+
+  // ---- Пользователи ----
+
   const handleToggleUser = async (id: number, isActive: boolean) => {
     try {
       await api.put(`/auth/users/${id}`, { is_active: !isActive });
@@ -240,6 +655,28 @@ const Admin: React.FC = () => {
     }
   };
 
+  // ---- Count total indicators in template ----
+  const getTotalIndicators = (template: AnalysisType): number => {
+    return (template.indicators?.length || 0) + (template.template_indicators?.length || 0);
+  };
+
+  const getTypeLabel = (templateType?: string): { label: string; color: string } => {
+    if (templateType === 'pure') return { label: 'Чистый', color: 'info' };
+    return { label: 'Гибридный', color: 'warning' };
+  };
+
+  const getCategoryLabel = (category: string | null): string => {
+    const labels: Record<string, string> = {
+      quality: 'Качество',
+      safety: 'Безопасность',
+      performance: 'Производительность',
+      chemical: 'Химический состав',
+      physical: 'Физические свойства',
+      microbiology: 'Микробиология',
+    };
+    return category ? (labels[category] || category) : 'Без категории';
+  };
+
   return (
     <div className="min-vh-100 bg-light">
       <AppHeader showDashboardLink />
@@ -249,7 +686,7 @@ const Admin: React.FC = () => {
           <div className="page-wrapper">
             <div className="mb-4">
               <h2 className="h3 mb-1">Администрирование</h2>
-              <p className="text-muted mb-0">Управление шаблонами анализа и пользователями</p>
+              <p className="text-muted mb-0">Управление шаблонами анализа, справочником показателей и пользователями</p>
             </div>
 
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} className="mb-4">
@@ -275,7 +712,7 @@ const Admin: React.FC = () => {
                             Очистить все
                           </Button>
                         )}
-                        <Button variant="primary" onClick={() => setShowTemplateModal(true)}>
+                        <Button variant="primary" onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }}>
                           <i className="bi bi-plus-circle me-1"></i>
                           Создать шаблон
                         </Button>
@@ -299,47 +736,282 @@ const Admin: React.FC = () => {
                             <tr>
                               <th>Название</th>
                               <th>Описание</th>
+                              <th>Тип</th>
                               <th>Показатели</th>
                               <th>Статус</th>
                               <th className="text-end">Действия</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {templates.map((template) => (
-                              <tr key={template.id}>
-                                <td><strong>{template.name}</strong></td>
-                                <td>{template.description || '-'}</td>
-                                <td>{template.indicators.length}</td>
+                            {templates.map((template) => {
+                              const typeInfo = getTypeLabel(template.template_type);
+                              return (
+                                <tr key={template.id}>
+                                  <td><strong>{template.name}</strong></td>
+                                  <td>{template.description || '-'}</td>
+                                  <td>
+                                    <Badge bg={typeInfo.color as any}>{typeInfo.label}</Badge>
+                                  </td>
+                                  <td>{getTotalIndicators(template)}</td>
+                                  <td>
+                                    <Badge bg={template.is_active ? 'success' : 'danger'}>
+                                      {template.is_active ? 'Активен' : 'Неактивен'}
+                                    </Badge>
+                                  </td>
+                                  <td className="text-end">
+                                    <Button 
+                                      variant="outline-primary" 
+                                      size="sm" 
+                                      className="me-1"
+                                      onClick={() => handleEditTemplate(template)}
+                                    >
+                                      <i className="bi bi-pencil me-1"></i>
+                                      Ред.
+                                    </Button>
+                                    <Button 
+                                      variant="outline-secondary" 
+                                      size="sm"
+                                      className="me-1"
+                                      onClick={() => handleOpenPreview(template)}
+                                      title="Предпросмотр"
+                                    >
+                                      <i className="bi bi-eye"></i>
+                                    </Button>
+                                    <Button 
+                                      variant="outline-info" 
+                                      size="sm"
+                                      className="me-1"
+                                      onClick={() => handleOpenCopyModal(template)}
+                                      title="Создать копию"
+                                    >
+                                      <i className="bi bi-copy"></i>
+                                    </Button>
+                                    <Button 
+                                      variant={template.is_active ? 'warning' : 'success'} 
+                                      size="sm"
+                                      className="me-1"
+                                      onClick={() => handleToggleTemplate(template.id, template.is_active)}
+                                    >
+                                      {template.is_active ? 'Деакт.' : 'Акт.'}
+                                    </Button>
+                                    <Button 
+                                      variant="outline-danger" 
+                                      size="sm"
+                                      onClick={() => handleDeleteTemplate(template.id)}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </Tab>
+
+              {/* Presets Tab */}
+              <Tab eventKey="presets" title={
+                <span><i className="bi bi-collection-fill me-1"></i>Пресеты</span>
+              }>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="h5 mb-0">
+                      <i className="bi bi-layers me-2 text-primary"></i>
+                      Предустановленные наборы показателей (пресеты)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody>
+                    {presets.length === 0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-inbox display-1 text-muted"></i>
+                        <p className="text-muted mt-2">Нет пресетов</p>
+                        <p className="text-muted">Пресеты — это предустановленные наборы показателей из справочника. На их основе можно быстро создать шаблон анализа.</p>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <Table striped hover>
+                          <thead>
+                            <tr>
+                              <th>Название</th>
+                              <th>Категория</th>
+                              <th>Показателей</th>
+                              <th className="text-end">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {presets.map((preset) => (
+                              <tr key={preset.id}>
+                                <td><strong>{preset.name}</strong></td>
                                 <td>
-                                  <Badge bg={template.is_active ? 'success' : 'danger'}>
-                                    {template.is_active ? 'Активен' : 'Неактивен'}
+                                  <Badge bg="secondary">
+                                    {getCategoryLabel(preset.category)}
                                   </Badge>
+                                </td>
+                                <td>{preset.indicators_count}</td>
+                                <td className="text-end">
+                                  <Button 
+                                    variant="success" 
+                                    size="sm"
+                                    onClick={() => handleOpenCreateFromPresetModal(preset.id)}
+                                  >
+                                    <i className="bi bi-plus-circle me-1"></i>
+                                    Создать шаблон
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </Tab>
+
+              {/* Indicators Library Tab */}
+              <Tab eventKey="library" title={
+                <span><i className="bi bi-book me-1"></i>Справочник показателей</span>
+              }>
+                <Card>
+                  <CardHeader className="d-flex justify-content-between align-items-center">
+                    <CardTitle className="h5 mb-0">
+                      <i className="bi bi-collection me-2 text-primary"></i>
+                      Справочник показателей
+                    </CardTitle>
+                    <div className="d-flex gap-2 align-items-center">
+                      <div className="btn-group">
+                        <button className="btn btn-outline-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <i className="bi bi-download me-1"></i>Экспорт
+                        </button>
+                        <ul className="dropdown-menu dropdown-menu-end">
+                          <li><button className="dropdown-item" onClick={() => handleExport('csv')}>
+                            <i className="bi bi-filetype-csv me-2"></i>CSV
+                          </button></li>
+                          <li><button className="dropdown-item" onClick={() => handleExport('excel')}>
+                            <i className="bi bi-file-earmark-excel me-2"></i>Excel (.xlsx)
+                          </button></li>
+                        </ul>
+                      </div>
+                      <div className="btn-group">
+                        <button className="btn btn-outline-warning btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <i className="bi bi-upload me-1"></i>Импорт
+                        </button>
+                        <ul className="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <label className="dropdown-item" style={{cursor: 'pointer'}}>
+                              <i className="bi bi-filetype-csv me-2"></i>CSV
+                              <input type="file" accept=".csv,.txt" style={{display: 'none'}} onChange={(e) => handleImportFile(e, 'csv')} />
+                            </label>
+                          </li>
+                          <li>
+                            <label className="dropdown-item" style={{cursor: 'pointer'}}>
+                              <i className="bi bi-filetype-json me-2"></i>JSON
+                              <input type="file" accept=".json" style={{display: 'none'}} onChange={(e) => handleImportFile(e, 'json')} />
+                            </label>
+                          </li>
+                        </ul>
+                      </div>
+                      <Button variant="primary" size="sm" onClick={() => setShowLibModal(true)}>
+                        <i className="bi bi-plus-circle me-1"></i>
+                        Добавить
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardBody>
+                    {/* Search & filters */}
+                    <div className="row g-2 mb-3">
+                      <div className="col-md-5">
+                        <div className="input-group input-group-sm">
+                          <span className="input-group-text"><i className="bi bi-search"></i></span>
+                          <Form.Control
+                            type="text"
+                            placeholder="Поиск по названию, описанию, категории..."
+                            value={libSearch}
+                            onChange={(e) => handleLibSearchChange(e.target.value)}
+                          />
+                          {libSearch && (
+                            <button className="btn btn-outline-secondary" onClick={() => handleLibSearchChange('')}>
+                              <i className="bi bi-x"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <Form.Select size="sm" value={libFilterCategory} onChange={(e) => handleLibFilterChange('category', e.target.value)}>
+                          <option value="">Все категории</option>
+                          <option value="quality">Качество</option>
+                          <option value="safety">Безопасность</option>
+                          <option value="performance">Производительность</option>
+                          <option value="chemical">Химический состав</option>
+                          <option value="physical">Физические свойства</option>
+                          <option value="microbiology">Микробиология</option>
+                        </Form.Select>
+                      </div>
+                      <div className="col-md-2">
+                        <Form.Select size="sm" value={libFilterType} onChange={(e) => handleLibFilterChange('type', e.target.value)}>
+                          <option value="">Все типы</option>
+                          <option value="number">Число</option>
+                          <option value="text">Текст</option>
+                          <option value="select">Выбор</option>
+                        </Form.Select>
+                      </div>
+                      <div className="col-md-2 d-flex align-items-center">
+                        {libIsSearching && <Spinner animation="border" size="sm" className="me-2" />}
+                        <small className="text-muted">Найдено: {libIndicators.length}</small>
+                      </div>
+                    </div>
+                    {libIndicators.length === 0 && !libIsSearching ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-inbox display-1 text-muted"></i>
+                        <p className="text-muted mt-2">Нет показателей в справочнике</p>
+                        <p className="text-muted">Добавьте показатели, которые будут использоваться в шаблонах</p>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <Table striped hover>
+                          <thead>
+                            <tr>
+                              <th>Название</th>
+                              <th>Ед. изм.</th>
+                              <th>Тип</th>
+                              <th>Варианты</th>
+                              <th className="text-end">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {libIndicators.map((ind) => (
+                              <tr key={ind.id}>
+                                <td><strong>{ind.name}</strong></td>
+                                <td>{ind.unit}</td>
+                                <td>
+                                  <Badge bg="secondary">
+                                    {ind.data_type === 'number' ? 'Число' : ind.data_type === 'text' ? 'Текст' : 'Выбор'}
+                                  </Badge>
+                                </td>
+                                <td>
+                                  {ind.data_type === 'select' && ind.options ? (
+                                    <small className="text-muted">{ind.options.join(', ')}</small>
+                                  ) : '-'}
                                 </td>
                                 <td className="text-end">
                                   <Button 
                                     variant="outline-primary" 
                                     size="sm" 
                                     className="me-1"
-                                    onClick={() => handleEditTemplate(template)}
+                                    onClick={() => handleEditLibIndicator(ind)}
                                   >
-                                    <i className="bi bi-pencil me-1"></i>
-                                    Редактировать
-                                  </Button>
-                                  <Button 
-                                    variant={template.is_active ? 'warning' : 'success'} 
-                                    size="sm"
-                                    onClick={() => handleToggleTemplate(template.id, template.is_active)}
-                                  >
-                                    {template.is_active ? 'Деактивировать' : 'Активировать'}
+                                    <i className="bi bi-pencil"></i>
                                   </Button>
                                   <Button 
                                     variant="outline-danger" 
-                                    size="sm" 
-                                    className="ms-1"
-                                    onClick={() => handleDeleteTemplate(template.id)}
+                                    size="sm"
+                                    onClick={() => handleDeleteLibIndicator(ind.id)}
                                   >
-                                    <i className="bi bi-trash me-1"></i>
-                                    Удалить
+                                    <i className="bi bi-trash"></i>
                                   </Button>
                                 </td>
                               </tr>
@@ -454,6 +1126,23 @@ const Admin: React.FC = () => {
                 onChange={(e) => setTemplateDescription(e.target.value)}
               />
             </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Тип шаблона</Form.Label>
+              <Form.Select
+                value={templateType}
+                onChange={(e) => setTemplateType(e.target.value as 'pure' | 'hybrid')}
+                disabled={!!editingTemplate}
+              >
+                <option value="hybrid">Гибридный — справочник + пользовательские показатели</option>
+                <option value="pure">Чистый — только показатели из справочника</option>
+              </Form.Select>
+              <Form.Text className="text-muted">
+                {templateType === 'pure' 
+                  ? 'Только показатели из справочника. Пользовательские показатели недоступны.'
+                  : 'Можно добавлять как показатели из справочника, так и пользовательские.'}
+              </Form.Text>
+            </Form.Group>
             
             <Form.Group className="mb-3">
               <Form.Check
@@ -464,59 +1153,173 @@ const Admin: React.FC = () => {
               />
             </Form.Group>
 
+            {/* Показатели из справочника */}
             <div className="mb-3">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <h5>Показатели</h5>
-                <Button variant="outline-primary" size="sm" onClick={() => setShowIndicatorModal(true)}>
+                <h5 className="mb-0">
+                  <i className="bi bi-book me-1"></i>
+                  Показатели из справочника
+                </h5>
+                <Button variant="outline-primary" size="sm" onClick={handleOpenSelectLibModal}>
                   <i className="bi bi-plus-circle me-1"></i>
-                  Добавить показатель
+                  Выбрать из справочника
                 </Button>
               </div>
               
-              {templateIndicators.length === 0 ? (
-                <Alert variant="info">
-                  <i className="bi bi-info-circle-fill me-2"></i>
-                  Нет показателей. Добавьте хотя бы один показатель для шаблона.
+              {templateLibIndicators.length === 0 ? (
+                <Alert variant="info" className="py-2">
+                  <small><i className="bi bi-info-circle-fill me-1"></i>Нет показателей из справочника. Нажмите "Выбрать из справочника", чтобы добавить.</small>
                 </Alert>
               ) : (
                 <div>
-                  {templateIndicators.map((indicator) => (
-                    <Card key={indicator.id} className="mb-2">
-                      <CardBody>
-                        <div className="d-flex justify-content-between align-items-start">
-                          <div>
-                            <strong>{indicator.name}</strong>, {indicator.unit}
-                            {indicator.min_value !== null && indicator.max_value !== null && (
-                              <small className="text-muted ms-2">
-                                Норма: {indicator.min_value} - {indicator.max_value}
-                              </small>
-                            )}
-                            <Badge bg="secondary" className="ms-2">{indicator.data_type}</Badge>
-                          </div>
-                          <div>
-                            <Button 
-                              variant="outline-primary" 
-                              size="sm" 
-                              className="me-1"
-                              onClick={() => handleEditIndicator(indicator)}
-                            >
-                              <i className="bi bi-pencil"></i>
-                            </Button>
+                  {templateLibIndicators.map((ref, index) => {
+                    const libInd = getLibIndicator(ref.indicator_id);
+                    const isFirst = index === 0;
+                    const isLast = index === templateLibIndicators.length - 1;
+                    return (
+                      <Card key={ref.indicator_id} className="mb-2 bg-light">
+                        <CardBody className="py-2">
+                          <div className="d-flex justify-content-between align-items-center">
+                            <div className="d-flex align-items-center gap-2">
+                              <div className="d-flex flex-column">
+                                <button 
+                                  className="btn btn-sm py-0 px-1 border-0 text-muted" 
+                                  disabled={isFirst}
+                                  onClick={() => handleMoveLibIndicator(ref.indicator_id, 'up')}
+                                  title="Переместить вверх"
+                                >
+                                  <i className="bi bi-chevron-up"></i>
+                                </button>
+                                <button 
+                                  className="btn btn-sm py-0 px-1 border-0 text-muted" 
+                                  disabled={isLast}
+                                  onClick={() => handleMoveLibIndicator(ref.indicator_id, 'down')}
+                                  title="Переместить вниз"
+                                >
+                                  <i className="bi bi-chevron-down"></i>
+                                </button>
+                              </div>
+                              <div>
+                                <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
+                                <small className="text-muted ms-2">{libInd?.unit}</small>
+                                <Badge bg="info" className="ms-2" pill>Из справочника</Badge>
+                                {libInd?.category && (
+                                  <Badge bg="secondary" className="ms-1">{getCategoryLabel(libInd.category)}</Badge>
+                                )}
+                                {libInd?.description && (
+                                  <div className="text-muted small mt-1">{libInd.description}</div>
+                                )}
+                                {ref.min_value !== null && ref.max_value !== null && (
+                                  <small className="text-muted ms-2 d-block d-sm-inline">
+                                    Норма: {ref.min_value} - {ref.max_value}
+                                  </small>
+                                )}
+                              </div>
+                            </div>
                             <Button 
                               variant="outline-danger" 
                               size="sm"
-                              onClick={() => handleDeleteIndicator(indicator.id)}
+                              onClick={() => handleRemoveLibIndicator(ref.indicator_id)}
                             >
-                              <i className="bi bi-trash"></i>
+                              <i className="bi bi-x"></i>
                             </Button>
                           </div>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  ))}
+                        </CardBody>
+                      </Card>
+                    );
+                  })}
                 </div>
               )}
             </div>
+
+            {/* Обычные показатели (старый подход) — только для hybrid */}
+            {templateType === 'hybrid' && (
+              <div className="mb-3">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h5 className="mb-0">
+                    <i className="bi bi-speedometer2 me-1"></i>
+                    Пользовательские показатели
+                  </h5>
+                  <Button variant="outline-secondary" size="sm" onClick={() => setShowIndicatorModal(true)}>
+                    <i className="bi bi-plus-circle me-1"></i>
+                    Добавить показатель
+                  </Button>
+                </div>
+                
+                {templateIndicators.length === 0 ? (
+                  <Alert variant="info" className="py-2">
+                    <small><i className="bi bi-info-circle-fill me-1"></i>Нет пользовательских показателей.</small>
+                  </Alert>
+                ) : (
+                  <div>
+                    {templateIndicators.map((indicator, index) => {
+                      const isFirst = index === 0;
+                      const isLast = index === templateIndicators.length - 1;
+                      return (
+                        <Card key={indicator.id} className="mb-2">
+                          <CardBody className="py-2">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <div className="d-flex align-items-center gap-2">
+                                <div className="d-flex flex-column">
+                                  <button 
+                                    className="btn btn-sm py-0 px-1 border-0 text-muted" 
+                                    disabled={isFirst}
+                                    onClick={() => handleMoveIndicator(indicator.id, 'up')}
+                                    title="Переместить вверх"
+                                  >
+                                    <i className="bi bi-chevron-up"></i>
+                                  </button>
+                                  <button 
+                                    className="btn btn-sm py-0 px-1 border-0 text-muted" 
+                                    disabled={isLast}
+                                    onClick={() => handleMoveIndicator(indicator.id, 'down')}
+                                    title="Переместить вниз"
+                                  >
+                                    <i className="bi bi-chevron-down"></i>
+                                  </button>
+                                </div>
+                                <div>
+                                  <strong>{indicator.name}</strong>, {indicator.unit}
+                                  {indicator.min_value !== null && indicator.max_value !== null && (
+                                    <small className="text-muted ms-2">
+                                      Норма: {indicator.min_value} - {indicator.max_value}
+                                    </small>
+                                  )}
+                                  <Badge bg="secondary" className="ms-2">{indicator.data_type}</Badge>
+                                </div>
+                              </div>
+                              <div>
+                                <Button 
+                                  variant="outline-primary" 
+                                  size="sm" 
+                                  className="me-1"
+                                  onClick={() => handleEditIndicator(indicator)}
+                                >
+                                  <i className="bi bi-pencil"></i>
+                                </Button>
+                                <Button 
+                                  variant="outline-danger" 
+                                  size="sm"
+                                  onClick={() => handleDeleteIndicator(indicator.id)}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              </div>
+                            </div>
+                          </CardBody>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            {templateType === 'pure' && (
+              <Alert variant="info">
+                <i className="bi bi-info-circle-fill me-2"></i>
+                Чистый шаблон использует только показатели из справочника. Пользовательские показатели недоступны.
+              </Alert>
+            )}
           </Form>
         </Modal.Body>
         <Modal.Footer>
@@ -529,7 +1332,86 @@ const Admin: React.FC = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Indicator Modal */}
+      {/* Copy Template Modal */}
+      <Modal show={showCopyModal} onHide={() => setShowCopyModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Копирование шаблона</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={(e) => { e.preventDefault(); handleCopyTemplate(); }}>
+            <Form.Group className="mb-3">
+              <Form.Label>Название для копии</Form.Label>
+              <Form.Control
+                type="text"
+                value={copyTemplateName}
+                onChange={(e) => setCopyTemplateName(e.target.value)}
+                required
+              />
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowCopyModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleCopyTemplate}>
+            <i className="bi bi-copy me-1"></i>
+            Создать копию
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Create From Preset Modal */}
+      <Modal show={showCreateFromPresetModal} onHide={() => setShowCreateFromPresetModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Создание шаблона из пресета</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {presetDetail && (
+            <div className="mb-3">
+              <p><strong>Пресет:</strong> {presetDetail.name}</p>
+              <p><strong>Категория:</strong> {getCategoryLabel(presetDetail.category)}</p>
+              <p><strong>Показателей:</strong> {presetDetail.indicators.length}</p>
+              {presetDetail.indicators.length > 0 && (
+                <ul className="list-group list-group-flush mb-3">
+                  {presetDetail.indicators.slice(0, 5).map((pi) => (
+                    <li key={pi.id} className="list-group-item py-1">
+                      <small>{pi.indicator_name} ({pi.indicator_unit})</small>
+                    </li>
+                  ))}
+                  {presetDetail.indicators.length > 5 && (
+                    <li className="list-group-item py-1 text-muted">
+                      <small>...и ещё {presetDetail.indicators.length - 5}</small>
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+          <Form onSubmit={(e) => { e.preventDefault(); handleCreateFromPreset(); }}>
+            <Form.Group className="mb-3">
+              <Form.Label>Название нового шаблона</Form.Label>
+              <Form.Control
+                type="text"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                required
+              />
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowCreateFromPresetModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="success" onClick={handleCreateFromPreset}>
+            <i className="bi bi-plus-circle me-1"></i>
+            Создать шаблон
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Indicator Modal (старый подход) */}
       <Modal show={showIndicatorModal} onHide={() => setShowIndicatorModal(false)}>
         <Modal.Header closeButton>
           <Modal.Title>
@@ -615,6 +1497,308 @@ const Admin: React.FC = () => {
           <Button variant="primary" onClick={handleIndicatorSubmit}>
             {editingIndicator ? 'Сохранить изменения' : 'Добавить показатель'}
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Library Indicator Modal */}
+      <Modal show={showLibModal} onHide={() => setShowLibModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {editingLibIndicator ? 'Редактирование показателя' : 'Добавление показателя в справочник'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleLibIndicatorSubmit}>
+            <Form.Group className="mb-3">
+              <Form.Label>Название показателя</Form.Label>
+              <Form.Control
+                type="text"
+                value={libIndicatorName}
+                onChange={(e) => setLibIndicatorName(e.target.value)}
+                required
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Единица измерения</Form.Label>
+              <Form.Control
+                type="text"
+                value={libIndicatorUnit}
+                onChange={(e) => setLibIndicatorUnit(e.target.value)}
+                required
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Тип</Form.Label>
+              <Form.Select
+                value={libIndicatorType}
+                onChange={(e) => setLibIndicatorType(e.target.value as 'number' | 'text' | 'select')}
+              >
+                <option value="number">Число с плавающей точкой</option>
+                <option value="text">Текст</option>
+                <option value="select">Выбор из списка</option>
+              </Form.Select>
+            </Form.Group>
+            
+            {libIndicatorType === 'select' && (
+              <Form.Group className="mb-3">
+                <Form.Label>Варианты выбора (через запятую)</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={libIndicatorOptions}
+                  onChange={(e) => setLibIndicatorOptions(e.target.value)}
+                  placeholder="Вариант 1, Вариант 2, Вариант 3"
+                />
+              </Form.Group>
+            )}
+            
+            {/* Новые поля */}
+            <Form.Group className="mb-3">
+              <Form.Label>Описание</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={2}
+                value={libIndicatorDescription}
+                onChange={(e) => setLibIndicatorDescription(e.target.value)}
+                placeholder="Подробное описание показателя"
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Категория</Form.Label>
+              <Form.Select
+                value={libIndicatorCategory}
+                onChange={(e) => setLibIndicatorCategory(e.target.value)}
+              >
+                <option value="">Без категории</option>
+                <option value="quality">Качество</option>
+                <option value="safety">Безопасность</option>
+                <option value="performance">Производительность</option>
+                <option value="chemical">Химический состав</option>
+                <option value="physical">Физические свойства</option>
+                <option value="microbiology">Микробиология</option>
+              </Form.Select>
+            </Form.Group>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    label="Обязательный показатель"
+                    checked={libIndicatorRequired}
+                    onChange={(e) => setLibIndicatorRequired(e.target.checked)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Значение по умолчанию</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={libIndicatorDefaultValue}
+                    onChange={(e) => setLibIndicatorDefaultValue(e.target.value)}
+                    placeholder="Например: 0.0"
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {libIndicatorType !== 'number' && (
+              <Alert variant="info">
+                <small><i className="bi bi-info-circle me-1"></i>Нормы (min/max) задаются при добавлении показателя в шаблон.</small>
+              </Alert>
+            )}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowLibModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleLibIndicatorSubmit}>
+            {editingLibIndicator ? 'Сохранить изменения' : 'Добавить показатель'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Select from Library Modal */}
+      <Modal show={showSelectLibModal} onHide={() => setShowSelectLibModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Выбор показателей из справочника
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3">
+            Выберите показатели для добавления в шаблон и задайте для них нормы (min/max).
+          </p>
+          
+          {libIndicators.length === 0 ? (
+            <Alert variant="warning">
+              <i className="bi bi-exclamation-triangle-fill me-2"></i>
+              Справочник показателей пуст. Сначала добавьте показатели на вкладке "Справочник показателей".
+            </Alert>
+          ) : (
+            <div className="table-responsive">
+              <Table striped hover size="sm">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}>#</th>
+                    <th>Показатель</th>
+                    <th>Тип</th>
+                    <th style={{ width: '120px' }}>Норма min</th>
+                    <th style={{ width: '120px' }}>Норма max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {libIndicators.map((ind) => (
+                    <tr key={ind.id} className={selectedLibIndicators.includes(ind.id) ? 'table-primary' : ''}>
+                      <td>
+                        <Form.Check
+                          type="checkbox"
+                          checked={selectedLibIndicators.includes(ind.id)}
+                          onChange={() => handleToggleLibSelection(ind.id)}
+                        />
+                      </td>
+                      <td>
+                        <strong>{ind.name}</strong>, {ind.unit}
+                        {ind.data_type === 'select' && ind.options && (
+                          <small className="text-muted d-block">Варианты: {ind.options.join(', ')}</small>
+                        )}
+                      </td>
+                      <td>
+                        <Badge bg="secondary">
+                          {ind.data_type === 'number' ? 'Число' : ind.data_type === 'text' ? 'Текст' : 'Выбор'}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Form.Control
+                          type="number"
+                          size="sm"
+                          value={libIndicatorNorms[ind.id]?.min ?? ''}
+                          onChange={(e) => handleLibNormChange(ind.id, 'min', e.target.value)}
+                          disabled={!selectedLibIndicators.includes(ind.id)}
+                          placeholder="min"
+                        />
+                      </td>
+                      <td>
+                        <Form.Control
+                          type="number"
+                          size="sm"
+                          value={libIndicatorNorms[ind.id]?.max ?? ''}
+                          onChange={(e) => handleLibNormChange(ind.id, 'max', e.target.value)}
+                          disabled={!selectedLibIndicators.includes(ind.id)}
+                          placeholder="max"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSelectLibModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleConfirmLibSelection} disabled={selectedLibIndicators.length === 0}>
+            <i className="bi bi-check-circle me-1"></i>
+            Добавить выбранные ({selectedLibIndicators.length})
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Preview Template Modal */}
+      <Modal show={showPreviewModal} onHide={() => setShowPreviewModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <i className="bi bi-eye me-2"></i>
+            {previewTemplate?.name}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {previewTemplate && (
+            <>
+              <div className="mb-3">
+                <Badge bg={getTypeLabel(previewTemplate.template_type).color as any} className="me-2">
+                  {getTypeLabel(previewTemplate.template_type).label}
+                </Badge>
+                <Badge bg={previewTemplate.is_active ? 'success' : 'danger'}>
+                  {previewTemplate.is_active ? 'Активен' : 'Неактивен'}
+                </Badge>
+              </div>
+              
+              {previewTemplate.description && (
+                <p className="text-muted mb-3">{previewTemplate.description}</p>
+              )}
+
+              <h6 className="mb-2">Показатели ({getTotalIndicators(previewTemplate)})</h6>
+              
+              {/* Library indicators */}
+              {previewTemplate.template_indicators && previewTemplate.template_indicators.length > 0 && (
+                <div className="mb-3">
+                  <small className="text-muted fw-bold d-block mb-1">
+                    <i className="bi bi-book me-1"></i>Из справочника:
+                  </small>
+                  <div className="list-group list-group-flush">
+                    {previewTemplate.template_indicators.map((ti, idx) => (
+                      <div key={ti.id} className="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
+                        <div>
+                          <span className="badge bg-secondary me-1">{idx + 1}</span>
+                          <strong>{ti.name}</strong>
+                          <small className="text-muted ms-1">{ti.unit}</small>
+                          {ti.max_value !== null && (
+                            <small className="text-muted ms-2">
+                              Норма: {ti.min_value ?? '?'} - {ti.max_value}
+                            </small>
+                          )}
+                          <Badge bg="info" className="ms-1" pill>{ti.data_type}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Custom indicators */}
+              {previewTemplate.indicators && previewTemplate.indicators.length > 0 && (
+                <div>
+                  <small className="text-muted fw-bold d-block mb-1">
+                    <i className="bi bi-speedometer2 me-1"></i>Пользовательские:
+                  </small>
+                  <div className="list-group list-group-flush">
+                    {previewTemplate.indicators.map((ind, idx) => (
+                      <div key={ind.id} className="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
+                        <div>
+                          <span className="badge bg-secondary me-1">{idx + 1}</span>
+                          <strong>{ind.name}</strong>
+                          <small className="text-muted ms-1">{ind.unit}</small>
+                          {ind.max_value !== null && (
+                            <small className="text-muted ms-2">
+                              Норма: {ind.min_value ?? '?'} - {ind.max_value}
+                            </small>
+                          )}
+                          <Badge bg="secondary" className="ms-1">{ind.data_type}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowPreviewModal(false)}>
+            Закрыть
+          </Button>
+          {previewTemplate && (
+            <Button variant="primary" onClick={() => { setShowPreviewModal(false); handleEditTemplate(previewTemplate); }}>
+              <i className="bi bi-pencil me-1"></i>Редактировать
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
 

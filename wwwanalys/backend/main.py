@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, analysis_type, process_log, templates, reports, external
+from app.api import auth, analysis_type, process_log, templates, reports, external, indicators, presets, statistics
 from app.core.database import engine, Base
 from app.core.config import settings
-from app.models import User, AnalysisType, Indicator, ProcessLog, IndicatorValue
+from app.models import User, AnalysisType, Indicator, ProcessLog, IndicatorValue, Preset, PresetIndicator
 import uvicorn
 
 # Создаем таблицы в базе данных
@@ -55,6 +55,9 @@ app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 app.include_router(external.router, prefix="/api/external", tags=["External Integration"])
 app.include_router(analysis_type.router, prefix="/analysis-types", tags=["Analysis Types"])
 app.include_router(process_log.router, prefix="/process-logs", tags=["Process Logs"])
+app.include_router(indicators.router, prefix="/api/indicators", tags=["Indicator Library"])
+app.include_router(presets.router, prefix="/api/presets", tags=["Presets"])
+app.include_router(statistics.router, prefix="/api", tags=["Statistics"])
 
 @app.get("/")
 def read_root():
