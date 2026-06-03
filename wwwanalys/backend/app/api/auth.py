@@ -1,27 +1,27 @@
+"""Authentication API endpoints."""
 from datetime import timedelta
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
+
+from app.core.deps import get_db
 from app.core.config import settings
 from app.auth.auth import authenticate_user, create_access_token, get_current_active_user, get_current_admin_user
 from app.crud import user as crud_user
 from app.models import User
 from app.schemas import User as UserSchema, UserCreate, UserUpdate
-from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 router = APIRouter()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/token", response_model=dict)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Login and get an access token."""
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -35,38 +35,71 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @router.post("/register", response_model=UserSchema)
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
+def register_user(
+    user: UserCreate,
+    db: Session = Depends(get_db)
+):
+    """Register a new user."""
     db_user = crud_user.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     return crud_user.create_user(db=db, user=user)
 
+
 @router.get("/users/me", response_model=UserSchema)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """Get current user info."""
     return current_user
 
+
 @router.get("/users", response_model=list[UserSchema])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin_user)):
+def read_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Get all users (admin only)."""
     users = crud_user.get_users(db, skip=skip, limit=limit)
     return users
 
+
 @router.get("/users/{user_id}", response_model=UserSchema)
-def read_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin_user)):
+def read_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Get a specific user (admin only)."""
     db_user = crud_user.get_user(db, user_id=user_id)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
+
 @router.put("/users/{user_id}", response_model=UserSchema)
-def update_user(user_id: int, user: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin_user)):
+def update_user(
+    user_id: int,
+    user: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Update a user (admin only)."""
     db_user = crud_user.update_user(db, user_id=user_id, user=user)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
+
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_admin_user)):
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    """Delete a user (admin only)."""
     db_user = crud_user.delete_user(db, user_id=user_id)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")

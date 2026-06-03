@@ -36,7 +36,7 @@ class ProcessLogUpdate(BaseModel):
 
 class ProcessLog(ProcessLogBase):
     id: int
-    created_at: datetime
+    started_at: datetime
     completed_at: Optional[datetime] = None
     
     class Config:

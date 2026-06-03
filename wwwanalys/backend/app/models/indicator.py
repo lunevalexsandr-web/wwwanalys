@@ -1,12 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from enum import Enum as PyEnum
-
-class DataType(PyEnum):
-    NUMBER = "number"
-    TEXT = "text"
-    SELECT = "select"
 
 class Indicator(Base):
     __tablename__ = "indicators"
@@ -16,7 +10,7 @@ class Indicator(Base):
     unit = Column(String)
     min_value = Column(Float)
     max_value = Column(Float)
-    data_type = Column(Enum(DataType), default=DataType.NUMBER)
+    data_type = Column(String(20), default="number")
     options = Column(Text)  # JSON-строка с вариантами для SELECT типа, например: '["Вариант 1", "Вариант 2"]'
     analysis_type_id = Column(Integer, ForeignKey("analysis_types.id"))
     

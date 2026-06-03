@@ -1,41 +1,16 @@
+/** Dashboard page - report creation and history */
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { 
+  Card, CardHeader, CardTitle, CardBody, Tabs, Tab, Form, Button, 
+  Alert, Badge, Table, Spinner
+} from 'react-bootstrap';
+import AppHeader from '../components/AppHeader';
+import AppToast from '../components/AppToast';
+import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-
-interface Indicator {
-  id: number;
-  name: string;
-  unit: string;
-  min_value: number;
-  max_value: number;
-  type: 'FLOAT' | 'TEXT';
-}
-
-interface AnalysisType {
-  id: number;
-  name: string;
-  description: string;
-  is_active: boolean;
-  indicators: Indicator[];
-}
-
-interface IndicatorValue {
-  indicator_id: number;
-  value: string | number;
-  is_normal?: boolean;
-}
-
-interface Report {
-  id: number;
-  batch_number: string;
-  analysis_type_id: number;
-  started_at: string;
-  status: string;
-  notes?: string;
-}
+import type { AnalysisType, IndicatorValue, Report, ToastState } from '../types';
 
 const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('new-report');
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<AnalysisType | null>(null);
@@ -49,6 +24,13 @@ const Dashboard: React.FC = () => {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  
+  // View report state
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewReport, setViewReport] = useState<Report | null>(null);
+  const [viewReportIndicators, setViewReportIndicators] = useState<any[]>([]);
+  
+  const { toast, showToast, hideToast } = useToast();
 
   useEffect(() => {
     fetchTemplates();
@@ -64,28 +46,23 @@ const Dashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching templates:', error);
-      alert('Ошибка при загрузке шаблонов');
+      showToast('Ошибка при загрузке шаблонов', 'danger');
     }
   };
 
   const fetchReports = async () => {
     setIsLoadingHistory(true);
     try {
-      let url = '/api/reports/filtered/list?';
-      if (filterTemplateId) {
-        url += `template_id=${filterTemplateId}&`;
-      }
-      if (filterDateFrom) {
-        url += `date_from=${filterDateFrom}&`;
-      }
-      if (filterDateTo) {
-        url += `date_to=${filterDateTo}&`;
-      }
+      const params = new URLSearchParams();
+      if (filterTemplateId) params.append('template_id', filterTemplateId.toString());
+      if (filterDateFrom) params.append('date_from', filterDateFrom);
+      if (filterDateTo) params.append('date_to', filterDateTo);
       
-      const response = await api.get(url);
+      const response = await api.get(`/api/reports/filtered/list?${params.toString()}`);
       setReports(response.data);
     } catch (error) {
       console.error('Error fetching reports:', error);
+      showToast('Ошибка при загрузке отчетов', 'danger');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -94,8 +71,6 @@ const Dashboard: React.FC = () => {
   const handleTemplateSelect = (template: AnalysisType) => {
     setSelectedTemplate(template);
     setBatchNumber('');
-    
-    // Initialize indicator values
     const values = template.indicators.map(indicator => ({
       indicator_id: indicator.id,
       value: '',
@@ -105,37 +80,36 @@ const Dashboard: React.FC = () => {
   };
 
   const handleIndicatorValueChange = (indicatorId: number, value: string) => {
-    const updatedValues = [...indicatorValues];
-    const indicatorIndex = updatedValues.findIndex(v => v.indicator_id === indicatorId);
-    
-    if (indicatorIndex !== -1) {
-      updatedValues[indicatorIndex].value = value;
+    setIndicatorValues(prev => {
+      const updated = [...prev];
+      const index = updated.findIndex(v => v.indicator_id === indicatorId);
       
-      // Check if value is normal (only for FLOAT type)
-      const indicator = selectedTemplate?.indicators.find(ind => ind.id === indicatorId);
-      if (indicator && indicator.min_value !== undefined && indicator.max_value !== undefined) {
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue)) {
-          updatedValues[indicatorIndex].is_normal = numValue >= indicator.min_value && numValue <= indicator.max_value;
-        } else {
-          updatedValues[indicatorIndex].is_normal = undefined;
+      if (index !== -1) {
+        updated[index] = { ...updated[index], value };
+        
+        const indicator = selectedTemplate?.indicators.find(ind => ind.id === indicatorId);
+        if (indicator && indicator.min_value !== null && indicator.max_value !== null) {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            updated[index].is_normal = numValue >= indicator.min_value && 
+                                       numValue <= indicator.max_value;
+          }
         }
       }
-      
-      setIndicatorValues(updatedValues);
-    }
+      return updated;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedTemplate || !batchNumber) {
-      alert('Пожалуйста, выберите шаблон и введите номер партии');
+      showToast('Пожалуйста, выберите шаблон и введите номер партии', 'warning');
       return;
     }
     
     if (indicatorValues.some(v => v.value === '' || v.value === undefined)) {
-      alert('Пожалуйста, заполните все значения показателей');
+      showToast('Пожалуйста, заполните все значения показателей', 'warning');
       return;
     }
     
@@ -147,13 +121,15 @@ const Dashboard: React.FC = () => {
         batch_number: batchNumber,
         values: indicatorValues.map(v => ({
           indicator_id: v.indicator_id,
-          value: typeof v.value === 'string' && !isNaN(parseFloat(v.value)) ? parseFloat(v.value) : v.value,
+          value: typeof v.value === 'string' && !isNaN(parseFloat(v.value)) 
+            ? parseFloat(v.value) 
+            : v.value,
           is_normal: v.is_normal
         }))
       };
       
       await api.post('/api/reports/', reportData);
-      alert('Отчет успешно отправлен!');
+      showToast('Отчет успешно отправлен!', 'success');
       
       // Reset form
       setBatchNumber('');
@@ -163,13 +139,41 @@ const Dashboard: React.FC = () => {
         is_normal: undefined
       })));
       
-      // Refresh history
       fetchReports();
     } catch (error) {
       console.error('Error submitting report:', error);
-      alert('Ошибка при отправке отчета');
+      showToast('Ошибка при отправке отчета', 'danger');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleViewReport = async (reportId: number) => {
+    try {
+      const response = await api.get(`/api/reports/${reportId}`);
+      const reportData = response.data;
+      setViewReport(reportData);
+      
+      // Find the template to get indicator names
+      const template = templates.find(t => t.id === reportData.analysis_type_id);
+      const indicators = template?.indicators || [];
+      
+      // Map indicator values with names
+      const enrichedValues = (reportData.values || []).map((v: any) => {
+        const indicator = indicators.find((ind: any) => ind.id === v.indicator_id);
+        return {
+          ...v,
+          indicator_name: indicator?.name || `#${v.indicator_id}`,
+          indicator_unit: indicator?.unit || '',
+          indicator_min: indicator?.min_value,
+          indicator_max: indicator?.max_value
+        };
+      });
+      setViewReportIndicators(enrichedValues);
+      setShowViewModal(true);
+    } catch (error) {
+      console.error('Error fetching report:', error);
+      showToast('Ошибка при загрузке отчета', 'danger');
     }
   };
 
@@ -180,23 +184,21 @@ const Dashboard: React.FC = () => {
 
     try {
       await api.delete('/api/reports/history/clear');
-      alert('История отчетов успешно очищена!');
+      showToast('История отчетов успешно очищена!', 'success');
       setReports([]);
     } catch (error) {
       console.error('Error clearing history:', error);
-      alert('Ошибка при очистке истории');
+      showToast('Ошибка при очистке истории', 'danger');
     }
   };
 
-  const handleFilterApply = () => {
-    fetchReports();
-  };
-
+  const handleFilterApply = () => fetchReports();
+  
   const handleFilterReset = () => {
     setFilterTemplateId(null);
     setFilterDateFrom('');
     setFilterDateTo('');
-    fetchReports();
+    setTimeout(fetchReports, 0);
   };
 
   const getTemplateName = (templateId: number) => {
@@ -204,323 +206,374 @@ const Dashboard: React.FC = () => {
     return template ? template.name : `Шаблон #${templateId}`;
   };
 
+  const getStatusBadge = (status: string): 'success' | 'warning' | 'danger' | 'secondary' => {
+    const statusMap: Record<string, 'success' | 'warning' | 'danger' | 'secondary'> = {
+      completed: 'success',
+      pending: 'warning',
+      error: 'danger'
+    };
+    return statusMap[status] || 'secondary';
+  };
+
+  const getStatusText = (status: string) => {
+    const textMap: Record<string, string> = {
+      completed: 'Завершен',
+      pending: 'В ожидании',
+      error: 'Ошибка'
+    };
+    return textMap[status] || status;
+  };
+
   return (
-    <div className="min-h-screen bg-light">
-      <header className="bg-white shadow-sm">
+    <div className="min-vh-100 bg-light">
+      <AppHeader showAdminLink />
+
+      <main className="app-main">
         <div className="container-fluid">
-          <div className="d-flex justify-content-between align-items-center h-16">
-            <div className="d-flex">
-              <div className="flex-shrink-0 d-flex align-items-center">
-                <h1 className="h4 mb-0 text-dark">WWWAnalys</h1>
-              </div>
-              <nav className="ms-4 d-flex gap-3">
-                {user?.is_admin && (
-                  <a
-                    href="/admin"
-                    className="text-decoration-none text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm"
-                  >
-                    Админ-панель
-                  </a>
-                )}
-              </nav>
+          <div className="page-wrapper">
+            <div className="mb-4">
+              <h2 className="h3 mb-1">Панель управления</h2>
+              <p className="text-muted mb-0">Внесение данных и просмотр истории анализов</p>
             </div>
-            <div className="d-flex align-items-center">
-              <span className="me-3 text-dark">
-                {user?.email} ({user?.is_admin ? 'ADMIN' : 'USER'})
-              </span>
-              <button
-                onClick={logout}
-                className="btn btn-danger"
-              >
-                Выйти
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <main className="container-fluid py-4">
-        <div className="p-4 border-4 border-dashed border-secondary rounded">
-          {/* Tabs */}
-          <div className="mb-4">
-            <nav className="nav nav-tabs">
-              <button
-                onClick={() => setActiveTab('new-report')}
-                className={`nav-link ${activeTab === 'new-report' ? 'active' : ''}`}
-              >
-                Новый отчет
-              </button>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`nav-link ${activeTab === 'history' ? 'active' : ''}`}
-              >
-                История отчетов
-              </button>
-            </nav>
-          </div>
+            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'new-report')} className="mb-4">
+              <Tab eventKey="new-report" title={
+                <span><i className="bi bi-plus-circle-fill me-1"></i>Новый отчет</span>
+              }>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="h5 mb-0">
+                      <i className="bi bi-file-earmark-text me-2 text-primary"></i>
+                      Внесение данных анализа
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody>
+                    <p className="text-muted mb-4">
+                      Выберите шаблон анализа, заполните показатели и отправьте отчет
+                    </p>
 
-          {activeTab === 'new-report' && (
-            <div>
-              <h2 className="h3 mb-3">Панель внесения анализов</h2>
-              <p className="text-muted mb-4">
-                Выберите шаблон анализа, заполните показатели и отправьте отчет
-              </p>
+                    {/* Template Selection */}
+                    <Form.Group className="mb-4">
+                      <Form.Label><i className="bi bi-list-ul me-1"></i>Выберите шаблон анализа</Form.Label>
+                      {templates.length === 0 ? (
+                        <Alert variant="warning">
+                          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                          Нет доступных шаблонов. Обратитесь к администратору для создания шаблонов.
+                        </Alert>
+                      ) : (
+                        <div>
+                          <Form.Select
+                            value={selectedTemplate?.id || ''}
+                            onChange={(e) => {
+                              const template = templates.find(t => t.id === parseInt(e.target.value));
+                              if (template) handleTemplateSelect(template);
+                            }}
+                          >
+                            <option value="" disabled>-- Выберите шаблон --</option>
+                            {templates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name} ({template.indicators.length} показателей)
+                              </option>
+                            ))}
+                          </Form.Select>
+                          
+                          {selectedTemplate?.description && (
+                            <Alert variant="info" className="mt-3">
+                              <Alert.Heading>{selectedTemplate.name}</Alert.Heading>
+                              <p className="mb-0">{selectedTemplate.description}</p>
+                            </Alert>
+                          )}
+                        </div>
+                      )}
+                    </Form.Group>
 
-              {/* Template Selection */}
-              <div className="mb-4">
-                <label className="form-label">Выберите шаблон анализа</label>
-                {templates.length === 0 ? (
-                  <div className="alert alert-warning">
-                    Нет доступных шаблонов. Обратитесь к администратору для создания шаблонов.
-                  </div>
-                ) : (
-                  <div>
-                    <select
-                      value={selectedTemplate?.id || ''}
-                      onChange={(e) => {
-                        const template = templates.find(t => t.id === parseInt(e.target.value));
-                        if (template) handleTemplateSelect(template);
-                      }}
-                      className="form-select"
-                    >
-                      <option value="" disabled>-- Выберите шаблон --</option>
-                      {templates.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name} ({template.indicators.length} показателей)
-                        </option>
-                      ))}
-                    </select>
-                    
-                    {selectedTemplate && selectedTemplate.description && (
-                      <div className="alert alert-info mt-3">
-                        <h4 className="alert-heading">{selectedTemplate.name}</h4>
-                        <p className="mb-0">{selectedTemplate.description}</p>
+                    {selectedTemplate && (
+                      <Form onSubmit={handleSubmit}>
+                        {/* Batch Number */}
+                        <Form.Group className="mb-4">
+                          <Form.Label><i className="bi bi-barcode me-1"></i>Номер партии</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={batchNumber}
+                            onChange={(e) => setBatchNumber(e.target.value)}
+                            placeholder="Введите номер партии"
+                            required
+                          />
+                        </Form.Group>
+
+                        {/* Indicators */}
+                        <div className="mb-4">
+                          <h5 className="mb-3">
+                            <i className="bi bi-speedometer2 me-2 text-primary"></i>
+                            Показатели для анализа: {selectedTemplate.name}
+                          </h5>
+                          
+                          <div className="row g-3">
+                            {selectedTemplate.indicators.map((indicator) => {
+                              const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
+                              const isOutOfRange = indicatorValue && 
+                                  indicator.min_value !== null && 
+                                  indicator.max_value !== null &&
+                                  !isNaN(parseFloat(indicatorValue.value as string)) &&
+                                  (parseFloat(indicatorValue.value as string) < indicator.min_value || 
+                                   parseFloat(indicatorValue.value as string) > indicator.max_value);
+                              
+                              return (
+                                <div key={indicator.id} className="col-12">
+                                  <Card>
+                                    <CardBody>
+                                      <div className="row g-3">
+                                        <div className="col-md-4">
+                                          <Form.Label>{indicator.name}, {indicator.unit}</Form.Label>
+                                          {indicator.min_value !== null && indicator.max_value !== null && (
+                                            <small className="text-muted d-block">
+                                              Норма: {indicator.min_value} - {indicator.max_value}
+                                            </small>
+                                          )}
+                                        </div>
+                                        <div className="col-md-8">
+                                          <Form.Control
+                                            type={indicator.data_type === 'number' ? 'number' : 'text'}
+                                            className={isOutOfRange ? 'is-invalid' : ''}
+                                            value={indicatorValue?.value || ''}
+                                            onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
+                                            step={indicator.data_type === 'number' ? '0.01' : undefined}
+                                            placeholder={`Введите значение (${indicator.data_type})`}
+                                            required
+                                          />
+                                          {isOutOfRange && (
+                                            <div className="invalid-feedback">
+                                              <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                              Значение вне нормы!
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </CardBody>
+                                  </Card>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="d-flex justify-content-end">
+                          <Button type="submit" variant="primary" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                              <>
+                                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                                Отправка...
+                              </>
+                            ) : (
+                              <>
+                                <i className="bi bi-send-fill me-2"></i>
+                                Отправить отчет
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </Form>
+                    )}
+                  </CardBody>
+                </Card>
+              </Tab>
+
+              <Tab eventKey="history" title={
+                <span><i className="bi bi-clock-history me-1"></i>История отчетов</span>
+              }>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="h5 mb-0">
+                      <i className="bi bi-journal-text me-2 text-primary"></i>
+                      История отчетов
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody>
+                    {/* Filters */}
+                    <Card className="mb-4">
+                      <CardHeader className="bg-light">
+                        <CardTitle className="h6 mb-0">
+                          <i className="bi bi-funnel me-1"></i>Фильтры
+                        </CardTitle>
+                      </CardHeader>
+                      <CardBody>
+                        <div className="row g-3">
+                          <div className="col-md-4">
+                            <Form.Label><i className="bi bi-list-ul me-1"></i>Шаблон</Form.Label>
+                            <Form.Select
+                              value={filterTemplateId || ''}
+                              onChange={(e) => setFilterTemplateId(e.target.value ? parseInt(e.target.value) : null)}
+                            >
+                              <option value="">Все шаблоны</option>
+                              {templates.map((t) => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </Form.Select>
+                          </div>
+                          <div className="col-md-3">
+                            <Form.Label><i className="bi bi-calendar-range me-1"></i>Дата с</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={filterDateFrom}
+                              onChange={(e) => setFilterDateFrom(e.target.value)}
+                            />
+                          </div>
+                          <div className="col-md-3">
+                            <Form.Label><i className="bi bi-calendar-check me-1"></i>по</Form.Label>
+                            <Form.Control
+                              type="date"
+                              value={filterDateTo}
+                              onChange={(e) => setFilterDateTo(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 d-flex gap-2">
+                          <Button variant="primary" onClick={handleFilterApply}>
+                            <i className="bi bi-check-circle me-1"></i>Применить
+                          </Button>
+                          <Button variant="secondary" onClick={handleFilterReset}>
+                            <i className="bi bi-arrow-counterclockwise me-1"></i>Сбросить
+                          </Button>
+                        </div>
+                      </CardBody>
+                    </Card>
+
+                    {/* Reports List */}
+                    {isLoadingHistory ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                        <p className="text-muted mt-2">Загрузка...</p>
+                      </div>
+                    ) : reports.length === 0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-inbox display-1 text-muted"></i>
+                        <p className="text-muted mt-2">Нет отчетов для отображения</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="table-responsive">
+                          <Table striped hover>
+                            <thead>
+                              <tr>
+                                <th>Номер партии</th>
+                                <th>Шаблон</th>
+                                <th>Дата</th>
+                                <th>Статус</th>
+                                <th className="text-end">Действия</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reports.map((report) => (
+                                <tr key={report.id}>
+                                  <td><strong>{report.batch_number}</strong></td>
+                                  <td>{getTemplateName(report.analysis_type_id)}</td>
+                                  <td>{new Date(report.started_at).toLocaleString('ru-RU')}</td>
+                                  <td>
+                                    <Badge bg={getStatusBadge(report.status)}>
+                                      {getStatusText(report.status)}
+                                    </Badge>
+                                  </td>
+                                  <td className="text-end">
+                                    <Button variant="outline-primary" size="sm" onClick={() => handleViewReport(report.id)}>
+                                      <i className="bi bi-eye me-1"></i>Просмотр
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        </div>
+
+                        {reports.length > 0 && (
+                          <div className="mt-4 d-flex justify-content-end">
+                            <Button variant="danger" onClick={handleClearHistory}>
+                              <i className="bi bi-trash me-1"></i>
+                              Очистить всю историю
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
-
-              {selectedTemplate && (
-                <div>
-                  {/* Batch Number */}
-                  <div className="mb-4">
-                    <label htmlFor="batch-number" className="form-label">
-                      Номер партии
-                    </label>
-                    <input
-                      type="text"
-                      id="batch-number"
-                      className="form-control"
-                      value={batchNumber}
-                      onChange={(e) => setBatchNumber(e.target.value)}
-                      placeholder="Введите номер партии"
-                    />
-                  </div>
-
-                  {/* Form */}
-                  <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                      <h3 className="h5 mb-3">
-                        Показатели для анализа: {selectedTemplate.name}
-                      </h3>
-                      
-                      <div className="row g-3">
-                        {selectedTemplate.indicators.map((indicator) => {
-                          const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
-                          const isOutOfRange = indicatorValue && 
-                              indicator.min_value !== undefined && 
-                              indicator.max_value !== undefined &&
-                              !isNaN(parseFloat(indicatorValue.value as string)) &&
-                              (parseFloat(indicatorValue.value as string) < indicator.min_value || 
-                               parseFloat(indicatorValue.value as string) > indicator.max_value);
-                          
-                          return (
-                            <div key={indicator.id} className="col-12">
-                              <div className="card">
-                                <div className="card-body">
-                                  <div className="row g-3">
-                                    <div className="col-md-4">
-                                      <label className="form-label">
-                                        {indicator.name}, {indicator.unit}
-                                      </label>
-                                      {indicator.min_value !== undefined && indicator.max_value !== undefined && (
-                                        <small className="text-muted d-block">
-                                          Норма: {indicator.min_value} - {indicator.max_value}
-                                        </small>
-                                      )}
-                                    </div>
-                                    <div className="col-md-8">
-                                      {indicatorValue && (
-                                        <input
-                                          type={indicator.type === 'FLOAT' ? 'number' : 'text'}
-                                          className={`form-control ${isOutOfRange ? 'is-invalid' : ''}`}
-                                          value={indicatorValue.value}
-                                          onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
-                                          step={indicator.type === 'FLOAT' ? '0.01' : undefined}
-                                          placeholder={`Введите значение (${indicator.type})`}
-                                        />
-                                      )}
-                                      {isOutOfRange && (
-                                        <div className="invalid-feedback">
-                                          Значение вне нормы!
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="d-flex justify-content-end">
-                      <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="btn btn-primary"
-                      >
-                        {isSubmitting ? 'Отправка...' : 'Отправить отчет'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {!templates.length && (
-                <div className="text-center py-4">
-                  <p className="text-muted">Нет доступных шаблонов анализа</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'history' && (
-            <div>
-              <h2 className="h3 mb-3">История отчетов</h2>
-              
-              {/* Filters */}
-              <div className="card mb-4">
-                <div className="card-body">
-                  <h5 className="card-title">Фильтры</h5>
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <label className="form-label">Шаблон</label>
-                      <select
-                        value={filterTemplateId || ''}
-                        onChange={(e) => setFilterTemplateId(e.target.value ? parseInt(e.target.value) : null)}
-                        className="form-select"
-                      >
-                        <option value="">Все шаблоны</option>
-                        {templates.map((t) => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-3">
-                      <label className="form-label">Дата с</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={filterDateFrom}
-                        onChange={(e) => setFilterDateFrom(e.target.value)}
-                      />
-                    </div>
-                    <div className="col-md-3">
-                      <label className="form-label">по</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={filterDateTo}
-                        onChange={(e) => setFilterDateTo(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-3 d-flex gap-2">
-                    <button
-                      onClick={handleFilterApply}
-                      className="btn btn-primary"
-                    >
-                      Применить
-                    </button>
-                    <button
-                      onClick={handleFilterReset}
-                      className="btn btn-secondary"
-                    >
-                      Сбросить
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reports List */}
-              {isLoadingHistory ? (
-                <div className="text-center py-4">
-                  <p className="text-muted">Загрузка...</p>
-                </div>
-              ) : reports.length === 0 ? (
-                <div className="text-center py-4 card">
-                  <p className="text-muted">Нет отчетов для отображения</p>
-                </div>
-              ) : (
-                <div className="accordion" id="reportsAccordion">
-                  {reports.map((report, index) => (
-                    <div key={report.id} className="accordion-item">
-                      <h2 className="accordion-header">
-                        <button
-                          className="accordion-button"
-                          type="button"
-                          data-bs-toggle="collapse"
-                          data-bs-target={`#collapse${index}`}
-                        >
-                          <div className="d-flex justify-content-between align-items-center w-100">
-                            <div>
-                              <h5 className="mb-1">Партия: {report.batch_number}</h5>
-                              <p className="mb-0 text-muted">
-                                Шаблон: {getTemplateName(report.analysis_type_id)}
-                              </p>
-                            </div>
-                            <span className={`badge ${report.status === 'completed' ? 'bg-success' : 
-                                           report.status === 'pending' ? 'bg-warning' : 'bg-secondary'}`}>
-                              {report.status === 'completed' ? 'Завершен' : 
-                               report.status === 'pending' ? 'В ожидании' : report.status}
-                            </span>
-                          </div>
-                        </button>
-                      </h2>
-                      <div
-                        id={`collapse${index}`}
-                        className="accordion-collapse collapse"
-                        data-bs-parent="#reportsAccordion"
-                      >
-                        <div className="accordion-body">
-                          <p><strong>Дата:</strong> {new Date(report.started_at).toLocaleString('ru-RU')}</p>
-                          <p><strong>Статус:</strong> {report.status}</p>
-                          {report.notes && <p><strong>Примечания:</strong> {report.notes}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Clear History Button */}
-              {reports.length > 0 && (
-                <div className="mt-4 d-flex justify-content-end">
-                  <button
-                    onClick={handleClearHistory}
-                    className="btn btn-danger"
-                  >
-                    Очистить всю историю
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                  </CardBody>
+                </Card>
+              </Tab>
+            </Tabs>
+          </div>
         </div>
       </main>
+
+      {/* View Report Modal */}
+      {showViewModal && viewReport && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="bi bi-file-earmark-text me-2 text-primary"></i>
+                  Отчет #{viewReport.id} — {viewReport.batch_number}
+                </h5>
+                <button type="button" className="btn-close" onClick={() => setShowViewModal(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <strong>Шаблон:</strong> {getTemplateName(viewReport.analysis_type_id)}
+                </div>
+                <div className="mb-3">
+                  <strong>Дата:</strong> {new Date(viewReport.started_at).toLocaleString('ru-RU')}
+                </div>
+                <div className="mb-3">
+                  <strong>Статус:</strong>{' '}
+                  <Badge bg={getStatusBadge(viewReport.status)}>
+                    {getStatusText(viewReport.status)}
+                  </Badge>
+                </div>
+                
+                <hr />
+                <h6>Значения показателей:</h6>
+                {viewReportIndicators.length === 0 ? (
+                  <Alert variant="info">Нет данных по показателям</Alert>
+                ) : (
+                  <Table striped size="sm">
+                    <thead>
+                      <tr>
+                        <th>Показатель</th>
+                        <th>Значение</th>
+                        <th>Норма</th>
+                        <th>Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewReportIndicators.map((v, i) => (
+                        <tr key={i}>
+                          <td>{v.indicator_name}, {v.indicator_unit}</td>
+                          <td><strong>{v.value || v.text_value || '-'}</strong></td>
+                          <td>
+                            {v.indicator_min !== null && v.indicator_max !== null
+                              ? `${v.indicator_min} — ${v.indicator_max}`
+                              : 'Не задана'}
+                          </td>
+                          <td>
+                            <Badge bg={v.is_normal ? 'success' : 'danger'}>
+                              {v.is_normal ? 'В норме' : 'Отклонение'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </div>
+              <div className="modal-footer">
+                <Button variant="secondary" onClick={() => setShowViewModal(false)}>
+                  Закрыть
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AppToast toast={toast} onClose={hideToast} />
     </div>
   );
 };

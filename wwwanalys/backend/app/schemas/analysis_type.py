@@ -50,6 +50,19 @@ class Indicator(IndicatorBase):
     
     class Config:
         from_attributes = True
+
+    @field_validator('data_type', mode='before')
+    @classmethod
+    def parse_data_type(cls, v):
+        """Конвертирует строку или enum в DataType enum"""
+        if v is None:
+            return DataType.NUMBER
+        if isinstance(v, str):
+            try:
+                return DataType(v)
+            except ValueError:
+                return DataType.NUMBER
+        return v
     
     @field_validator('options', mode='before')
     @classmethod

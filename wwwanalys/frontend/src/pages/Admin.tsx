@@ -1,72 +1,39 @@
+/** Admin page - template and user management */
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { 
+  Card, CardHeader, CardTitle, CardBody, Tabs, Tab, Form, Button, 
+  Alert, Badge, Table, Spinner, Modal, Row, Col
+} from 'react-bootstrap';
+import AppHeader from '../components/AppHeader';
+import AppToast from '../components/AppToast';
+import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-
-interface Indicator {
-  id: number;
-  name: string;
-  unit: string;
-  min_value: number | null;
-  max_value: number | null;
-  data_type: 'number' | 'text' | 'select';
-  options: string[] | null;
-}
-
-interface IndicatorFormData {
-  name: string;
-  unit: string;
-  min_value: string;
-  max_value: string;
-  data_type: 'number' | 'text' | 'select';
-  options: string;  // JSON строка с вариантами для select
-}
-
-interface Template {
-  id: number;
-  name: string;
-  description: string;
-  is_active: boolean;
-  indicators: Indicator[];
-  created_at: string;
-}
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  is_active: boolean;
-  is_admin: boolean;
-}
+import type { AnalysisType, Indicator, User as UserType } from '../types';
 
 const Admin: React.FC = () => {
-  const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('constructor');
-  const [indicators, setIndicators] = useState<IndicatorFormData[]>([]);
-  const [templateName, setTemplateName] = useState('');
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  
-  // Users state
-  const [users, setUsers] = useState<User[]>([]);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState({
-    username: '',
-    email: '',
-    password: '',
-    is_active: true,
-    is_admin: false
-  });
+  const [activeTab, setActiveTab] = useState('templates');
+  const [templates, setTemplates] = useState<AnalysisType[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
-  if (!user?.is_admin) {
-    return (
-      <div className="min-h-screen d-flex align-items-center justify-content-center bg-light">
-        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow">
-          <h2 className="h3 text-danger mb-4">Доступ запрещен</h2>
-          <p className="text-muted">У вас нет прав администратора для доступа к этой странице.</p>
-        </div>
-      </div>
-    );
-  }
+  // Template form state
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<AnalysisType | null>(null);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [templateActive, setTemplateActive] = useState(true);
+  const [templateIndicators, setTemplateIndicators] = useState<Indicator[]>([]);
+
+  // Indicator form state
+  const [showIndicatorModal, setShowIndicatorModal] = useState(false);
+  const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
+  const [indicatorName, setIndicatorName] = useState('');
+  const [indicatorUnit, setIndicatorUnit] = useState('');
+  const [indicatorMin, setIndicatorMin] = useState<number | null>(null);
+  const [indicatorMax, setIndicatorMax] = useState<number | null>(null);
+  const [indicatorType, setIndicatorType] = useState<'number' | 'text' | 'select'>('number');
+  const [indicatorOptions, setIndicatorOptions] = useState('');
 
   useEffect(() => {
     fetchTemplates();
@@ -74,11 +41,15 @@ const Admin: React.FC = () => {
   }, []);
 
   const fetchTemplates = async () => {
+    setIsLoading(true);
     try {
       const response = await api.get('/api/templates/');
       setTemplates(response.data);
     } catch (error) {
       console.error('Error fetching templates:', error);
+      showToast('Ошибка при загрузке шаблонов', 'danger');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -88,726 +59,566 @@ const Admin: React.FC = () => {
       setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
+      showToast('Ошибка при загрузке пользователей', 'danger');
     }
   };
 
-  const handleAddIndicator = () => {
-    setIndicators([...indicators, {
-      name: '',
-      unit: '',
-      min_value: '',
-      max_value: '',
-      data_type: 'number',
-      options: ''
-    }]);
-  };
-
-  const handleIndicatorChange = (index: number, field: keyof IndicatorFormData, value: string) => {
-    const updatedIndicators = [...indicators];
-    updatedIndicators[index] = { ...updatedIndicators[index], [field]: value };
-    setIndicators(updatedIndicators);
-  };
-
-  const handleRemoveIndicator = (index: number) => {
-    const updatedIndicators = [...indicators];
-    updatedIndicators.splice(index, 1);
-    setIndicators(updatedIndicators);
-  };
-
-  const handleCreateTemplate = async () => {
-    if (!templateName || indicators.length === 0) {
-      alert('Пожалуйста, введите название шаблона и добавьте хотя бы один показатель');
+  const handleTemplateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!templateName.trim()) {
+      showToast('Название шаблона обязательно', 'warning');
       return;
     }
 
     try {
       const templateData = {
         name: templateName,
-        description: '',
-        is_active: true,
-        indicators: indicators.map(ind => {
-          const indicator: any = {
-            name: ind.name,
-            unit: ind.unit,
-            data_type: ind.data_type
-          };
-          
-          // Добавляем min/max только для числового типа
-          if (ind.data_type === 'number') {
-            indicator.min_value = ind.min_value ? parseFloat(ind.min_value) : null;
-            indicator.max_value = ind.max_value ? parseFloat(ind.max_value) : null;
-          }
-          
-          // Добавляем options для select типа
-          if (ind.data_type === 'select' && ind.options) {
-            indicator.options = ind.options.split(',').map((o: string) => o.trim()).filter((o: string) => o);
-          }
-          
-          return indicator;
-        })
+        description: templateDescription,
+        is_active: templateActive,
+        indicators: templateIndicators.map(ind => ({
+          name: ind.name,
+          unit: ind.unit,
+          min_value: ind.min_value,
+          max_value: ind.max_value,
+          data_type: ind.data_type,
+          options: ind.options
+        }))
       };
 
-      await api.post('/api/templates/', templateData);
-      alert('Шаблон успешно создан!');
-      setTemplateName('');
-      setIndicators([]);
-      fetchTemplates();
-    } catch (error) {
-      console.error('Error creating template:', error);
-      alert('Ошибка при создании шаблона');
-    }
-  };
-
-  const handleEditTemplate = (template: Template) => {
-    setEditingTemplate(template);
-    setTemplateName(template.name);
-    setIndicators(template.indicators.map(ind => ({
-      name: ind.name,
-      unit: ind.unit,
-      min_value: ind.min_value?.toString() || '',
-      max_value: ind.max_value?.toString() || '',
-      data_type: ind.data_type,
-      options: ind.options?.join(', ') || ''
-    })));
-    setActiveTab('constructor');
-  };
-
-  const handleUpdateTemplate = async () => {
-    if (!editingTemplate || !templateName) {
-      alert('Пожалуйста, заполните все поля');
-      return;
-    }
-
-    try {
-      const templateData: any = {
-        name: templateName,
-        description: editingTemplate.description,
-        is_active: editingTemplate.is_active
-      };
-      
-      if (indicators.length > 0) {
-        templateData.indicators = indicators.map(ind => {
-          const indicator: any = {
-            name: ind.name,
-            unit: ind.unit,
-            data_type: ind.data_type
-          };
-          
-          // Добавляем min/max только для числового типа
-          if (ind.data_type === 'number') {
-            indicator.min_value = ind.min_value ? parseFloat(ind.min_value) : null;
-            indicator.max_value = ind.max_value ? parseFloat(ind.max_value) : null;
-          }
-          
-          // Добавляем options для select типа
-          if (ind.data_type === 'select' && ind.options) {
-            indicator.options = ind.options.split(',').map((o: string) => o.trim()).filter((o: string) => o);
-          }
-          
-          return indicator;
-        });
+      if (editingTemplate) {
+        await api.put(`/api/templates/${editingTemplate.id}`, templateData);
+        showToast('Шаблон успешно обновлен', 'success');
+      } else {
+        await api.post('/api/templates/', templateData);
+        showToast('Шаблон успешно создан', 'success');
       }
 
-      await api.put(`/api/templates/${editingTemplate.id}`, templateData);
-      alert('Шаблон успешно обновлен!');
-      setEditingTemplate(null);
-      setTemplateName('');
-      setIndicators([]);
+      setShowTemplateModal(false);
+      resetTemplateForm();
       fetchTemplates();
-      setActiveTab('templates');
     } catch (error) {
-      console.error('Error updating template:', error);
-      alert('Ошибка при обновлении шаблона');
+      console.error('Error saving template:', error);
+      showToast('Ошибка при сохранении шаблона', 'danger');
     }
   };
 
-  const handleDeleteTemplate = async (templateId: number) => {
+  const handleDeleteTemplate = async (id: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этот шаблон?')) {
       return;
     }
 
     try {
-      await api.delete(`/api/templates/${templateId}`);
-      alert('Шаблон успешно удален!');
+      await api.delete(`/api/templates/${id}`);
+      showToast('Шаблон успешно удален', 'success');
       fetchTemplates();
     } catch (error) {
       console.error('Error deleting template:', error);
-      alert('Ошибка при удалении шаблона');
+      showToast('Ошибка при удалении шаблона', 'danger');
     }
   };
 
-  const handleToggleActive = async (template: Template) => {
+  const handleToggleTemplate = async (id: number, isActive: boolean) => {
     try {
-      await api.put(`/api/templates/${template.id}`, {
-        name: template.name,
-        description: template.description,
-        is_active: !template.is_active
-      });
+      await api.put(`/api/templates/${id}`, { is_active: !isActive });
+      showToast(`Шаблон ${!isActive ? 'активирован' : 'деактивирован'}`, 'success');
       fetchTemplates();
     } catch (error) {
-      console.error('Error toggling template status:', error);
-      alert('Ошибка при изменении статуса шаблона');
+      console.error('Error toggling template:', error);
+      showToast('Ошибка при изменении статуса шаблона', 'danger');
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingTemplate(null);
-    setTemplateName('');
-    setIndicators([]);
-  };
-
-  // User management functions
-  const handleOpenUserModal = (userToEdit?: User) => {
-    if (userToEdit) {
-      setEditingUser(userToEdit);
-      setUserForm({
-        username: userToEdit.username,
-        email: userToEdit.email,
-        password: '',
-        is_active: userToEdit.is_active,
-        is_admin: userToEdit.is_admin
-      });
-    } else {
-      setEditingUser(null);
-      setUserForm({
-        username: '',
-        email: '',
-        password: '',
-        is_active: true,
-        is_admin: false
-      });
-    }
-  };
-
-  const handleCloseUserModal = () => {
-    setEditingUser(null);
-    setUserForm({
-      username: '',
-      email: '',
-      password: '',
-      is_active: true,
-      is_admin: false
-    });
-  };
-
-  const handleSaveUser = async () => {
-    if (!userForm.username || !userForm.email) {
-      alert('Пожалуйста, заполните все обязательные поля');
-      return;
-    }
-
-    if (!editingUser && !userForm.password) {
-      alert('Пожалуйста, введите пароль для нового пользователя');
+  const handleClearAllTemplates = async () => {
+    if (!window.confirm('Вы уверены, что хотите удалить ВСЕ шаблоны? Это действие необратимо.')) {
       return;
     }
 
     try {
-      if (editingUser) {
-        const updateData: any = {
-          username: userForm.username,
-          email: userForm.email,
-          is_active: userForm.is_active,
-          is_admin: userForm.is_admin
-        };
-        if (userForm.password) {
-          updateData.password = userForm.password;
-        }
-        await api.put(`/auth/users/${editingUser.id}`, updateData);
-        alert('Пользователь успешно обновлен!');
-      } else {
-        await api.post('/auth/register', {
-          username: userForm.username,
-          email: userForm.email,
-          password: userForm.password,
-          is_active: userForm.is_active,
-          is_admin: userForm.is_admin
-        });
-        alert('Пользователь успешно создан!');
-      }
-      handleCloseUserModal();
-      fetchUsers();
+      await api.delete('/api/templates/clear-all');
+      showToast('Все шаблоны успешно удалены', 'success');
+      fetchTemplates();
     } catch (error) {
-      console.error('Error saving user:', error);
-      alert('Ошибка при сохранении пользователя');
+      console.error('Error clearing all templates:', error);
+      showToast('Ошибка при очистке шаблонов', 'danger');
     }
   };
 
-  const handleDeleteUser = async (userId: number) => {
+  const handleEditTemplate = (template: AnalysisType) => {
+    setEditingTemplate(template);
+    setTemplateName(template.name);
+    setTemplateDescription(template.description);
+    setTemplateActive(template.is_active);
+    setTemplateIndicators(template.indicators);
+    setShowTemplateModal(true);
+  };
+
+  const resetTemplateForm = () => {
+    setEditingTemplate(null);
+    setTemplateName('');
+    setTemplateDescription('');
+    setTemplateActive(true);
+    setTemplateIndicators([]);
+  };
+
+  const handleIndicatorSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!indicatorName.trim() || !indicatorUnit.trim()) {
+      showToast('Название и единица измерения обязательны', 'warning');
+      return;
+    }
+
+    const newIndicator: Indicator = {
+      id: editingIndicator?.id || Date.now(),
+      name: indicatorName,
+      unit: indicatorUnit,
+      min_value: indicatorMin,
+      max_value: indicatorMax,
+      data_type: indicatorType,
+      options: indicatorType === 'select' ? indicatorOptions.split(',').map(opt => opt.trim()).filter(opt => opt) : undefined
+    };
+
+    if (editingIndicator) {
+      setTemplateIndicators(prev => prev.map(ind => ind.id === editingIndicator.id ? newIndicator : ind));
+    } else {
+      setTemplateIndicators(prev => [...prev, newIndicator]);
+    }
+
+    setShowIndicatorModal(false);
+    resetIndicatorForm();
+  };
+
+  const handleDeleteIndicator = (id: number) => {
+    setTemplateIndicators(prev => prev.filter(ind => ind.id !== id));
+  };
+
+  const handleEditIndicator = (indicator: Indicator) => {
+    setEditingIndicator(indicator);
+    setIndicatorName(indicator.name);
+    setIndicatorUnit(indicator.unit);
+    setIndicatorMin(indicator.min_value);
+    setIndicatorMax(indicator.max_value);
+    setIndicatorType(indicator.data_type);
+    setIndicatorOptions(indicator.options?.join(', ') || '');
+    setShowIndicatorModal(true);
+  };
+
+  const resetIndicatorForm = () => {
+    setEditingIndicator(null);
+    setIndicatorName('');
+    setIndicatorUnit('');
+    setIndicatorMin(null);
+    setIndicatorMax(null);
+    setIndicatorType('number');
+    setIndicatorOptions('');
+  };
+
+  const handleToggleUser = async (id: number, isActive: boolean) => {
+    try {
+      await api.put(`/auth/users/${id}`, { is_active: !isActive });
+      showToast(`Пользователь ${!isActive ? 'активирован' : 'деактивирован'}`, 'success');
+      fetchUsers();
+    } catch (error) {
+      console.error('Error toggling user:', error);
+      showToast('Ошибка при изменении статуса пользователя', 'danger');
+    }
+  };
+
+  const handleDeleteUser = async (id: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этого пользователя?')) {
       return;
     }
 
     try {
-      await api.delete(`/auth/users/${userId}`);
-      alert('Пользователь успешно удален!');
+      await api.delete(`/auth/users/${id}`);
+      showToast('Пользователь успешно удален', 'success');
       fetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Ошибка при удалении пользователя');
-    }
-  };
-
-  const handleToggleUserActive = async (userToToggle: User) => {
-    try {
-      await api.put(`/auth/users/${userToToggle.id}`, {
-        is_active: !userToToggle.is_active
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Error toggling user status:', error);
-      alert('Ошибка при изменении статуса пользователя');
+      showToast('Ошибка при удалении пользователя', 'danger');
     }
   };
 
   return (
-    <div className="min-h-screen bg-light">
-      <header className="bg-white shadow-sm">
+    <div className="min-vh-100 bg-light">
+      <AppHeader showDashboardLink />
+
+      <main className="app-main">
         <div className="container-fluid">
-          <div className="d-flex justify-content-between align-items-center h-16">
-            <div className="flex-shrink-0 d-flex align-items-center">
-              <h1 className="h4 mb-0 text-dark">WWWAnalys - Админ панель</h1>
+          <div className="page-wrapper">
+            <div className="mb-4">
+              <h2 className="h3 mb-1">Администрирование</h2>
+              <p className="text-muted mb-0">Управление шаблонами анализа и пользователями</p>
             </div>
-            <div className="d-flex align-items-center">
-              <span className="me-3 text-dark">
-                {user?.email} (ADMIN)
-              </span>
-              <button
-                onClick={logout}
-                className="btn btn-danger"
-              >
-                Выйти
-              </button>
-            </div>
+
+            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} className="mb-4">
+              {/* Templates Tab */}
+              <Tab eventKey="templates" title={
+                <span><i className="bi bi-list-ul me-1"></i>Шаблоны анализа</span>
+              }>
+                <Card>
+                    <CardHeader className="d-flex justify-content-between align-items-center">
+                      <CardTitle className="h5 mb-0">
+                        <i className="bi bi-file-earmark-text me-2 text-primary"></i>
+                        Управление шаблонами анализа
+                      </CardTitle>
+                      <div>
+                        {templates.length > 0 && (
+                          <Button 
+                            variant="outline-danger" 
+                            size="sm" 
+                            className="me-2"
+                            onClick={handleClearAllTemplates}
+                          >
+                            <i className="bi bi-trash me-1"></i>
+                            Очистить все
+                          </Button>
+                        )}
+                        <Button variant="primary" onClick={() => setShowTemplateModal(true)}>
+                          <i className="bi bi-plus-circle me-1"></i>
+                          Создать шаблон
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  <CardBody>
+                    {isLoading ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                        <p className="text-muted mt-2">Загрузка...</p>
+                      </div>
+                    ) : templates.length === 0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-inbox display-1 text-muted"></i>
+                        <p className="text-muted mt-2">Нет шаблонов анализа</p>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <Table striped hover>
+                          <thead>
+                            <tr>
+                              <th>Название</th>
+                              <th>Описание</th>
+                              <th>Показатели</th>
+                              <th>Статус</th>
+                              <th className="text-end">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {templates.map((template) => (
+                              <tr key={template.id}>
+                                <td><strong>{template.name}</strong></td>
+                                <td>{template.description || '-'}</td>
+                                <td>{template.indicators.length}</td>
+                                <td>
+                                  <Badge bg={template.is_active ? 'success' : 'danger'}>
+                                    {template.is_active ? 'Активен' : 'Неактивен'}
+                                  </Badge>
+                                </td>
+                                <td className="text-end">
+                                  <Button 
+                                    variant="outline-primary" 
+                                    size="sm" 
+                                    className="me-1"
+                                    onClick={() => handleEditTemplate(template)}
+                                  >
+                                    <i className="bi bi-pencil me-1"></i>
+                                    Редактировать
+                                  </Button>
+                                  <Button 
+                                    variant={template.is_active ? 'warning' : 'success'} 
+                                    size="sm"
+                                    onClick={() => handleToggleTemplate(template.id, template.is_active)}
+                                  >
+                                    {template.is_active ? 'Деактивировать' : 'Активировать'}
+                                  </Button>
+                                  <Button 
+                                    variant="outline-danger" 
+                                    size="sm" 
+                                    className="ms-1"
+                                    onClick={() => handleDeleteTemplate(template.id)}
+                                  >
+                                    <i className="bi bi-trash me-1"></i>
+                                    Удалить
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </Tab>
+
+              {/* Users Tab */}
+              <Tab eventKey="users" title={
+                <span><i className="bi bi-people-fill me-1"></i>Пользователи</span>
+              }>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="h5 mb-0">
+                      <i className="bi bi-person-lines-fill me-2 text-primary"></i>
+                      Управление пользователями
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody>
+                    {users.length === 0 ? (
+                      <div className="text-center py-4">
+                        <i className="bi bi-inbox display-1 text-muted"></i>
+                        <p className="text-muted mt-2">Нет пользователей</p>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <Table striped hover>
+                          <thead>
+                            <tr>
+                              <th>Email</th>
+                              <th>Роль</th>
+                              <th>Статус</th>
+                              <th className="text-end">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {users.map((user) => (
+                              <tr key={user.id}>
+                                <td><strong>{user.email}</strong></td>
+                                <td>
+                                  <Badge bg={user.is_admin ? 'primary' : 'secondary'}>
+                                    {user.is_admin ? 'ADMIN' : 'USER'}
+                                  </Badge>
+                                </td>
+                                <td>
+                                  <Badge bg={user.is_active ? 'success' : 'danger'}>
+                                    {user.is_active ? 'Активен' : 'Неактивен'}
+                                  </Badge>
+                                </td>
+                                <td className="text-end">
+                                  <Button 
+                                    variant={user.is_active ? 'warning' : 'success'} 
+                                    size="sm"
+                                    onClick={() => handleToggleUser(user.id, user.is_active)}
+                                  >
+                                    {user.is_active ? 'Деактивировать' : 'Активировать'}
+                                  </Button>
+                                  <Button 
+                                    variant="outline-danger" 
+                                    size="sm" 
+                                    className="ms-1"
+                                    onClick={() => handleDeleteUser(user.id)}
+                                  >
+                                    <i className="bi bi-trash me-1"></i>
+                                    Удалить
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </Tab>
+            </Tabs>
           </div>
         </div>
-      </header>
+      </main>
 
-      <main className="container-fluid py-4">
-        <div className="p-4 border-4 border-dashed border-secondary rounded">
-          <div className="mb-4">
-            <nav className="nav nav-tabs">
-              <button
-                onClick={() => { setActiveTab('constructor'); handleCancelEdit(); }}
-                className={`nav-link ${activeTab === 'constructor' ? 'active' : ''}`}
-              >
-                {editingTemplate ? 'Редактирование шаблона' : 'Конструктор'}
-              </button>
-              <button
-                onClick={() => { setActiveTab('templates'); handleCancelEdit(); }}
-                className={`nav-link ${activeTab === 'templates' ? 'active' : ''}`}
-              >
-                Управление шаблонами
-              </button>
-              <button
-                onClick={() => { setActiveTab('users'); handleCancelEdit(); }}
-                className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}
-              >
-                Пользователи
-              </button>
-            </nav>
-          </div>
+      {/* Template Modal */}
+      <Modal show={showTemplateModal} onHide={() => setShowTemplateModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {editingTemplate ? 'Редактирование шаблона' : 'Создание шаблона'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleTemplateSubmit}>
+            <Form.Group className="mb-3">
+              <Form.Label>Название шаблона</Form.Label>
+              <Form.Control
+                type="text"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                required
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Описание</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={templateDescription}
+                onChange={(e) => setTemplateDescription(e.target.value)}
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="switch"
+                label="Активен"
+                checked={templateActive}
+                onChange={(e) => setTemplateActive(e.target.checked)}
+              />
+            </Form.Group>
 
-          {activeTab === 'constructor' && (
-            <div>
-              <h2 className="h3 mb-3">
-                {editingTemplate ? 'Редактирование шаблона' : 'Конструктор шаблонов'}
-              </h2>
-              
-              <div className="mb-4">
-                <label htmlFor="template-name" className="form-label">
-                  Название шаблона
-                </label>
-                <input
-                  type="text"
-                  id="template-name"
-                  className="form-control"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  placeholder="Введите название шаблона"
-                />
+            <div className="mb-3">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5>Показатели</h5>
+                <Button variant="outline-primary" size="sm" onClick={() => setShowIndicatorModal(true)}>
+                  <i className="bi bi-plus-circle me-1"></i>
+                  Добавить показатель
+                </Button>
               </div>
-
-              <div className="mb-4">
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h3 className="h5 mb-0">Показатели</h3>
-                  <button
-                    onClick={handleAddIndicator}
-                    className="btn btn-success"
-                  >
-                    Добавить показатель
-                  </button>
-                </div>
-
-                {indicators.map((indicator, index) => (
-                  <div key={index} className="card mb-3">
-                    <div className="card-body">
-                      <div className="row g-3">
-                        <div className="col-md-4">
-                          <label className="form-label">Название</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={indicator.name}
-                            onChange={(e) => handleIndicatorChange(index, 'name', e.target.value)}
-                            placeholder="Название показателя"
-                          />
-                        </div>
-                        <div className="col-md-2">
-                          <label className="form-label">Тип</label>
-                          <select
-                            className="form-select"
-                            value={indicator.data_type}
-                            onChange={(e) => handleIndicatorChange(index, 'data_type', e.target.value as 'number' | 'text' | 'select')}
-                          >
-                            <option value="number">Число</option>
-                            <option value="text">Текст</option>
-                            <option value="select">Список</option>
-                          </select>
-                        </div>
-                        <div className="col-md-2">
-                          <label className="form-label">Ед. изм.</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={indicator.unit}
-                            onChange={(e) => handleIndicatorChange(index, 'unit', e.target.value)}
-                            placeholder="Единицы измерения"
-                          />
-                        </div>
-                        <div className="col-md-2">
-                          <label className="form-label">Мин. значение</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={indicator.min_value}
-                            onChange={(e) => handleIndicatorChange(index, 'min_value', e.target.value)}
-                            placeholder="Мин"
-                            step="0.01"
-                          />
-                        </div>
-                        <div className="col-md-2">
-                          <label className="form-label">Макс. значение</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={indicator.max_value}
-                            onChange={(e) => handleIndicatorChange(index, 'max_value', e.target.value)}
-                            placeholder="Макс"
-                            step="0.01"
-                          />
-                        </div>
-                      </div>
-                      
-                      {indicator.data_type === 'select' && (
-                        <div className="row mt-3">
-                          <div className="col-12">
-                            <label className="form-label">Варианты (через запятую)</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              value={indicator.options}
-                              onChange={(e) => handleIndicatorChange(index, 'options', e.target.value)}
-                              placeholder="Вариант 1, Вариант 2, Вариант 3"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="mt-3 d-flex justify-content-end">
-                        <button
-                          onClick={() => handleRemoveIndicator(index)}
-                          className="btn btn-sm btn-danger"
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="d-flex gap-2">
-                  {editingTemplate ? (
-                    <>
-                      <button
-                        onClick={handleUpdateTemplate}
-                        className="btn btn-primary"
-                      >
-                        Сохранить изменения
-                      </button>
-                      <button
-                        onClick={handleCancelEdit}
-                        className="btn btn-secondary"
-                      >
-                        Отмена
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleCreateTemplate}
-                      className="btn btn-primary"
-                    >
-                      Создать шаблон
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'templates' && (
-            <div>
-              <h2 className="h3 mb-3">Управление шаблонами</h2>
-              <p className="text-muted mb-3">
-                Список всех шаблонов анализов с возможностью редактирования и удаления
-              </p>
               
-              {templates.length === 0 ? (
-                <div className="card">
-                  <div className="card-body">
-                    <p className="text-muted">Нет созданных шаблонов</p>
-                  </div>
-                </div>
+              {templateIndicators.length === 0 ? (
+                <Alert variant="info">
+                  <i className="bi bi-info-circle-fill me-2"></i>
+                  Нет показателей. Добавьте хотя бы один показатель для шаблона.
+                </Alert>
               ) : (
-                <div className="accordion" id="templatesAccordion">
-                  {templates.map((template) => (
-                    <div key={template.id} className="accordion-item">
-                      <h2 className="accordion-header">
-                        <button
-                          className="accordion-button"
-                          type="button"
-                          data-bs-toggle="collapse"
-                          data-bs-target={`#template${template.id}`}
-                        >
-                          <div className="d-flex justify-content-between align-items-center w-100">
-                            <div>
-                              <h5 className="mb-1">{template.name}</h5>
-                              <p className="mb-0 text-muted">
-                                Показателей: {template.indicators.length} | Создан: {new Date(template.created_at).toLocaleDateString('ru-RU')}
-                              </p>
-                            </div>
-                            <div className="d-flex align-items-center gap-2">
-                              <span className={`badge ${template.is_active ? 'bg-success' : 'bg-danger'}`}>
-                                {template.is_active ? 'Активен' : 'Неактивен'}
-                              </span>
-                            </div>
+                <div>
+                  {templateIndicators.map((indicator) => (
+                    <Card key={indicator.id} className="mb-2">
+                      <CardBody>
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div>
+                            <strong>{indicator.name}</strong>, {indicator.unit}
+                            {indicator.min_value !== null && indicator.max_value !== null && (
+                              <small className="text-muted ms-2">
+                                Норма: {indicator.min_value} - {indicator.max_value}
+                              </small>
+                            )}
+                            <Badge bg="secondary" className="ms-2">{indicator.data_type}</Badge>
                           </div>
-                        </button>
-                      </h2>
-                      <div
-                        id={`template${template.id}`}
-                        className="accordion-collapse collapse"
-                        data-bs-parent="#templatesAccordion"
-                      >
-                        <div className="accordion-body">
-                          <div className="d-flex gap-2 mb-3">
-                            <button
-                              onClick={() => handleToggleActive(template)}
-                              className={`btn btn-sm ${template.is_active ? 'btn-warning' : 'btn-success'}`}
+                          <div>
+                            <Button 
+                              variant="outline-primary" 
+                              size="sm" 
+                              className="me-1"
+                              onClick={() => handleEditIndicator(indicator)}
                             >
-                              {template.is_active ? 'Деактивировать' : 'Активировать'}
-                            </button>
-                            <button
-                              onClick={() => handleEditTemplate(template)}
-                              className="btn btn-sm btn-primary"
+                              <i className="bi bi-pencil"></i>
+                            </Button>
+                            <Button 
+                              variant="outline-danger" 
+                              size="sm"
+                              onClick={() => handleDeleteIndicator(indicator.id)}
                             >
-                              Редактировать
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTemplate(template.id)}
-                              className="btn btn-sm btn-danger"
-                            >
-                              Удалить
-                            </button>
+                              <i className="bi bi-trash"></i>
+                            </Button>
                           </div>
-                          
-                          {template.indicators.length > 0 && (
-                            <div>
-                              <h6 className="mb-2">Показатели:</h6>
-                              <div className="row g-2">
-                                {template.indicators.map((ind) => (
-                                  <div key={ind.id} className="col-md-4 col-lg-3">
-                                    <div className="badge bg-light text-dark p-2 d-flex justify-content-between align-items-center">
-                                      <span>{ind.name}</span>
-                                      <small className="text-muted">({ind.unit})</small>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    </div>
+                      </CardBody>
+                    </Card>
                   ))}
                 </div>
               )}
             </div>
-          )}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowTemplateModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleTemplateSubmit}>
+            {editingTemplate ? 'Сохранить изменения' : 'Создать шаблон'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
-          {activeTab === 'users' && (
-            <div>
-              <h2 className="h3 mb-3">Управление пользователями</h2>
-              <p className="text-muted mb-3">
-                Список всех пользователей системы
-              </p>
-              
-              {/* Add User Form */}
-              <div className="card mb-4">
-                <div className="card-body">
-                  <h3 className="h5 mb-3">
-                    {editingUser ? 'Редактирование пользователя' : 'Добавить нового пользователя'}
-                  </h3>
-                  <div className="row g-3">
-                    <div className="col-md-4">
-                      <label className="form-label">Имя пользователя *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={userForm.username}
-                        onChange={(e) => setUserForm({...userForm, username: e.target.value})}
-                        placeholder="Введите имя"
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label">Email *</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        value={userForm.email}
-                        onChange={(e) => setUserForm({...userForm, email: e.target.value})}
-                        placeholder="Введите email"
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label">
-                        Пароль {editingUser ? '(оставьте пустым, чтобы не менять)' : '*'}
-                      </label>
-                      <input
-                        type="password"
-                        className="form-control"
-                        value={userForm.password}
-                        onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                        placeholder="Введите пароль"
-                      />
-                    </div>
-                  </div>
-                  <div className="row mt-3">
-                    <div className="col-md-6">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          checked={userForm.is_admin}
-                          onChange={(e) => setUserForm({...userForm, is_admin: e.target.checked})}
-                        />
-                        <label className="form-check-label">
-                          Администратор
-                        </label>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          checked={userForm.is_active}
-                          onChange={(e) => setUserForm({...userForm, is_active: e.target.checked})}
-                        />
-                        <label className="form-check-label">
-                          Активен
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 d-flex gap-2">
-                    <button
-                      onClick={handleSaveUser}
-                      className="btn btn-primary"
-                    >
-                      {editingUser ? 'Сохранить изменения' : 'Создать пользователя'}
-                    </button>
-                    {editingUser && (
-                      <button
-                        onClick={handleCloseUserModal}
-                        className="btn btn-secondary"
-                      >
-                        Отмена
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+      {/* Indicator Modal */}
+      <Modal show={showIndicatorModal} onHide={() => setShowIndicatorModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {editingIndicator ? 'Редактирование показателя' : 'Добавление показателя'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleIndicatorSubmit}>
+            <Form.Group className="mb-3">
+              <Form.Label>Название показателя</Form.Label>
+              <Form.Control
+                type="text"
+                value={indicatorName}
+                onChange={(e) => setIndicatorName(e.target.value)}
+                required
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Единица измерения</Form.Label>
+              <Form.Control
+                type="text"
+                value={indicatorUnit}
+                onChange={(e) => setIndicatorUnit(e.target.value)}
+                required
+              />
+            </Form.Group>
+            
+            <Form.Group className="mb-3">
+              <Form.Label>Тип</Form.Label>
+              <Form.Select
+                value={indicatorType}
+                onChange={(e) => setIndicatorType(e.target.value as 'number' | 'text' | 'select')}
+              >
+                <option value="number">Число с плавающей точкой</option>
+                <option value="text">Текст</option>
+                <option value="select">Выбор из списка</option>
+              </Form.Select>
+            </Form.Group>
+            
+            {indicatorType === 'number' && (
+              <Row>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Минимальное значение</Form.Label>
+                    <Form.Control
+                      type="number"
+                      value={indicatorMin || ''}
+                      onChange={(e) => setIndicatorMin(e.target.value ? parseFloat(e.target.value) : null)}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Максимальное значение</Form.Label>
+                    <Form.Control
+                      type="number"
+                      value={indicatorMax || ''}
+                      onChange={(e) => setIndicatorMax(e.target.value ? parseFloat(e.target.value) : null)}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+            )}
+            
+            {indicatorType === 'select' && (
+              <Form.Group className="mb-3">
+                <Form.Label>Варианты выбора (через запятую)</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={indicatorOptions}
+                  onChange={(e) => setIndicatorOptions(e.target.value)}
+                  placeholder="Вариант 1, Вариант 2, Вариант 3"
+                />
+              </Form.Group>
+            )}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowIndicatorModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleIndicatorSubmit}>
+            {editingIndicator ? 'Сохранить изменения' : 'Добавить показатель'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
-              {/* Users List */}
-              {users.length === 0 ? (
-                <div className="card">
-                  <div className="card-body">
-                    <p className="text-muted">Нет пользователей</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="card">
-                  <div className="card-body">
-                    <div className="table-responsive">
-                      <table className="table table-hover">
-                        <thead>
-                          <tr>
-                            <th>Пользователь</th>
-                            <th>Email</th>
-                            <th>Роль</th>
-                            <th>Статус</th>
-                            <th className="text-end">Действия</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {users.map((userItem) => (
-                            <tr key={userItem.id}>
-                              <td>
-                                <div className="fw-bold">{userItem.username}</div>
-                              </td>
-                              <td>{userItem.email}</td>
-                              <td>
-                                <span className={`badge ${userItem.is_admin ? 'bg-purple' : 'bg-secondary'}`}>
-                                  {userItem.is_admin ? 'Админ' : 'Пользователь'}
-                                </span>
-                              </td>
-                              <td>
-                                <span className={`badge ${userItem.is_active ? 'bg-success' : 'bg-danger'}`}>
-                                  {userItem.is_active ? 'Активен' : 'Неактивен'}
-                                </span>
-                              </td>
-                              <td className="text-end">
-                                <button
-                                  onClick={() => handleOpenUserModal(userItem)}
-                                  className="btn btn-sm btn-outline-primary me-1"
-                                >
-                                  Редактировать
-                                </button>
-                                <button
-                                  onClick={() => handleToggleUserActive(userItem)}
-                                  className={`btn btn-sm me-1 ${userItem.is_active ? 'btn-warning' : 'btn-success'}`}
-                                >
-                                  {userItem.is_active ? 'Деактивировать' : 'Активировать'}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUser(userItem.id)}
-                                  className="btn btn-sm btn-outline-danger"
-                                >
-                                  Удалить
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </main>
+      <AppToast toast={toast} onClose={hideToast} />
     </div>
   );
 };

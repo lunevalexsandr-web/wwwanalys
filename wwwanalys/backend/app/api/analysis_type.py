@@ -1,19 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
+from app.core.deps import get_db
 from app.auth.auth import get_current_active_user, get_current_admin_user
 from app.crud import analysis_type as crud_analysis_type
 from app.models import User
 from app.schemas import AnalysisType as AnalysisTypeSchema, AnalysisTypeCreate, AnalysisTypeUpdate
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.get("/", response_model=list[AnalysisTypeSchema])
 def read_analysis_types(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):

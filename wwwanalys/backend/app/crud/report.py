@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
 from app.models import AnalysisType, Indicator, ProcessLog, IndicatorValue
 from app.schemas import ReportCreate, IndicatorValue as IndicatorValueSchema
@@ -28,8 +28,6 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         if not indicator:
             continue
         
-        # Получаем тип данных индикатора
-        from app.models.indicator import DataType
         import json
         
         data_type = indicator.data_type
@@ -39,11 +37,11 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         text_value = None
         is_normal = True
         
-        if data_type == DataType.TEXT:
+        if data_type == 'text':
             # Для текстовых индикаторов сохраняем как текст
             text_value = str(value_data.value) if value_data.value is not None else None
             
-        elif data_type == DataType.SELECT:
+        elif data_type == 'select':
             # Для select-индикаторов сохраняем выбранное значение как текст
             text_value = str(value_data.value) if value_data.value is not None else None
             # Валидация: проверяем, что значение есть в списке options
@@ -87,7 +85,7 @@ def get_reports(db: Session, skip: int = 0, limit: int = 100):
     return db.query(ProcessLog).offset(skip).limit(limit).all()
 
 def get_report(db: Session, report_id: int):
-    return db.query(ProcessLog).filter(ProcessLog.id == report_id).first()
+    return db.query(ProcessLog).options(joinedload(ProcessLog.indicator_values)).filter(ProcessLog.id == report_id).first()
 
 def get_reports_by_template(db: Session, template_id: int):
     return db.query(ProcessLog).filter(ProcessLog.analysis_type_id == template_id).all()

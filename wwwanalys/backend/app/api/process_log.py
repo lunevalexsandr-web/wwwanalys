@@ -1,19 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.core.database import SessionLocal
+from app.core.deps import get_db
 from app.auth.auth import get_current_active_user, get_current_admin_user
 from app.crud import process_log as crud_process_log
 from app.models import User
 from app.schemas import ProcessLog as ProcessLogSchema, ProcessLogCreate, ProcessLogUpdate
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.get("/", response_model=list[ProcessLogSchema])
 def read_process_logs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):

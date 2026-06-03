@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
 from app.models import AnalysisType, Indicator
-from app.models.indicator import DataType
 from app.schemas import AnalysisTypeCreate, AnalysisTypeUpdate
 import json
 
@@ -105,17 +104,43 @@ def update_template(db: Session, template_id: int, template: AnalysisTypeUpdate)
 def delete_template(db: Session, template_id: int):
     db_template = get_analysis_type(db, analysis_type_id=template_id)
     if db_template:
-        # Сначала удаляем связанные индикаторы
+        from app.models import IndicatorValue, ProcessLog
+        
+        # Удаляем значения индикаторов, связанные с индикаторами этого шаблона
+        indicator_ids = [ind.id for ind in db_template.indicators]
+        if indicator_ids:
+            db.query(IndicatorValue).filter(IndicatorValue.indicator_id.in_(indicator_ids)).delete(synchronize_session=False)
+        
+        # Удаляем логи процессов, связанные с этим шаблоном
+        db.query(ProcessLog).filter(ProcessLog.analysis_type_id == template_id).delete(synchronize_session=False)
+        
+        # Удаляем индикаторы
         for indicator in db_template.indicators:
             db.delete(indicator)
         
-        # Затем удаляем тип анализа
+        # Удаляем тип анализа
         db.delete(db_template)
         db.commit()
     return db_template
 
 def get_indicators_by_analysis_type(db: Session, analysis_type_id: int):
     return db.query(Indicator).filter(Indicator.analysis_type_id == analysis_type_id).all()
+
+def clear_all_templates(db: Session):
+    """Удалить все шаблоны с индикаторами и значениями."""
+    from app.models import IndicatorValue, ProcessLog
+    
+    count = db.query(AnalysisType).count()
+    # Удаляем значения индикаторов (FK → indicators)
+    db.query(IndicatorValue).delete()
+    # Удаляем логи процессов (FK → analysis_types)
+    db.query(ProcessLog).delete()
+    # Удаляем индикаторы (FK → analysis_types)
+    db.query(Indicator).delete()
+    # Удаляем шаблоны
+    db.query(AnalysisType).delete()
+    db.commit()
+    return count
 
 # Алиасы для совместимости с существующим кодом
 def get_analysis_types(db: Session, skip: int = 0, limit: int = 100):

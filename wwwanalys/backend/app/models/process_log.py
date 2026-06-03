@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
 class Status(PyEnum):
@@ -18,7 +18,7 @@ class ProcessLog(Base):
     analysis_type_id = Column(Integer, ForeignKey("analysis_types.id"))
     created_by = Column(Integer, ForeignKey("users.id"))
     status = Column(Enum(Status), default=Status.PENDING)
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
     notes = Column(String)
     

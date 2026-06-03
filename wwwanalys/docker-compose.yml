@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wwwanalys_user"]
+      test: ["CMD-SHELL", "pg_isready -U wwwanalys_user -d wwwanalys"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,14 +22,26 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://wwwanalys_user:wwwanalys_password@db:5432/wwwanalys
-      SECRET_KEY: your-secret-key-here
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-secret-key}
+      API_KEY: ${API_KEY:-change-me-api-key}
+      CORS_ORIGINS: http://localhost:5173
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
+
+  seed:
+    build: ./backend
+    image: las84/wwwanalys-backend:latest
+    environment:
+      DATABASE_URL: postgresql://wwwanalys_user:wwwanalys_password@db:5432/wwwanalys
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-secret-key}
+    depends_on:
+      db:
+        condition: service_healthy
     command: >
-      sh -c "python seed.py && uvicorn main:app --host 0.0.0.0 --port 8000"
+      sh -c "python seed.py"
+    profiles:
+      - seed
 
   frontend:
     build: ./frontend

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
-from app.core.database import SessionLocal
+from app.core.deps import get_db
 from app.core.config import settings
 from app.crud import analysis_type as crud_template
 from app.schemas import AnalysisTypeCreate, AnalysisTypeUpdate
@@ -9,23 +9,17 @@ from fastapi.security import APIKeyHeader
 
 router = APIRouter()
 
-API_KEY = "your-secret-api-key"  # В реальном проекте хранить в env
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=True)
 
+
 def get_api_key(api_key: str = Depends(api_key_header)):
-    if api_key != API_KEY:
+    if api_key != settings.api_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API Key",
         )
     return api_key
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/sync-templates")
 def sync_templates(
@@ -43,7 +37,7 @@ def sync_templates(
             existing_template = db.query(crud_template.AnalysisType).filter(
                 crud_template.AnalysisType.name == template_data["name"]
             ).first()
-            
+
             if existing_template:
                 # Обновляем существующий шаблон
                 update_data = AnalysisTypeUpdate(
@@ -58,8 +52,8 @@ def sync_templates(
                     description=template_data.get("description")
                 )
                 crud_template.create_template(db, create_data, user_id=1)  # ID системного пользователя
-        
+
         return {"message": f"Successfully synced {len(templates_data)} templates"}
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")

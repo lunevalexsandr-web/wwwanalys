@@ -1,11 +1,37 @@
 from fastapi import FastAPI
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth, analysis_type, process_log, templates, reports, external
 from app.core.database import engine, Base
+from app.core.config import settings
 from app.models import User, AnalysisType, Indicator, ProcessLog, IndicatorValue
+import uvicorn
 
 # Создаем таблицы в базе данных
-Base.metadata.create_all(bind=engine)
+def ensure_indicator_columns(engine):
+    with engine.connect() as conn:
+        conn.execute(text(
+            """
+            ALTER TABLE indicators
+            ADD COLUMN IF NOT EXISTS data_type VARCHAR DEFAULT 'number',
+            ADD COLUMN IF NOT EXISTS options TEXT
+            """
+        ))
+        conn.execute(text(
+            """
+            ALTER TABLE indicator_values
+            ADD COLUMN IF NOT EXISTS text_value VARCHAR
+            """
+        ))
+        conn.commit()
+
+try:
+    Base.metadata.create_all(bind=engine)
+    ensure_indicator_columns(engine)
+    print("Database tables created successfully")
+except Exception as e:
+    print(f"Error creating database tables: {e}")
+    # Продолжаем запуск, даже если таблицы не создались (возможно, они уже существуют)
 
 app = FastAPI(
     title="WWWAnalys API",
@@ -13,10 +39,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Настройка CORS
+# Настройка CORS из конфига
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,3 +63,6 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
