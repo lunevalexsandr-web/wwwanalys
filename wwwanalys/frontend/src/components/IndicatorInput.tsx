@@ -33,7 +33,7 @@ const IndicatorInput: React.FC<IndicatorInputProps> = ({
             value={value}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
             step="0.01"
-            placeholder={`Введите значение (${indicator.unit})`}
+            placeholder={`Введите значение (${indicator.unit || ''})`}
             className={isOutOfRange ? 'is-invalid' : ''}
             required
           />
@@ -44,7 +44,7 @@ const IndicatorInput: React.FC<IndicatorInputProps> = ({
             type="text"
             value={value}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-            placeholder={`Введите значение (${indicator.unit})`}
+            placeholder={`Введите значение (${indicator.unit || ''})`}
             required
           />
         );

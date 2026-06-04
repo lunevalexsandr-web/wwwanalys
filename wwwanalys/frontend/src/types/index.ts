@@ -11,7 +11,7 @@ export interface User {
 export interface Indicator {
   id: number;
   name: string;
-  unit: string;
+  unit?: string;
   min_value: number | null;
   max_value: number | null;
   data_type: 'number' | 'text' | 'select';
@@ -64,7 +64,7 @@ export interface ToastState {
 export interface IndicatorLibrary {
   id: number;
   name: string;
-  unit: string;
+  unit?: string;
   data_type: 'number' | 'text' | 'select';
   options?: string[];
   description?: string | null;

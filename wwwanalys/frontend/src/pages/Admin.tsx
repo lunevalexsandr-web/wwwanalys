@@ -383,7 +383,7 @@ const Admin: React.FC = () => {
   const handleEditIndicator = (indicator: Indicator) => {
     setEditingIndicator(indicator);
     setIndicatorName(indicator.name);
-    setIndicatorUnit(indicator.unit);
+    setIndicatorUnit(indicator.unit || '');
     setIndicatorMin(indicator.min_value);
     setIndicatorMax(indicator.max_value);
     setIndicatorType(indicator.data_type);
@@ -406,7 +406,7 @@ const Admin: React.FC = () => {
   const handleEditLibIndicator = (indicator: IndicatorLibrary) => {
     setEditingLibIndicator(indicator);
     setLibIndicatorName(indicator.name);
-    setLibIndicatorUnit(indicator.unit);
+    setLibIndicatorUnit(indicator.unit || '');
     setLibIndicatorType(indicator.data_type);
     setLibIndicatorOptions(indicator.options?.join(', ') || '');
     setLibIndicatorDescription(indicator.description || '');
@@ -620,7 +620,7 @@ const Admin: React.FC = () => {
 
   const getLibIndicatorName = (indicatorId: number): string => {
     const libInd = libIndicators.find(i => i.id === indicatorId);
-    return libInd ? `${libInd.name}, ${libInd.unit}` : `#${indicatorId}`;
+    return libInd ? `${libInd.name}${libInd.unit ? `, ${libInd.unit}` : ''}` : `#${indicatorId}`;
   };
 
   const getLibIndicator = (indicatorId: number): IndicatorLibrary | undefined => {
@@ -986,7 +986,7 @@ const Admin: React.FC = () => {
                             {libIndicators.map((ind) => (
                               <tr key={ind.id}>
                                 <td><strong>{ind.name}</strong></td>
-                                <td>{ind.unit}</td>
+                                <td>{ind.unit || '-'}</td>
                                 <td>
                                   <Badge bg="secondary">
                                     {ind.data_type === 'number' ? 'Число' : ind.data_type === 'text' ? 'Текст' : 'Выбор'}
@@ -1662,7 +1662,7 @@ const Admin: React.FC = () => {
                         />
                       </td>
                       <td>
-                        <strong>{ind.name}</strong>, {ind.unit}
+                        <strong>{ind.name}</strong>{ind.unit && `, ${ind.unit}`}
                         {ind.data_type === 'select' && ind.options && (
                           <small className="text-muted d-block">Варианты: {ind.options.join(', ')}</small>
                         )}

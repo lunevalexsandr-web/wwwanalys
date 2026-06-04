@@ -107,7 +107,7 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
                       />
                     </td>
                     <td>
-                      <strong>{ind.name}</strong>, {ind.unit}
+                      <strong>{ind.name}</strong>{ind.unit && `, ${ind.unit}`}
                       {ind.description && <small className="text-muted d-block">{ind.description}</small>}
                       {ind.data_type === 'select' && ind.options && (
                         <small className="text-muted d-block">Варианты: {ind.options.join(', ')}</small>
