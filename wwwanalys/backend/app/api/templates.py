@@ -21,7 +21,7 @@ def _format_template(template):
     # Pydantic v2 не умеет автоматически сериализовать вложенные relationship,
     # поэтому формируем template_indicators вручную
     ti_list = []
-    for ti in template.template_indicators:
+    for ti in template.template_indicators or []:
         lib_ind = ti.indicator_ref
         if lib_ind:
             # Парсим options из JSON
@@ -39,6 +39,21 @@ def _format_template(template):
                 "unit": lib_ind.unit or "",
                 "data_type": lib_ind.data_type or "number",
                 "options": options,
+                "min_value": ti.min_value,
+                "max_value": ti.max_value,
+                "sort_order": ti.sort_order or 0,
+                "is_custom": ti.is_custom or False,
+                "template_notes": ti.template_notes or None,
+            })
+        else:
+            # Если indicator_ref не загружен, создаем минимальную запись
+            ti_list.append({
+                "id": ti.id,
+                "indicator_id": ti.indicator_id,
+                "name": f"Показатель #{ti.indicator_id}",
+                "unit": "",
+                "data_type": "number",
+                "options": None,
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
                 "sort_order": ti.sort_order or 0,
