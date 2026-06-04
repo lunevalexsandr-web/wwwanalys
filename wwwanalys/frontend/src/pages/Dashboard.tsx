@@ -184,28 +184,11 @@ const Dashboard: React.FC = () => {
       const reportData = response.data;
       setViewReport(reportData);
       
-      // Получаем свежие данные шаблона
-      const templateResponse = await api.get(`/api/templates/${reportData.analysis_type_id}`);
-      const template = templateResponse.data;
-      console.log('Template data:', template);
-      console.log('Template template_indicators:', template?.template_indicators);
+      // API теперь возвращает все данные о показателях, включая названия и единицы измерения
+      console.log('Report data:', reportData);
       
-      const allIndicators = template ? getAllIndicators(template) : [];
-      console.log('All indicators:', allIndicators);
-      
-      // Map indicator values with names
-      const enrichedValues = (reportData.values || []).map((v: any) => {
-        const indicator = allIndicators.find((ind: any) => ind.id === v.indicator_id);
-        return {
-          ...v,
-          indicator_name: indicator?.name || `#${v.indicator_id}`,
-          indicator_unit: indicator?.unit || '',
-          indicator_min: indicator?.min_value,
-          indicator_max: indicator?.max_value
-        };
-      });
-      console.log('Enriched values:', enrichedValues);
-      setViewReportIndicators(enrichedValues);
+      // Просто используем значения, которые вернул API
+      setViewReportIndicators(reportData.values || []);
       setShowViewModal(true);
     } catch (error) {
       console.error('Error fetching report:', error);

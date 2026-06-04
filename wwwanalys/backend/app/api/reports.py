@@ -110,6 +110,36 @@ def get_report(
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     from app.schemas.report import IndicatorValueReport
+    from app.models import Indicator, IndicatorLibrary
+    
+    # Получаем все значения показателей для отчета
+    indicator_values = []
+    if hasattr(db_report, 'indicator_values') and db_report.indicator_values:
+        for v in db_report.indicator_values:
+            # Ищем название показателя в обычных индикаторах
+            indicator = db.query(Indicator).filter(Indicator.id == v.indicator_id).first()
+            
+            # Если не найден, ищем в справочнике
+            if not indicator:
+                indicator = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
+            
+            # Получаем название и единицу измерения
+            name = indicator.name if indicator else f"Показатель #{v.indicator_id}"
+            unit = indicator.unit if indicator else ""
+            min_value = indicator.min_value if hasattr(indicator, 'min_value') else None
+            max_value = indicator.max_value if hasattr(indicator, 'max_value') else None
+            
+            indicator_values.append({
+                "id": v.id,
+                "indicator_id": v.indicator_id,
+                "name": name,
+                "unit": unit,
+                "value": v.value,
+                "text_value": v.text_value,
+                "is_normal": v.is_normal,
+                "min_value": min_value,
+                "max_value": max_value
+            })
     
     return {
         "id": db_report.id,
@@ -119,13 +149,5 @@ def get_report(
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
         "notes": db_report.notes,
         "created_by": db_report.created_by,
-        "values": [
-            IndicatorValueReport(
-                id=v.id,
-                indicator_id=v.indicator_id,
-                value=v.value,
-                text_value=v.text_value,
-                is_normal=v.is_normal
-            ).model_dump() for v in db_report.indicator_values
-        ] if hasattr(db_report, 'indicator_values') and db_report.indicator_values else []
+        "values": indicator_values
     }
