@@ -21,9 +21,15 @@ def _format_template(template):
     # Pydantic v2 не умеет автоматически сериализовать вложенные relationship,
     # поэтому формируем template_indicators вручную
     ti_list = []
+    print(f"DEBUG: Processing template {template.id} with {len(template.template_indicators or [])} template_indicators")
+    
     for ti in template.template_indicators or []:
+        print(f"DEBUG: Processing template_indicator {ti.id}, indicator_id={ti.indicator_id}")
         lib_ind = ti.indicator_ref
+        print(f"DEBUG: indicator_ref loaded: {lib_ind is not None}")
+        
         if lib_ind:
+            print(f"DEBUG: Found library indicator: {lib_ind.name}")
             # Парсим options из JSON
             options = None
             if lib_ind.options:
@@ -47,6 +53,7 @@ def _format_template(template):
             })
         else:
             # Если indicator_ref не загружен, создаем минимальную запись
+            print(f"DEBUG: indicator_ref not loaded for {ti.indicator_id}")
             ti_list.append({
                 "id": ti.id,
                 "indicator_id": ti.indicator_id,
@@ -61,6 +68,7 @@ def _format_template(template):
                 "template_notes": ti.template_notes or None,
             })
 
+    print(f"DEBUG: Total template_indicators processed: {len(ti_list)}")
     return ti_list
 
 
