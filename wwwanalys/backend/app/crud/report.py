@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
-from app.models import AnalysisType, Indicator, ProcessLog, IndicatorValue
+from app.models import AnalysisType, Indicator, IndicatorLibrary, ProcessLog, IndicatorValue
 from app.schemas import ReportCreate, IndicatorValue as IndicatorValueSchema
 from typing import List
 from datetime import datetime, date
@@ -23,9 +23,20 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         # Создаем значения для каждого индикатора
         indicator_values = []
         for value_data in report.values:
+            # Ищем индикатор в обычных показателях (индикаторы, созданные в шаблоне)
             indicator = db.query(Indicator).filter(Indicator.id == value_data.indicator_id).first()
+            
+            # Если не найден, ищем в справочнике
             if not indicator:
-                continue
+                indicator = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == value_data.indicator_id).first()
+                if not indicator:
+                    continue
+            
+            # Получаем данные в зависимости от типа индикатора
+            data_type = indicator.data_type
+            min_value = indicator.min_value if hasattr(indicator, 'min_value') else None
+            max_value = indicator.max_value if hasattr(indicator, 'max_value') else None
+            options = indicator.options if hasattr(indicator, 'options') else None
             
             import json
             
@@ -44,9 +55,9 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 # Для select-индикаторов сохраняем выбранное значение как текст
                 text_value = str(value_data.value) if value_data.value is not None else None
                 # Валидация: проверяем, что значение есть в списке options
-                if indicator.options and text_value:
+                if options and text_value:
                     try:
-                        allowed_options = json.loads(indicator.options)
+                        allowed_options = json.loads(options)
                         if text_value not in allowed_options:
                             is_normal = False
                     except (json.JSONDecodeError, TypeError):
@@ -64,8 +75,8 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                     numeric_value = float(value)
                 
                 # Проверяем, что значение в допустимом диапазоне
-                if numeric_value is not None and indicator.min_value is not None and indicator.max_value is not None:
-                    is_normal = indicator.min_value <= numeric_value <= indicator.max_value
+                if numeric_value is not None and min_value is not None and max_value is not None:
+                    is_normal = min_value <= numeric_value <= max_value
             
             db_indicator_value = IndicatorValue(
                 indicator_id=value_data.indicator_id,
