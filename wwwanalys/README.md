@@ -91,8 +91,9 @@ docker-compose up -d
 
 4. Проверьте работу:
 - Бэкенд: http://localhost:8000
-- Фронтенд: http://localhost:3000
+- Фронтенд: http://localhost:5173
 - API документация: http://localhost:8000/docs
+- PostgreSQL: localhost:5433
 
 ### Ручной запуск (для разработки)
 
@@ -130,18 +131,24 @@ npm run dev
 - `DELETE /api/indicators/{id}` — Удаление индикатора
 
 ### Библиотека индикаторов (Indicator Library)
-- `GET /api/indicator-library/` — Получение всех библиотек
-- `POST /api/indicator-library/` — Создание библиотеки
-- `GET /api/indicator-library/{id}` — Получение библиотеки по ID
-- `PUT /api/indicator-library/{id}` — Обновление библиотеки
-- `DELETE /api/indicator-library/{id}` — Удаление библиотеки
+- `GET /api/indicators/library` — Получение всех показателей библиотеки
+- `POST /api/indicators/library` — Создание показателя библиотеки
+- `PUT /api/indicators/library/{indicator_id}` — Обновление показателя библиотеки
+- `DELETE /api/indicators/library/{indicator_id}` — Удаление показателя библиотеки
 
-### Версии библиотеки (Indicator Library Version)
-- `GET /api/indicator-library/{id}/versions` — Получение версий библиотеки
-- `POST /api/indicator-library/{id}/versions` — Создание версии библиотеки
-- `GET /api/indicator-library-versions/{id}` — Получение версии по ID
-- `PUT /api/indicator-library-versions/{id}` — Обновление версии
-- `DELETE /api/indicator-library-versions/{id}` — Удаление версии
+### Дополнительные эндпоинты библиотеки
+- `GET /api/indicators/library/count` — Получение количества показателей
+- `GET /api/indicators/library/{indicator_id}/versions` — Получение истории версий показателя
+- `GET /api/indicators/library/{indicator_id}/related` — Получение связанных показателей
+- `GET /api/indicators/library/suggestions` — Получение рекомендаций по показателям
+- `GET /api/indicators/library/check-duplicate` — Проверка дубликатов показателей
+- `POST /api/indicators/library/batch/create` — Пакетное создание показателей
+- `PUT /api/indicators/library/batch/update` — Пакетное обновление показателей
+- `POST /api/indicators/library/batch/delete` — Пакетное удаление показателей
+- `GET /api/indicators/library/export/csv` — Экспорт в CSV
+- `GET /api/indicators/library/export/excel` — Экспорт в Excel
+- `POST /api/indicators/library/import/csv` — Импорт из CSV
+- `POST /api/indicators/library/import/json` — Импорт из JSON
 
 ### Пресеты (Presets)
 - `GET /api/presets/` — Получение всех пресетов
