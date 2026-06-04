@@ -184,9 +184,14 @@ const Dashboard: React.FC = () => {
       const reportData = response.data;
       setViewReport(reportData);
       
-      // Find the template to get indicator names
-      const template = templates.find(t => t.id === reportData.analysis_type_id);
+      // Получаем свежие данные шаблона
+      const templateResponse = await api.get(`/api/templates/${reportData.analysis_type_id}`);
+      const template = templateResponse.data;
+      console.log('Template data:', template);
+      console.log('Template template_indicators:', template?.template_indicators);
+      
       const allIndicators = template ? getAllIndicators(template) : [];
+      console.log('All indicators:', allIndicators);
       
       // Map indicator values with names
       const enrichedValues = (reportData.values || []).map((v: any) => {
@@ -199,6 +204,7 @@ const Dashboard: React.FC = () => {
           indicator_max: indicator?.max_value
         };
       });
+      console.log('Enriched values:', enrichedValues);
       setViewReportIndicators(enrichedValues);
       setShowViewModal(true);
     } catch (error) {
