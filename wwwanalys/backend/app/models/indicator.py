@@ -7,7 +7,7 @@ class Indicator(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
-    unit = Column(String)
+    unit = Column(String, nullable=True)
     min_value = Column(Float)
     max_value = Column(Float)
     data_type = Column(String(20), default="number")
