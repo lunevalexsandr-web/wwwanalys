@@ -130,10 +130,18 @@ npm run dev
 - `DELETE /api/indicators/{id}` — Удаление индикатора
 
 ### Библиотека индикаторов (Indicator Library)
-- `GET /api/indicator-library/` — Получение библиотеки индикаторов
+- `GET /api/indicator-library/` — Получение всех библиотек
 - `POST /api/indicator-library/` — Создание библиотеки
+- `GET /api/indicator-library/{id}` — Получение библиотеки по ID
+- `PUT /api/indicator-library/{id}` — Обновление библиотеки
+- `DELETE /api/indicator-library/{id}` — Удаление библиотеки
+
+### Версии библиотеки (Indicator Library Version)
 - `GET /api/indicator-library/{id}/versions` — Получение версий библиотеки
 - `POST /api/indicator-library/{id}/versions` — Создание версии библиотеки
+- `GET /api/indicator-library-versions/{id}` — Получение версии по ID
+- `PUT /api/indicator-library-versions/{id}` — Обновление версии
+- `DELETE /api/indicator-library-versions/{id}` — Удаление версии
 
 ### Пресеты (Presets)
 - `GET /api/presets/` — Получение всех пресетов
