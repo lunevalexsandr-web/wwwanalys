@@ -6,7 +6,7 @@ import json
 
 class IndicatorLibraryBase(BaseModel):
     name: str
-    unit: str
+    unit: Optional[str] = None
     data_type: str = "number"
     options: Optional[List[str]] = None
     description: Optional[str] = None
@@ -64,7 +64,7 @@ class IndicatorLibrary(IndicatorLibraryBase):
 class BatchCreateItem(BaseModel):
     """Один элемент для batch-создания."""
     name: str
-    unit: str
+    unit: Optional[str] = None
     data_type: str = "number"
     options: Optional[List[str]] = None
     description: Optional[str] = None

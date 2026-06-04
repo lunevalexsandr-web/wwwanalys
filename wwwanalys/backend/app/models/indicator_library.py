@@ -10,7 +10,7 @@ class IndicatorLibrary(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
-    unit = Column(String)
+    unit = Column(String, nullable=True)
     data_type = Column(String(20), default="number")
     options = Column(Text)  # JSON-строка для SELECT типа
 

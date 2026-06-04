@@ -4,7 +4,7 @@ import { Form } from 'react-bootstrap';
 interface Indicator {
   id: number;
   name: string;
-  unit: string;
+  unit?: string;
   min_value: number | null;
   max_value: number | null;
   type: 'FLOAT' | 'TEXT' | 'SELECT';
@@ -72,7 +72,8 @@ const IndicatorInput: React.FC<IndicatorInputProps> = ({
     <div className="mb-3">
       <div className="d-flex justify-content-between align-items-start mb-2">
         <Form.Label className="mb-0">
-          {indicator.name}, {indicator.unit}
+          {indicator.name}
+          {indicator.unit && `, ${indicator.unit}`}
         </Form.Label>
         {indicator.min_value !== null && indicator.max_value !== null && (
           <small className="text-muted">
