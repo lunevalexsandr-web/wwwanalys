@@ -95,6 +95,77 @@ docker-compose up -d
 - API документация: http://localhost:8000/docs
 - PostgreSQL: localhost:5433
 
+## Доступ из сети
+
+Чтобы открыть проект с другого компьютера в сети, выполните следующие шаги:
+
+### 1. Получите IP-адрес вашего компьютера
+```bash
+# macOS/Linux
+hostname -I
+
+# Windows
+ipconfig | findstr "IPv4"
+```
+
+### 2. Запустите Docker с привязкой к сетевому IP
+
+#### Вариант A: Изменить docker-compose.yml
+Отредактируйте `docker-compose.yml`:
+```yaml
+services:
+  backend:
+    ports:
+      - "8000:8000"
+    # Добавьте эту строку
+    network_mode: host
+
+  frontend:
+    ports:
+      - "5173:5173"
+    # Добавьте эту строку
+    network_mode: host
+
+  db:
+    ports:
+      - "5433:5432"
+    # Добавьте эту строку
+    network_mode: host
+```
+
+#### Вариант B: Запустить контейнеры с хост-режимом
+```bash
+docker-compose up -d --force-recreate
+```
+
+### 3. Доступ к проекту с других устройств
+- **Бэкенд**: http://<your-ip-address>:8000
+- **Фронтенд**: http://<your-ip-address>:5173
+- **API документация**: http://<your-ip-address>:8000/docs
+- **PostgreSQL**: <your-ip-address>:5433
+
+### 4. Доступ по локальному сетевому имени (macOS/Linux)
+Если вы используете macOS или Linux, можно использовать имя компьютера:
+```bash
+# Получите имя компьютера
+hostname
+```
+Доступные адреса:
+- http://<computer-name>.local:8000
+- http://<computer-name>.local:5173
+
+### 5. Фронтенд прокси
+Фронтенд настроен на проксирование запросов к бэкенду. Если вы меняете порт бэкенда, обновите переменную окружения:
+
+```bash
+export VITE_BACKEND_URL=http://<your-ip-address>:8000
+```
+
+Или передайте её при запуске Docker:
+```bash
+VITE_BACKEND_URL=http://<your-ip-address>:8000 docker-compose up -d
+```
+
 ### Ручной запуск (для разработки)
 
 #### Бэкенд
