@@ -351,8 +351,8 @@ const Admin: React.FC = () => {
   const handleIndicatorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!indicatorName.trim() || !indicatorUnit.trim()) {
-      showToast('Название и единица измерения обязательны', 'warning');
+    if (!indicatorName.trim()) {
+      showToast('Название показателя обязательно', 'warning');
       return;
     }
 
@@ -431,8 +431,8 @@ const Admin: React.FC = () => {
   const handleLibIndicatorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!libIndicatorName.trim() || !libIndicatorUnit.trim()) {
-      showToast('Название и единица измерения обязательны', 'warning');
+    if (!libIndicatorName.trim()) {
+      showToast('Название показателя обязательно', 'warning');
       return;
     }
 
@@ -1436,7 +1436,6 @@ const Admin: React.FC = () => {
                 type="text"
                 value={indicatorUnit}
                 onChange={(e) => setIndicatorUnit(e.target.value)}
-                required
               />
             </Form.Group>
             
