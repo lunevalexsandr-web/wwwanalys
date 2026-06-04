@@ -16,20 +16,33 @@ from app.auth.auth import get_current_active_user, get_current_admin_user
 router = APIRouter()
 
 
-def _format_template(template):
+def _format_template(template, db: Session):
     """Форматирует шаблон с обогащением template_indicators данными из справочника."""
     # Pydantic v2 не умеет автоматически сериализовать вложенные relationship,
     # поэтому формируем template_indicators вручную
     ti_list = []
-    print(f"DEBUG: Processing template {template.id} with {len(template.template_indicators or [])} template_indicators")
     
-    for ti in template.template_indicators or []:
-        print(f"DEBUG: Processing template_indicator {ti.id}, indicator_id={ti.indicator_id}")
-        lib_ind = ti.indicator_ref
-        print(f"DEBUG: indicator_ref loaded: {lib_ind is not None}")
+    # Если template_indicators не загружены, пробуем загрузить их вручную
+    if not hasattr(template, 'template_indicators') or template.template_indicators is None:
+        # Загружаем template_indicators с joinedload
+        from sqlalchemy.orm import joinedload
+        from app.models import TemplateIndicator
         
+        # Это временный обходной путь - в идеале нужно исправить загрузку в CRUD
+        db_template = db.query(AnalysisType).options(
+            joinedload(AnalysisType.template_indicators).joinedload(TemplateIndicator.indicator_ref)
+        ).filter(AnalysisType.id == template.id).first()
+        
+        if db_template and db_template.template_indicators:
+            template_indicators = db_template.template_indicators
+        else:
+            template_indicators = []
+    else:
+        template_indicators = template.template_indicators or []
+    
+    for ti in template_indicators:
+        lib_ind = ti.indicator_ref
         if lib_ind:
-            print(f"DEBUG: Found library indicator: {lib_ind.name}")
             # Парсим options из JSON
             options = None
             if lib_ind.options:
@@ -53,7 +66,6 @@ def _format_template(template):
             })
         else:
             # Если indicator_ref не загружен, создаем минимальную запись
-            print(f"DEBUG: indicator_ref not loaded for {ti.indicator_id}")
             ti_list.append({
                 "id": ti.id,
                 "indicator_id": ti.indicator_id,
@@ -68,11 +80,10 @@ def _format_template(template):
                 "template_notes": ti.template_notes or None,
             })
 
-    print(f"DEBUG: Total template_indicators processed: {len(ti_list)}")
     return ti_list
 
 
-def _make_template_dict(template):
+def _make_template_dict(template, db: Session):
     """Сформировать словарь шаблона для ответа."""
     return {
         "id": template.id,
@@ -83,7 +94,7 @@ def _make_template_dict(template):
         "is_active": template.is_active,
         "template_type": getattr(template, 'template_type', 'hybrid'),
         "indicators": template.indicators,
-        "template_indicators": _format_template(template),
+        "template_indicators": _format_template(template, db),
     }
 
 
