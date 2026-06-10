@@ -1,0 +1,20 @@
+def _make_template_response(template, db: Session):
+    """Сформировать ответ шаблона через Pydantic модели."""
+    from app.schemas.analysis_type import AnalysisType as AnalysisTypeSchema
+    
+    template_dict = {
+        "id": template.id,
+        "name": template.name,
+        "description": template.description,
+        "created_at": template.created_at,
+        "created_by": template.created_by,
+        "is_active": template.is_active,
+        "template_type": getattr(template, 'template_type', 'hybrid'),
+        "indicators": template.indicators,
+        "template_indicators": _format_template(template, db),
+    }
+    
+    # Используем model_validate для корректной сериализации в Pydantic v2
+    return AnalysisTypeSchema.model_validate(template_dict)
+>>>>>>>
+```

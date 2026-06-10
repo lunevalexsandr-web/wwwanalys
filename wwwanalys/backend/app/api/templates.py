@@ -9,7 +9,7 @@ from app.core.deps import get_db
 from app.crud import analysis_type as crud_template
 from app.crud import preset as crud_preset
 from app.models import User
-from app.schemas import AnalysisType, AnalysisTypeCreate, AnalysisTypeUpdate, TemplateIndicatorDetail
+from app.schemas import AnalysisType, AnalysisTypeCreate, AnalysisTypeUpdate
 from app.schemas.analysis_type import CopyTemplateRequest, CreateFromPresetRequest
 from app.auth.auth import get_current_active_user, get_current_admin_user
 
@@ -61,8 +61,8 @@ def _format_template(template, db: Session):
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
                 "sort_order": ti.sort_order or 0,
-                "is_custom": ti.is_custom or False,
-                "template_notes": ti.template_notes or None,
+                "is_custom": ti.is_custom if ti.is_custom is not None else False,
+                "template_notes": ti.template_notes,
             })
         else:
             # Если indicator_ref не загружен, создаем минимальную запись
@@ -76,16 +76,18 @@ def _format_template(template, db: Session):
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
                 "sort_order": ti.sort_order or 0,
-                "is_custom": ti.is_custom or False,
-                "template_notes": ti.template_notes or None,
+                "is_custom": ti.is_custom if ti.is_custom is not None else False,
+                "template_notes": ti.template_notes,
             })
 
     return ti_list
 
 
-def _make_template_dict(template, db: Session):
-    """Сформировать словарь шаблона для ответа."""
-    return {
+def _make_template_response(template, db: Session):
+    """Сформировать ответ шаблона через Pydantic модели."""
+    from app.schemas.analysis_type import AnalysisType as AnalysisTypeSchema
+    
+    template_dict = {
         "id": template.id,
         "name": template.name,
         "description": template.description,
@@ -96,6 +98,9 @@ def _make_template_dict(template, db: Session):
         "indicators": template.indicators,
         "template_indicators": _format_template(template, db),
     }
+    
+    # Используем model_validate для корректной сериализации в Pydantic v2
+    return AnalysisTypeSchema.model_validate(template_dict)
 
 
 @router.get("/", response_model=List[AnalysisType])
@@ -111,7 +116,7 @@ def get_templates(
     # Обогащаем template_indicators
     result = []
     for t in templates:
-        result.append(_make_template_dict(t))
+        result.append(_make_template_response(t, db))
     
     return result
 
@@ -124,7 +129,7 @@ def create_template(
 ):
     """Create a new template with indicators (admin only)."""
     db_template = crud_template.create_template(db=db, template=template, user_id=current_user.id)
-    return _make_template_dict(db_template)
+    return _make_template_response(db_template, db)
 
 
 @router.get("/active", response_model=List[AnalysisType])
@@ -137,7 +142,7 @@ def get_active_templates(
     
     result = []
     for t in templates:
-        result.append(_make_template_dict(t))
+        result.append(_make_template_response(t, db))
     
     return result
 
@@ -153,7 +158,7 @@ def get_template(
     if not db_template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    return _make_template_dict(db_template)
+    return _make_template_response(db_template, db)
 
 
 @router.put("/{template_id}", response_model=AnalysisType)
@@ -168,7 +173,7 @@ def update_template(
     if not db_template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    return _make_template_dict(db_template)
+    return _make_template_response(db_template, db)
 
 
 @router.post("/{template_id}/copy", response_model=AnalysisType)
@@ -186,7 +191,7 @@ def copy_template(
         new_description=request.new_description or "",
         user_id=current_user.id,
     )
-    return _make_template_dict(db_template)
+    return _make_template_response(db_template, db)
 
 
 @router.post("/from-preset", response_model=AnalysisType)
@@ -205,7 +210,7 @@ def create_template_from_preset(
     )
     if not db_template:
         raise HTTPException(status_code=404, detail="Preset not found")
-    return _make_template_dict(db_template)
+    return _make_template_response(db_template, db)
 
 
 @router.delete("/clear-all")
