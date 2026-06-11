@@ -8,7 +8,7 @@ class IndicatorValue(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     process_log_id = Column(Integer, ForeignKey("process_logs.id"))
-    indicator_id = Column(Integer, ForeignKey("indicators.id"))
+    indicator_id = Column(Integer, ForeignKey("indicator_library.id"))
     value = Column(Float, nullable=True)
     text_value = Column(String, nullable=True)
     is_normal = Column(Boolean, default=True)
@@ -18,5 +18,5 @@ class IndicatorValue(Base):
     # Связь с моделью ProcessLog
     process_log = relationship("ProcessLog", back_populates="indicator_values")
     
-    # Связь с моделью Indicator
-    indicator = relationship("Indicator", back_populates="values")
+    # Связь с моделью IndicatorLibrary
+    indicator = relationship("IndicatorLibrary")

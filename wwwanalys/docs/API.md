@@ -1,4 +1,4 @@
-# API документация WWWAnalys v3.0.0
+# API документация WWWAnalys v3.2.0
 
 Base URL: `http://localhost:8000`
 
@@ -54,8 +54,10 @@ username=admin&password=yourpassword
 
 ## Шаблоны анализов
 
+Шаблоны содержат только показатели из справочника (library_indicators).
+
 ### GET /api/templates/
-Получить список всех шаблонов с индикаторами.
+Получить список всех шаблонов с показателями из справочника.
 
 **Response 200:**
 ```json
@@ -66,15 +68,16 @@ username=admin&password=yourpassword
     "description": "Стандартный анализ воды",
     "created_by": 1,
     "is_active": true,
-    "indicators": [
+    "template_indicators": [
       {
         "id": 1,
+        "indicator_id": 1,
         "name": "pH",
         "unit": "pH",
+        "data_type": "number",
         "min_value": 6.5,
         "max_value": 8.5,
-        "data_type": "number",
-        "options": null
+        "sort_order": 0
       }
     ]
   }
@@ -84,29 +87,29 @@ username=admin&password=yourpassword
 ### GET /api/templates/active
 Получить только активные шаблоны.
 
+### GET /api/templates/{template_id}
+Получить шаблон по ID.
+
 ### POST /api/templates/
 Создать новый шаблон. **Только для админа.**
 
 **Request:**
 ```json
 {
-  "name": "Анаализ почвы",
+  "name": "Анализ почвы",
   "description": "Полный анализ почвы",
-  "indicators": [
+  "library_indicators": [
     {
-      "name": "Влажность",
-      "unit": "%",
+      "indicator_id": 1,
       "min_value": 10,
       "max_value": 80,
-      "data_type": "number"
+      "sort_order": 0
     },
     {
-      "name": "Тип почвы",
-      "unit": "",
+      "indicator_id": 2,
       "min_value": null,
       "max_value": null,
-      "data_type": "select",
-      "options": ["Песчаная", "Суглинистая", "Глинистая"]
+      "sort_order": 1
     }
   ]
 }
@@ -116,11 +119,11 @@ username=admin&password=yourpassword
 ```json
 {
   "id": 2,
-  "name": "Анаализ почвы",
+  "name": "Анализ почвы",
   "description": "Полный анализ почвы",
   "created_by": 1,
   "is_active": true,
-  "indicators": [...]
+  "template_indicators": [...]
 }
 ```
 
@@ -133,30 +136,247 @@ username=admin&password=yourpassword
   "name": "Обновлённое название",
   "description": "Новое описание",
   "is_active": true,
-  "indicators": [...]
+  "library_indicators": [...]
 }
 ```
 
 ### DELETE /api/templates/{template_id}
 Удалить шаблон по ID. **Только для админа.**
 
-**Response 200:**
-```json
-{
-  "message": "Template deleted successfully"
-}
-```
-
 ### DELETE /api/templates/clear-all
 Удалить все шаблоны. **Только для админа.**
 
+### POST /api/templates/{template_id}/copy
+Копировать шаблон с новым именем. **Только для админа.**
+
+**Request:**
+```json
+{
+  "new_name": "Копия шаблона",
+  "new_description": "Описание копии"
+}
+```
+
+### POST /api/templates/from-preset
+Создать шаблон из пресета. **Только для админа.**
+
+**Request:**
+```json
+{
+  "preset_id": 1,
+  "template_name": "Новый шаблон из пресета",
+  "template_description": "Описание"
+}
+```
+
+---
+
+## Библиотека показателей (Indicator Library)
+
+Централизованный справочник показателей, который может быть импортирован из внешних систем (1С).
+
+### GET /api/indicators/library
+Получить список всех показателей из справочника.
+
+**Query параметры:**
+- `search` (string, optional) — Поиск по названию, описанию, категории
+- `category` (string, optional) — Фильтр по категории (quality, safety, performance, chemical, physical, microbiology)
+- `data_type` (string, optional) — Фильтр по типу данных (number, text, select)
+- `skip` (int, default: 0) — Пропустить записей
+- `limit` (int, default: 100) — Лимит записей
+
+**Response 200:**
+```json
+[
+  {
+    "id": 1,
+    "name": "pH",
+    "unit": "pH",
+    "data_type": "number",
+    "description": "Показатель кислотности",
+    "category": "quality",
+    "is_required": true,
+    "default_value": "7.0",
+    "created_at": "2026-06-01T10:00:00"
+  }
+]
+```
+
+### POST /api/indicators/library
+Создать новый показатель в справочнике. **Только для админа.**
+
+**Request:**
+```json
+{
+  "name": "Влажность",
+  "unit": "%",
+  "data_type": "number",
+  "description": "Показатель влажности",
+  "category": "quality",
+  "is_required": false,
+  "default_value": "0.0"
+}
+```
+
+### PUT /api/indicators/library/{indicator_id}
+Обновить показатель в справочнике. **Только для админа.**
+
+### DELETE /api/indicators/library/{indicator_id}
+Удалить показатель из справочника. **Только для админа.**
+
+### POST /api/indicators/library/batch/create
+Пакетное создание показателей. **Только для админа.**
+
+**Request:**
+```json
+{
+  "indicators": [
+    {
+      "name": "Показатель 1",
+      "unit": "%",
+      "data_type": "number",
+      "category": "quality"
+    },
+    {
+      "name": "Показатель 2",
+      "unit": "мг/л",
+      "data_type": "number",
+      "category": "chemical"
+    }
+  ]
+}
+```
+
+### GET /api/indicators/library/export/csv
+Экспортировать справочник в формате CSV.
+
+### GET /api/indicators/library/export/excel
+Экспортировать справочник в формате Excel (.xlsx).
+
+### POST /api/indicators/library/import/csv
+Импортировать показатели из CSV-файла.
+
+### POST /api/indicators/library/import/json
+Импортировать показатели из JSON-файла.
+
+---
+
+## Интеграция с 1С Предприятие
+
+API для загрузки справочника показателей из внешних систем (1С Предприятие).
+
+**Важно:** Все эндпоинты интеграции требуют заголовок `X-API-KEY` с ключом из конфигурации.
+
+### POST /api/external/1c/test-connection
+Проверить подключение к 1С.
+
+**Request:**
+```json
+{
+  "connection": {
+    "base_url": "http://1c-server:8080",
+    "api_key": "your-api-key",
+    "timeout": 30
+  }
+}
+```
+
 **Response 200:**
 ```json
 {
-  "message": "Удалено шаблонов: 12",
-  "deleted_count": 12
+  "status": "ok",
+  "message": "Connection to 1C successful",
+  "timestamp": "2026-06-06T09:00:00"
 }
 ```
+
+### POST /api/external/1c/import-indicators
+Импортировать справочник показателей из 1С.
+
+**Request:**
+```json
+{
+  "connection": {
+    "base_url": "http://1c-server:8080",
+    "api_key": "your-api-key",
+    "username": "admin",
+    "password": "password"
+  },
+  "endpoint": "/api/v1/indicators",
+  "field_mapping": {
+    "name": "Наименование",
+    "unit": "ЕдиницаИзмерения",
+    "data_type": "ТипДанных",
+    "description": "Описание",
+    "category": "Категория"
+  },
+  "skip_duplicates": true
+}
+```
+
+**Поля field_mapping:**
+- `name` — Название показателя (обязательное)
+- `unit` — Единица измерения
+- `data_type` — Тип данных (number, text, select)
+- `description` — Описание показателя
+- `category` — Категория (quality, safety, performance, chemical, physical, microbiology)
+- `is_required` — Обязательный показатель
+- `default_value` — Значение по умолчанию
+- `options` — Варианты для select (через запятую или массив)
+
+**Response 200:**
+```json
+{
+  "status": "success",
+  "total": 150,
+  "created": 120,
+  "skipped": 30,
+  "errors": [],
+  "timestamp": "2026-06-06T09:05:00"
+}
+```
+
+### GET /api/external/1c/indicators
+Получить список показателей из 1С без сохранения в БД (предпросмотр).
+
+**Query параметры:**
+- `base_url` (string, required) — URL сервера 1С
+- `api_key` (string, optional) — API-ключ
+- `username` (string, optional) — Логин
+- `password` (string, optional) — Пароль
+- `endpoint` (string, default: /api/v1/indicators) — API-эндпоинт
+
+**Response 200:**
+```json
+{
+  "status": "success",
+  "count": 150,
+  "indicators": [
+    {
+      "id": "1",
+      "name": "pH",
+      "unit": "pH",
+      "data_type": "number"
+    }
+  ]
+}
+```
+
+---
+
+## Пресеты
+
+### GET /api/presets/
+Получить список всех пресетов.
+
+### POST /api/presets/
+Создать новый пресет. **Только для админа.**
+
+### PUT /api/presets/{preset_id}
+Обновить пресет. **Только для админа.**
+
+### DELETE /api/presets/{preset_id}
+Удалить пресет. **Только для админа.**
 
 ---
 
@@ -202,43 +422,8 @@ username=admin&password=yourpassword
 }
 ```
 
-**Response 201:**
-```json
-{
-  "id": 38,
-  "batch_number": "BATCH-001",
-  "analysis_type_id": 1,
-  "started_at": "2026-06-03T11:00:00",
-  "status": "pending",
-  "notes": null,
-  "values": []
-}
-```
-
 ### GET /api/reports/{report_id}
 Получить детальную информацию об отчёте, включая значения показателей.
-
-**Response 200:**
-```json
-{
-  "id": 37,
-  "batch_number": "BATCH-001",
-  "analysis_type_id": 1,
-  "started_at": "2026-06-03T10:50:21",
-  "status": "pending",
-  "notes": null,
-  "created_by": 1,
-  "values": [
-    {
-      "id": 54,
-      "indicator_id": 1,
-      "value": 5.0,
-      "text_value": null,
-      "is_normal": true
-    }
-  ]
-}
-```
 
 ### GET /api/reports/filtered/list
 Получить отчёты с фильтрацией.
@@ -250,18 +435,31 @@ username=admin&password=yourpassword
 - `skip` (int, default: 0) — Пропустить записей
 - `limit` (int, default: 100) — Лимит записей
 
-**Пример:**
-```
-GET /api/reports/filtered/list?template_id=1&date_from=2026-01-01&date_to=2026-12-31
-```
-
 ### DELETE /api/reports/history/clear
 Очистить всю историю отчётов текущего пользователя.
+
+---
+
+## Статистика
+
+### GET /api/statistics/
+Получить статистику по отчётам.
 
 **Response 200:**
 ```json
 {
-  "message": "All reports deleted successfully"
+  "total_indicators": 50,
+  "by_category": {
+    "quality": 20,
+    "safety": 15,
+    "performance": 15
+  },
+  "by_type": {
+    "number": 30,
+    "text": 10,
+    "select": 10
+  },
+  "most_used": [...]
 }
 ```
 
@@ -273,6 +471,14 @@ GET /api/reports/filtered/list?template_id=1&date_from=2026-01-01&date_to=2026-1
 - `"number"` — Числовое значение
 - `"text"` — Текстовое значение
 - `"select"` — Выбор из вариантов
+
+### Category (строка)
+- `"quality"` — Качество
+- `"safety"` — Безопасность
+- `"performance"` — Производительность
+- `"chemical"` — Химический состав
+- `"physical"` — Физические свойства
+- `"microbiology"` — Микробиология
 
 ### Status (перечисление)
 - `"pending"` — В ожидании
@@ -324,6 +530,18 @@ const createReport = async () => {
   });
   return response.data;
 };
+
+// Импорт из 1С
+const importFrom1C = async () => {
+  const response = await api.post('/api/external/1c/import-indicators', {
+    connection: {
+      base_url: 'http://1c-server:8080',
+      api_key: 'your-api-key'
+    },
+    skip_duplicates: true
+  });
+  return response.data;
+};
 ```
 
 ### cURL
@@ -346,8 +564,26 @@ curl -s -X POST http://localhost:8000/api/reports/ \
     "batch_number": "BATCH-001",
     "values": [{"indicator_id": 1, "value": 7.2}]
   }'
+
+# Проверить подключение к 1С
+curl -s -X POST http://localhost:8000/api/external/1c/test-connection \
+  -H "X-API-KEY: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"connection": {"base_url": "http://1c-server:8080"}}'
+
+# Импорт показателей из 1С
+curl -s -X POST http://localhost:8000/api/external/1c/import-indicators \
+  -H "X-API-KEY: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connection": {"base_url": "http://1c-server:8080"},
+    "field_mapping": {
+      "name": "Наименование",
+      "unit": "ЕдиницаИзмерения"
+    }
+  }'
 ```
 
 ---
 
-**API документация WWWAnalys v3.0.0** | Автогенерируемая документация: http://localhost:8000/docs
+**API документация WWWAnalys v3.2.0** | Автогенерируемая документация: http://localhost:8000/docs

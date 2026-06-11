@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
-from app.models import AnalysisType, Indicator, IndicatorLibrary, ProcessLog, IndicatorValue
+from app.models import AnalysisType, IndicatorLibrary, ProcessLog, IndicatorValue, TemplateIndicator
 from app.schemas import ReportCreate, IndicatorValue as IndicatorValueSchema
 from typing import List
 from datetime import datetime, date
@@ -12,35 +12,38 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         return None
     
     try:
-        # Создаем отчет (используем ProcessLog, так как IndicatorValue уже используется для индикаторов)
+        # Создаем отчет
         db_report = ProcessLog(
             batch_number=report.batch_number,
             analysis_type_id=report.template_id,
             created_by=user_id
         )
         db.add(db_report)
+        db.flush()  # Получаем ID отчета до коммита
         
         # Создаем значения для каждого индикатора
-        indicator_values = []
         for value_data in report.values:
-            # Ищем индикатор в обычных показателях (индикаторы, созданные в шаблоне)
-            indicator = db.query(Indicator).filter(Indicator.id == value_data.indicator_id).first()
+            # Ищем показатель в справочнике
+            lib_indicator = db.query(IndicatorLibrary).filter(
+                IndicatorLibrary.id == value_data.indicator_id
+            ).first()
             
-            # Если не найден, ищем в справочнике
-            if not indicator:
-                indicator = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == value_data.indicator_id).first()
-                if not indicator:
-                    continue
+            if not lib_indicator:
+                continue
             
-            # Получаем данные в зависимости от типа индикатора
-            data_type = indicator.data_type
-            min_value = indicator.min_value if hasattr(indicator, 'min_value') else None
-            max_value = indicator.max_value if hasattr(indicator, 'max_value') else None
-            options = indicator.options if hasattr(indicator, 'options') else None
+            # Получаем min/max из TemplateIndicator (нормы для данного шаблона)
+            template_indicator = db.query(TemplateIndicator).filter(
+                TemplateIndicator.indicator_id == value_data.indicator_id,
+                TemplateIndicator.template_id == report.template_id
+            ).first()
+            
+            min_value = template_indicator.min_value if template_indicator else None
+            max_value = template_indicator.max_value if template_indicator else None
+            
+            data_type = lib_indicator.data_type
+            options = lib_indicator.options
             
             import json
-            
-            data_type = indicator.data_type
             
             # Подготовка значений для сохранения
             numeric_value = None
@@ -48,11 +51,11 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
             is_normal = True
             
             if data_type == 'text':
-                # Для текстовых индикаторов сохраняем как текст
+                # Для текстовых показателей сохраняем как текст
                 text_value = str(value_data.value) if value_data.value is not None else None
                 
             elif data_type == 'select':
-                # Для select-индикаторов сохраняем выбранное значение как текст
+                # Для select-показателей сохраняем выбранное значение как текст
                 text_value = str(value_data.value) if value_data.value is not None else None
                 # Валидация: проверяем, что значение есть в списке options
                 if options and text_value:
@@ -63,8 +66,8 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                     except (json.JSONDecodeError, TypeError):
                         pass
                         
-            else:  # DataType.NUMBER
-                # Для числовых индикаторов конвертируем в число
+            else:  # number
+                # Для числовых показателей конвертируем в число
                 value = value_data.value
                 if isinstance(value, str):
                     try:
@@ -83,12 +86,11 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 value=numeric_value,
                 text_value=text_value,
                 is_normal=is_normal,
-                process_log_id=db_report.id  # ID будет установлен после коммита
+                process_log_id=db_report.id
             )
             db.add(db_indicator_value)
-            indicator_values.append(db_indicator_value)
         
-        # Коммитим все за один раз - и ProcessLog, и все IndicatorValue
+        # Коммитим все за один раз
         db.commit()
         db.refresh(db_report)
         return db_report

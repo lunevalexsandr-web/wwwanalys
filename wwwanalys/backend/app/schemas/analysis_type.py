@@ -127,34 +127,15 @@ class AnalysisTypeBase(BaseModel):
 
 
 class AnalysisTypeCreate(AnalysisTypeBase):
-    indicators: List[IndicatorCreate] = []
-    # Новое поле: список ссылок на показатели из библиотеки
+    # Список ссылок на показатели из библиотеки
     library_indicators: List[LibraryIndicatorRef] = []
-    # Тип шаблона: 'pure' | 'hybrid'
-    template_type: str = 'hybrid'
-
-    @field_validator('template_type')
-    @classmethod
-    def validate_template_type(cls, v):
-        if v not in ('pure', 'hybrid'):
-            return 'hybrid'
-        return v
 
 
 class AnalysisTypeUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
-    indicators: Optional[List[IndicatorCreate]] = None
     library_indicators: Optional[List[LibraryIndicatorRef]] = None
-    template_type: Optional[str] = None
-
-    @field_validator('template_type')
-    @classmethod
-    def validate_template_type(cls, v):
-        if v is not None and v not in ('pure', 'hybrid'):
-            raise ValueError('template_type must be "pure" or "hybrid"')
-        return v
 
 
 class AnalysisType(AnalysisTypeBase):
@@ -162,9 +143,7 @@ class AnalysisType(AnalysisTypeBase):
     created_at: datetime
     created_by: int
     is_active: bool
-    template_type: str = 'hybrid'
-    indicators: List[Indicator] = []
-    # Новое поле: показатели из библиотеки (детальная информация)
+    # Показатели из библиотеки (детальная информация)
     template_indicators: List[TemplateIndicatorDetail] = []
     
     class Config:

@@ -1,19 +1,21 @@
-# WWWAnalys v3.0.0
+# WWWAnalys v3.2.0
 
-Система для управления анализами и шаблонами показателей с библиотекой индикаторов.
+Система для управления анализами и шаблонами показателей с библиотекой индикаторов и интеграцией с внешними системами (1С Предприятие).
 
 ## Описание
 
-Веб-приложение для создания шаблонов анализов, управления библиотекой индикаторов, заполнения показателей и просмотра истории отчётов. Состоит из бэкенда на FastAPI и фронтенда на React с Bootstrap 5.
+Веб-приложение для создания шаблонов анализов, управления библиотекой показателей, заполнения значений и просмотра истории отчётов. Состоит из бэкенда на FastAPI и фронтенда на React с Bootstrap 5.
 
 ### Основные возможности
 
 - 📊 Создание и управление шаблонами анализов и пресетами
-- 📚 Библиотека индикаторов с версионированием
+- 📚 Библиотека показателей с версионированием и категориями
 - 📝 Заполнение показателей с поддержкой числовых, текстовых и select типов
 - 📈 Просмотр истории отчётов с фильтрацией и статистикой
 - 👤 Аутентификация пользователей (администратор/пользователь)
-- 🗄️ PostgreSQL база данных
+- 🔗 Интеграция с 1С Предприятие для импорта справочника показателей
+- 📥 Импорт/экспорт показателей (CSV, JSON, Excel)
+- 🗄️ PostgreSQL / SQLite база данных
 - 🐳 Docker-контейнеризация
 
 ## Структура проекта
@@ -27,7 +29,8 @@ wwwanalys/
 │   │   ├── core/           # Конфигурация и зависимости
 │   │   ├── crud/           # Бизнес-логика
 │   │   ├── models/         # SQLAlchemy модели
-│   │   └── schemas/        # Pydantic схемы
+│   │   ├── schemas/        # Pydantic схемы
+│   │   └── services/       # Внешние сервисы (интеграция с 1С)
 │   ├── main.py             # Точка входа
 │   ├── requirements.txt    # Зависимости
 │   └── .env.example       # Пример конфигурации
@@ -40,6 +43,8 @@ wwwanalys/
 │   │   └── api/           # API клиент
 │   ├── package.json       # Зависимости
 │   └── vite.config.ts     # Конфигурация Vite
+├── docs/                   # Документация
+│   └── API.md             # API документация
 ├── docker-compose.yml     # Docker Compose
 └── README.md              # Документация
 ```
@@ -48,12 +53,13 @@ wwwanalys/
 
 ### Бэкенд
 - **FastAPI** — асинхронный веб-фреймворк
-- **SQLAlchemy** — ORM для работы с PostgreSQL
+- **SQLAlchemy** — ORM для работы с базой данных
 - **Pydantic** — валидация данных
-- **PostgreSQL** — база данных
+- **PostgreSQL / SQLite** — база данных
 - **JWT** — аутентификация
 - **Uvicorn** — ASGI сервер
 - **Alembic** — миграции базы данных
+- **httpx** — HTTP клиент для интеграции с 1С
 
 ### Фронтенд
 - **React 18** — UI библиотека
@@ -95,93 +101,6 @@ docker-compose up -d
 - API документация: http://localhost:8000/docs
 - PostgreSQL: localhost:5433
 
-## Доступ из сети
-
-Чтобы открыть проект с другого компьютера в сети, выполните следующие шаги:
-
-### 1. Получите IP-адрес вашего компьютера
-```bash
-# macOS/Linux
-hostname -I
-
-# Windows
-ipconfig | findstr "IPv4"
-```
-
-### 2. Запустите Docker с привязкой к сетевому IP
-
-#### Вариант A: Изменить docker-compose.yml
-Отредактируйте `docker-compose.yml`:
-```yaml
-services:
-  backend:
-    ports:
-      - "8000:8000"
-    # Добавьте эту строку
-    network_mode: host
-
-  frontend:
-    ports:
-      - "5173:5173"
-    # Добавьте эту строку
-    network_mode: host
-
-  db:
-    ports:
-      - "5433:5432"
-    # Добавьте эту строку
-    network_mode: host
-```
-
-#### Вариант B: Запустить контейнеры с хост-режимом
-```bash
-docker-compose up -d --force-recreate
-```
-
-### 3. Доступ к проекту с других устройств
-- **Бэкенд**: http://<your-ip-address>:8000
-- **Фронтенд**: http://<your-ip-address>:5173
-- **API документация**: http://<your-ip-address>:8000/docs
-- **PostgreSQL**: <your-ip-address>:5433
-
-### 4. Доступ по локальному сетевому имени (macOS/Linux)
-Если вы используете macOS или Linux, можно использовать имя компьютера:
-```bash
-# Получите имя компьютера
-hostname
-```
-Доступные адреса:
-- http://<computer-name>.local:8000
-- http://<computer-name>.local:5173
-
-### 5. Фронтенд прокси
-Фронтенд настроен на проксирование запросов к бэкенду. Если вы меняете порт бэкенда, обновите переменную окружения:
-
-```bash
-export VITE_BACKEND_URL=http://<your-ip-address>:8000
-```
-
-Или передайте её при запуске Docker:
-```bash
-VITE_BACKEND_URL=http://<your-ip-address>:8000 docker-compose up -d
-```
-
-### Ручной запуск (для разработки)
-
-#### Бэкенд
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-#### Фронтенд
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
 ## API Эндпоинты
 
 ### Аутентификация
@@ -191,17 +110,15 @@ npm run dev
 ### Шаблоны (Templates)
 - `GET /api/templates/` — Получение всех шаблонов
 - `POST /api/templates/` — Создание шаблона
+- `GET /api/templates/active` — Получение активных шаблонов
+- `GET /api/templates/{id}` — Получение шаблона по ID
 - `PUT /api/templates/{id}` — Обновление шаблона
 - `DELETE /api/templates/{id}` — Удаление шаблона
 - `DELETE /api/templates/clear-all` — Очистка всех шаблонов
+- `POST /api/templates/{id}/copy` — Копирование шаблона
+- `POST /api/templates/from-preset` — Создание шаблона из пресета
 
-### Индикаторы (Indicators)
-- `GET /api/indicators/` — Получение всех индикаторов
-- `POST /api/indicators/` — Создание индикатора
-- `PUT /api/indicators/{id}` — Обновление индикатора
-- `DELETE /api/indicators/{id}` — Удаление индикатора
-
-### Библиотека индикаторов (Indicator Library)
+### Библиотека показателей (Indicator Library)
 - `GET /api/indicators/library` — Получение всех показателей библиотеки
 - `POST /api/indicators/library` — Создание показателя библиотеки
 - `PUT /api/indicators/library/{indicator_id}` — Обновление показателя библиотеки
@@ -210,8 +127,6 @@ npm run dev
 ### Дополнительные эндпоинты библиотеки
 - `GET /api/indicators/library/count` — Получение количества показателей
 - `GET /api/indicators/library/{indicator_id}/versions` — Получение истории версий показателя
-- `GET /api/indicators/library/{indicator_id}/related` — Получение связанных показателей
-- `GET /api/indicators/library/suggestions` — Получение рекомендаций по показателям
 - `GET /api/indicators/library/check-duplicate` — Проверка дубликатов показателей
 - `POST /api/indicators/library/batch/create` — Пакетное создание показателей
 - `PUT /api/indicators/library/batch/update` — Пакетное обновление показателей
@@ -220,6 +135,11 @@ npm run dev
 - `GET /api/indicators/library/export/excel` — Экспорт в Excel
 - `POST /api/indicators/library/import/csv` — Импорт из CSV
 - `POST /api/indicators/library/import/json` — Импорт из JSON
+
+### Интеграция с 1С Предприятие
+- `POST /api/external/1c/test-connection` — Проверка подключения к 1С
+- `POST /api/external/1c/import-indicators` — Импорт показателей из 1С
+- `GET /api/external/1c/indicators` — Получение списка показателей из 1С (без сохранения)
 
 ### Пресеты (Presets)
 - `GET /api/presets/` — Получение всех пресетов
@@ -252,41 +172,39 @@ npm run dev
 - description: str
 - created_by: int
 - is_active: bool
-- indicators: List[Indicator]
+- template_indicators: List[TemplateIndicator] — показатели из справочника
 
-### Индикатор (Indicator)
+### Библиотека показателей (IndicatorLibrary)
 - id: int
 - name: str
 - unit: str
+- data_type: str ('number', 'text', 'select')
+- options: str (JSON для select)
+- description: str
+- category: str ('quality', 'safety', 'performance', 'chemical', 'physical', 'microbiology')
+- is_required: bool
+- default_value: str
+- validation_rules: str (JSON)
+- created_by: int
+- created_at: datetime
+
+### Показатель шаблона (TemplateIndicator)
+- id: int
+- template_id: int
+- indicator_id: int (ссылка на IndicatorLibrary)
 - min_value: float | null
 - max_value: float | null
-- data_type: str ('number', 'text', 'select')
-- options: str | null (JSON для select)
-- analysis_type_id: int
-
-### Библиотека индикаторов (IndicatorLibrary)
-- id: int
-- name: str
-- description: str
-- created_by: int
-- is_active: bool
-
-### Версия библиотеки (IndicatorLibraryVersion)
-- id: int
-- library_id: int
-- version: str
-- description: str
-- created_at: datetime
-- indicators: List[Indicator]
+- sort_order: int
+- is_custom: bool
+- template_notes: str
 
 ### Пресет (Preset)
 - id: int
 - name: str
 - description: str
-- analysis_type_id: int
+- category: str
 - created_by: int
-- is_active: bool
-- indicators: List[Indicator]
+- indicators: List[PresetIndicator]
 
 ### Отчёт (ProcessLog)
 - id: int
@@ -305,22 +223,68 @@ npm run dev
 - is_normal: bool
 - process_log_id: int
 
-### Индикатор шаблона (TemplateIndicator)
-- id: int
-- template_id: int
-- indicator_id: int
-- order: int
+## Интеграция с 1С Предприятие
+
+Система поддерживает импорт справочника показателей из 1С Предприятие через REST API.
+
+### Настройка подключения
+
+1. Убедитесь, что 1С Предприятие настроено на публикацию REST API (через HTTP-сервисы)
+2. В админ-панели перейдите на вкладку "Справочник показателей"
+3. Нажмите кнопку "Загрузить из 1С"
+4. Укажите параметры подключения:
+   - URL сервера 1С
+   - API-ключ (если используется)
+   - Логин и пароль (если используется Basic Auth)
+
+### Маппинг полей
+
+При импорте можно настроить соответствие полей между 1С и локальной системой:
+```json
+{
+  "name": "Наименование",
+  "unit": "ЕдиницаИзмерения",
+  "data_type": "ТипДанных",
+  "description": "Описание",
+  "category": "Категория"
+}
+```
+
+### API для интеграции
+
+```bash
+# Проверка подключения
+curl -X POST http://localhost:8000/api/external/1c/test-connection \
+  -H "X-API-KEY: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"connection": {"base_url": "http://1c-server:8080", "api_key": "your-key"}}'
+
+# Импорт показателей
+curl -X POST http://localhost:8000/api/external/1c/import-indicators \
+  -H "X-API-KEY: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connection": {"base_url": "http://1c-server:8080"},
+    "field_mapping": {
+      "name": "Наименование",
+      "unit": "ЕдиницаИзмерения"
+    }
+  }'
+```
 
 ## Роли пользователей
 
 ### Администратор
 - Доступ ко всем шаблонам
 - Управление пользователями
+- Управление справочником показателей
+- Импорт/экспорт показателей
+- Интеграция с внешними системами
 - Полный доступ к отчётам
 
 ### Пользователь
-- Доступ только к своим отчётам
-- Создание шаблонов (если разрешено)
+- Доступ к активным шаблонам
+- Создание отчётов
 - Просмотр истории своих отчётов
 
 ## Разработка
@@ -378,6 +342,7 @@ docker build -t wwwanalys-frontend ./frontend
 - **v3.0.0** — Full fix for reports and templates with UI improvements
 - **v3.0.0-bootstrap** — feat: migrate frontend from Tailwind CSS to Bootstrap 5
 - **v3.1.0** — feat: add indicator library with versioning and presets support
+- **v3.2.0** — feat: remove template_type, remove custom indicators, add 1C integration
 
 ## Лицензия
 
@@ -385,10 +350,9 @@ docker build -t wwwanalys-frontend ./frontend
 
 ## Контакты
 
-Для вопросов и предложений:
-- Email: your-email@example.com
+Для вопросов ипредложений:
 - GitHub Issues: [wwwanalys/issues](https://github.com/lunevalexsandr-web/wwwanalys/issues)
 
 ---
 
-**WWWAnalys v3.0.0** — Система для управления анализами и шаблонами показателей с библиотекой индикаторов
+**WWWAnalys v3.2.0** — Система для управления анализами и шаблонами показателей с интеграцией 1С

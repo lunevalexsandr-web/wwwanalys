@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, IndicatorValue, Report, ToastState, TemplateIndicator } from '../types';
+import type { AnalysisType, IndicatorValue, Report, ToastState } from '../types';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-report');
@@ -69,12 +69,11 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Получить все показатели шаблона (объединяет обычные + из справочника).
+   * Получить все показатели шаблона (только из справочника).
    */
   const getAllIndicators = (template: AnalysisType): (any)[] => {
-    // Из справочника (template_indicators)
     const libInds = (template.template_indicators || []).map(ti => ({
-      id: ti.indicator_id,  // используем indicator_id как id для matching
+      id: ti.indicator_id,
       name: ti.name,
       unit: ti.unit,
       min_value: ti.min_value,
@@ -84,13 +83,7 @@ const Dashboard: React.FC = () => {
       is_library: true
     }));
     
-    // Обычные
-    const regularInds = (template.indicators || []).map(ind => ({
-      ...ind,
-      is_library: false
-    }));
-    
-    return [...libInds, ...regularInds];
+    return libInds;
   };
 
   const handleTemplateSelect = (template: AnalysisType) => {
@@ -244,7 +237,7 @@ const Dashboard: React.FC = () => {
   };
 
   const getTotalIndicators = (template: AnalysisType): number => {
-    return (template.indicators?.length || 0) + (template.template_indicators?.length || 0);
+    return (template.template_indicators?.length || 0);
   };
 
   return (
@@ -597,11 +590,11 @@ const Dashboard: React.FC = () => {
                     <tbody>
                       {viewReportIndicators.map((v, i) => (
                         <tr key={i}>
-                          <td>{v.indicator_name}, {v.indicator_unit}</td>
+                          <td>{v.name}, {v.unit}</td>
                           <td><strong>{v.value || v.text_value || '-'}</strong></td>
                           <td>
-                            {v.indicator_min !== null && v.indicator_max !== null
-                              ? `${v.indicator_min} — ${v.indicator_max}`
+                            {v.min_value !== null && v.max_value !== null
+                              ? `${v.min_value} — ${v.max_value}`
                               : 'Не задана'}
                           </td>
                           <td>

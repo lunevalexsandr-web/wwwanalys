@@ -266,7 +266,6 @@ class TestTemplates:
             json={
                 "name": "Тестовый шаблон",
                 "description": "Описание шаблона",
-                "template_type": "pure",
                 "library_indicators": [{
                     "indicator_id": ind["id"],
                     "min_value": 5.0,
@@ -279,7 +278,6 @@ class TestTemplates:
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Тестовый шаблон"
-        assert data["template_type"] == "pure"
         assert len(data["template_indicators"]) == 1
 
     def test_copy_template(self):
@@ -292,7 +290,6 @@ class TestTemplates:
             json={
                 "name": "Оригинал",
                 "description": "Оригинальный шаблон",
-                "template_type": "hybrid",
             },
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -311,27 +308,6 @@ class TestTemplates:
         )
         assert response.status_code == 200
         assert response.json()["name"] == "Копия"
-
-    def test_template_type_filter(self):
-        """Проверка типа шаблона при создании."""
-        token = get_admin_token()
-        
-        # Pure template
-        pure = client.post(
-            "/api/templates/",
-            json={"name": "Pure", "template_type": "pure"},
-            headers={"Authorization": f"Bearer {token}"},
-        ).json()
-        assert pure["template_type"] == "pure"
-        
-        # Hybrid template
-        hybrid = client.post(
-            "/api/templates/",
-            json={"name": "Hybrid", "template_type": "hybrid"},
-            headers={"Authorization": f"Bearer {token}"},
-        ).json()
-        assert hybrid["template_type"] == "hybrid"
-
 
 class TestStatistics:
     """Тесты статистики."""

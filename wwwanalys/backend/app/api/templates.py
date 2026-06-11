@@ -94,7 +94,6 @@ def _make_template_response(template, db: Session):
         "created_at": template.created_at,
         "created_by": template.created_by,
         "is_active": template.is_active,
-        "template_type": getattr(template, 'template_type', 'hybrid'),
         "indicators": template.indicators,
         "template_indicators": _format_template(template, db),
     }

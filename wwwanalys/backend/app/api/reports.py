@@ -110,24 +110,26 @@ def get_report(
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     from app.schemas.report import IndicatorValueReport
-    from app.models import Indicator, IndicatorLibrary
+    from app.models import IndicatorLibrary, TemplateIndicator
     
     # Получаем все значения показателей для отчета
     indicator_values = []
     if hasattr(db_report, 'indicator_values') and db_report.indicator_values:
         for v in db_report.indicator_values:
-            # Ищем название показателя в обычных индикаторах
-            indicator = db.query(Indicator).filter(Indicator.id == v.indicator_id).first()
+            # Ищем показатель в справочнике
+            lib_indicator = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
             
-            # Если не найден, ищем в справочнике
-            if not indicator:
-                indicator = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
+            # Получаем название и единицу измерения из справочника
+            name = lib_indicator.name if lib_indicator else f"Показатель #{v.indicator_id}"
+            unit = lib_indicator.unit if lib_indicator else ""
             
-            # Получаем название и единицу измерения
-            name = indicator.name if indicator else f"Показатель #{v.indicator_id}"
-            unit = indicator.unit if indicator else ""
-            min_value = indicator.min_value if hasattr(indicator, 'min_value') else None
-            max_value = indicator.max_value if hasattr(indicator, 'max_value') else None
+            # Получаем min/max из TemplateIndicator (нормы для данного шаблона)
+            template_indicator = db.query(TemplateIndicator).filter(
+                TemplateIndicator.indicator_id == v.indicator_id,
+                TemplateIndicator.template_id == db_report.analysis_type_id
+            ).first()
+            min_value = template_indicator.min_value if template_indicator else None
+            max_value = template_indicator.max_value if template_indicator else None
             
             indicator_values.append({
                 "id": v.id,

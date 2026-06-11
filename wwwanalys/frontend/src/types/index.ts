@@ -8,23 +8,11 @@ export interface User {
   is_admin: boolean;
 }
 
-export interface Indicator {
-  id: number;
-  name: string;
-  unit?: string;
-  min_value: number | null;
-  max_value: number | null;
-  data_type: 'number' | 'text' | 'select';
-  options?: string[];
-}
-
 export interface AnalysisType {
   id: number;
   name: string;
   description: string;
   is_active: boolean;
-  template_type?: 'pure' | 'hybrid';
-  indicators: Indicator[];
   template_indicators?: TemplateIndicator[];
   created_at?: string;
 }
@@ -101,8 +89,6 @@ export interface TemplateFormData {
   name: string;
   description: string;
   is_active: boolean;
-  template_type?: 'pure' | 'hybrid';
-  indicators: Indicator[];
   library_indicators: LibraryIndicatorRef[];
 }
 

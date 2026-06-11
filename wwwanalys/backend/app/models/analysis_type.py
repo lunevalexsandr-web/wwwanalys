@@ -14,9 +14,6 @@ class AnalysisType(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     is_active = Column(Boolean, default=True)
     
-    # Тип шаблона: 'pure' — только из справочника, 'hybrid' — справочник + пользовательские
-    template_type = Column(String(20), default='hybrid')
-    
     # Связь с моделью User
     creator = relationship("User", back_populates="created_analysis_types")
     

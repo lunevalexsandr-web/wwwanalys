@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, Indicator, User as UserType, IndicatorLibrary, TemplateIndicator, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
+import type { AnalysisType, User as UserType, IndicatorLibrary, TemplateIndicator, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
 
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('templates');
@@ -23,8 +23,6 @@ const Admin: React.FC = () => {
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
-  const [templateType, setTemplateType] = useState<'pure' | 'hybrid'>('hybrid');
-  const [templateIndicators, setTemplateIndicators] = useState<Indicator[]>([]);
   const [templateLibIndicators, setTemplateLibIndicators] = useState<LibraryIndicatorRef[]>([]);
 
   // Preview template state
@@ -40,16 +38,6 @@ const Admin: React.FC = () => {
   const [showCreateFromPresetModal, setShowCreateFromPresetModal] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
-
-  // Indicator form state
-  const [showIndicatorModal, setShowIndicatorModal] = useState(false);
-  const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
-  const [indicatorName, setIndicatorName] = useState('');
-  const [indicatorUnit, setIndicatorUnit] = useState('');
-  const [indicatorMin, setIndicatorMin] = useState<number | null>(null);
-  const [indicatorMax, setIndicatorMax] = useState<number | null>(null);
-  const [indicatorType, setIndicatorType] = useState<'number' | 'text' | 'select'>('number');
-  const [indicatorOptions, setIndicatorOptions] = useState('');
 
   // Library state
   const [libIndicators, setLibIndicators] = useState<IndicatorLibrary[]>([]);
@@ -81,6 +69,25 @@ const Admin: React.FC = () => {
   const [presets, setPresets] = useState<PresetListItem[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
   const [presetDetail, setPresetDetail] = useState<Preset | null>(null);
+
+  // 1C Integration state
+  const [show1CModal, setShow1CModal] = useState(false);
+  const [is1CConnecting, setIs1CConnecting] = useState(false);
+  const [is1CImporting, setIs1CImporting] = useState(false);
+  const [connection1CStatus, setConnection1CStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [connection1CMessage, setConnection1CMessage] = useState('');
+  const [import1CResult, setImport1CResult] = useState<any>(null);
+  const [c1CBaseUrl, setC1CBaseUrl] = useState('');
+  const [c1CApiKey, setC1CApiKey] = useState('');
+  const [c1CUsername, setC1CUsername] = useState('');
+  const [c1CPassword, setC1CPassword] = useState('');
+
+  // User modal state
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [userUsername, setUserUsername] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -167,22 +174,9 @@ const Admin: React.FC = () => {
         name: templateName,
         description: templateDescription,
         is_active: templateActive,
-        template_type: templateType
       };
 
-      // Добавляем обычные индикаторы, если они есть
-      if (templateIndicators && templateIndicators.length > 0) {
-        templateData.indicators = templateIndicators.map(ind => ({
-          name: ind.name,
-          unit: ind.unit,
-          min_value: ind.min_value,
-          max_value: ind.max_value,
-          data_type: ind.data_type,
-          options: ind.options
-        }));
-      }
-
-      // Добавляем индикаторы из библиотеки, если они есть
+      // Добавляем показатели из библиотеки
       if (templateLibIndicators && templateLibIndicators.length > 0) {
         templateData.library_indicators = templateLibIndicators.map(ref => ({
           indicator_id: ref.indicator_id,
@@ -298,8 +292,6 @@ const Admin: React.FC = () => {
     setTemplateName(template.name);
     setTemplateDescription(template.description);
     setTemplateActive(template.is_active);
-    setTemplateType(template.template_type || 'hybrid');
-    setTemplateIndicators(template.indicators);
     
     // Конвертируем template_indicators в LibraryIndicatorRef
     const libRefs: LibraryIndicatorRef[] = (template.template_indicators || []).map(ti => ({
@@ -318,8 +310,6 @@ const Admin: React.FC = () => {
     setTemplateName('');
     setTemplateDescription('');
     setTemplateActive(true);
-    setTemplateType('hybrid');
-    setTemplateIndicators([]);
     setTemplateLibIndicators([]);
   };
 
@@ -346,62 +336,7 @@ const Admin: React.FC = () => {
     setShowCreateFromPresetModal(true);
   };
 
-  // ---- Обычные индикаторы (старый подход) ----
-
-  const handleIndicatorSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!indicatorName.trim()) {
-      showToast('Название показателя обязательно', 'warning');
-      return;
-    }
-
-    const newIndicator: Indicator = {
-      id: editingIndicator?.id || Date.now(),
-      name: indicatorName,
-      unit: indicatorUnit,
-      min_value: indicatorMin,
-      max_value: indicatorMax,
-      data_type: indicatorType,
-      options: indicatorType === 'select' ? indicatorOptions.split(',').map(opt => opt.trim()).filter(opt => opt) : undefined
-    };
-
-    if (editingIndicator) {
-      setTemplateIndicators(prev => prev.map(ind => ind.id === editingIndicator.id ? newIndicator : ind));
-    } else {
-      setTemplateIndicators(prev => [...prev, newIndicator]);
-    }
-
-    setShowIndicatorModal(false);
-    resetIndicatorForm();
-  };
-
-  const handleDeleteIndicator = (id: number) => {
-    setTemplateIndicators(prev => prev.filter(ind => ind.id !== id));
-  };
-
-  const handleEditIndicator = (indicator: Indicator) => {
-    setEditingIndicator(indicator);
-    setIndicatorName(indicator.name);
-    setIndicatorUnit(indicator.unit || '');
-    setIndicatorMin(indicator.min_value);
-    setIndicatorMax(indicator.max_value);
-    setIndicatorType(indicator.data_type);
-    setIndicatorOptions(indicator.options?.join(', ') || '');
-    setShowIndicatorModal(true);
-  };
-
-  const resetIndicatorForm = () => {
-    setEditingIndicator(null);
-    setIndicatorName('');
-    setIndicatorUnit('');
-    setIndicatorMin(null);
-    setIndicatorMax(null);
-    setIndicatorType('number');
-    setIndicatorOptions('');
-  };
-
-  // ---- Справочник показателей (новый подход) ----
+  // ---- Справочник показателей ----
 
   const handleEditLibIndicator = (indicator: IndicatorLibrary) => {
     setEditingLibIndicator(indicator);
@@ -550,20 +485,6 @@ const Admin: React.FC = () => {
     });
   };
 
-  const handleMoveIndicator = (id: number, direction: 'up' | 'down') => {
-    setTemplateIndicators(prev => {
-      const idx = prev.findIndex(ind => ind.id === id);
-      if (idx === -1) return prev;
-      if (direction === 'up' && idx === 0) return prev;
-      if (direction === 'down' && idx === prev.length - 1) return prev;
-      
-      const next = [...prev];
-      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-      return next;
-    });
-  };
-
   // ---- Import / Export справочника ----
 
   const handleExport = async (format: 'csv' | 'excel') => {
@@ -627,7 +548,130 @@ const Admin: React.FC = () => {
     return libIndicators.find(i => i.id === indicatorId);
   };
 
+  // ---- 1C Integration ----
+
+  const handleTest1CConnection = async () => {
+    if (!c1CBaseUrl.trim()) {
+      showToast('Введите URL сервера 1С', 'warning');
+      return;
+    }
+
+    setIs1CConnecting(true);
+    setConnection1CStatus('idle');
+    setConnection1CMessage('');
+
+    try {
+      const response = await api.post('/api/external/1c/test-connection', {
+        connection: {
+          base_url: c1CBaseUrl,
+          api_key: c1CApiKey || undefined,
+          username: c1CUsername || undefined,
+          password: c1CPassword || undefined,
+        }
+      });
+
+      if (response.data.status === 'ok') {
+        setConnection1CStatus('success');
+        setConnection1CMessage(response.data.message);
+        showToast('Подключение к 1С успешно!', 'success');
+      } else {
+        setConnection1CStatus('error');
+        setConnection1CMessage(response.data.message);
+        showToast(response.data.message, 'warning');
+      }
+    } catch (error: any) {
+      setConnection1CStatus('error');
+      setConnection1CMessage(error.response?.data?.detail || 'Ошибка подключения');
+      showToast('Ошибка подключения к 1С', 'danger');
+    } finally {
+      setIs1CConnecting(false);
+    }
+  };
+
+  const handleImportFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) {
+      showToast('Введите URL сервера 1С', 'warning');
+      return;
+    }
+
+    setIs1CImporting(true);
+    setImport1CResult(null);
+
+    try {
+      const response = await api.post('/api/external/1c/import-indicators', {
+        connection: {
+          base_url: c1CBaseUrl,
+          api_key: c1CApiKey || undefined,
+          username: c1CUsername || undefined,
+          password: c1CPassword || undefined,
+        },
+        skip_duplicates: true,
+      });
+
+      setImport1CResult(response.data);
+      
+      if (response.data.status === 'success') {
+        showToast(
+          `Импорт завершён: создано ${response.data.created}, пропущено ${response.data.skipped}`,
+          'success'
+        );
+        fetchLibraryIndicators();
+      } else {
+        showToast(
+          `Импорт завершён с ошибками: создано ${response.data.created}, ошибок ${response.data.errors.length}`,
+          'warning'
+        );
+        fetchLibraryIndicators();
+      }
+    } catch (error: any) {
+      showToast(
+        error.response?.data?.detail || 'Ошибка импорта из 1С',
+        'danger'
+      );
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
+  const reset1CForm = () => {
+    setC1CBaseUrl('');
+    setC1CApiKey('');
+    setC1CUsername('');
+    setC1CPassword('');
+    setConnection1CStatus('idle');
+    setConnection1CMessage('');
+    setImport1CResult(null);
+  };
+
   // ---- Пользователи ----
+
+  const handleUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!userUsername.trim() || !userEmail.trim() || !userPassword.trim()) {
+      showToast('Заполните все поля', 'warning');
+      return;
+    }
+
+    try {
+      await api.post('/auth/register', {
+        username: userUsername,
+        email: userEmail,
+        password: userPassword,
+        is_admin: userIsAdmin,
+      });
+      showToast('Пользователь успешно создан', 'success');
+      setShowUserModal(false);
+      setUserUsername('');
+      setUserEmail('');
+      setUserPassword('');
+      setUserIsAdmin(false);
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      showToast(error.response?.data?.detail || 'Ошибка при создании пользователя', 'danger');
+    }
+  };
 
   const handleToggleUser = async (id: number, isActive: boolean) => {
     try {
@@ -657,12 +701,7 @@ const Admin: React.FC = () => {
 
   // ---- Count total indicators in template ----
   const getTotalIndicators = (template: AnalysisType): number => {
-    return (template.indicators?.length || 0) + (template.template_indicators?.length || 0);
-  };
-
-  const getTypeLabel = (templateType?: string): { label: string; color: string } => {
-    if (templateType === 'pure') return { label: 'Чистый', color: 'info' };
-    return { label: 'Гибридный', color: 'warning' };
+    return (template.template_indicators?.length || 0);
   };
 
   const getCategoryLabel = (category: string | null): string => {
@@ -736,7 +775,6 @@ const Admin: React.FC = () => {
                             <tr>
                               <th>Название</th>
                               <th>Описание</th>
-                              <th>Тип</th>
                               <th>Показатели</th>
                               <th>Статус</th>
                               <th className="text-end">Действия</th>
@@ -744,21 +782,17 @@ const Admin: React.FC = () => {
                           </thead>
                           <tbody>
                             {templates.map((template) => {
-                              const typeInfo = getTypeLabel(template.template_type);
                               return (
                                 <tr key={template.id}>
                                   <td><strong>{template.name}</strong></td>
                                   <td>{template.description || '-'}</td>
-                                  <td>
-                                    <Badge bg={typeInfo.color as any}>{typeInfo.label}</Badge>
-                                  </td>
                                   <td>{getTotalIndicators(template)}</td>
                                   <td>
                                     <Badge bg={template.is_active ? 'success' : 'danger'}>
                                       {template.is_active ? 'Активен' : 'Неактивен'}
                                     </Badge>
                                   </td>
-                                  <td className="text-end">
+                                   <td className="text-end">
                                     <Button 
                                       variant="outline-primary" 
                                       size="sm" 
@@ -773,18 +807,18 @@ const Admin: React.FC = () => {
                                       size="sm"
                                       className="me-1"
                                       onClick={() => handleOpenPreview(template)}
-                                      title="Предпросмотр"
                                     >
-                                      <i className="bi bi-eye"></i>
+                                      <i className="bi bi-eye me-1"></i>
+                                      Просмотр
                                     </Button>
                                     <Button 
                                       variant="outline-info" 
                                       size="sm"
                                       className="me-1"
                                       onClick={() => handleOpenCopyModal(template)}
-                                      title="Создать копию"
                                     >
-                                      <i className="bi bi-copy"></i>
+                                      <i className="bi bi-copy me-1"></i>
+                                      Копия
                                     </Button>
                                     <Button 
                                       variant={template.is_active ? 'warning' : 'success'} 
@@ -799,7 +833,8 @@ const Admin: React.FC = () => {
                                       size="sm"
                                       onClick={() => handleDeleteTemplate(template.id)}
                                     >
-                                      <i className="bi bi-trash"></i>
+                                      <i className="bi bi-trash me-1"></i>
+                                      Удалить
                                     </Button>
                                   </td>
                                 </tr>
@@ -919,6 +954,15 @@ const Admin: React.FC = () => {
                         <i className="bi bi-plus-circle me-1"></i>
                         Добавить
                       </Button>
+                      <Button 
+                        variant="outline-info" 
+                        size="sm" 
+                        className="ms-2"
+                        onClick={() => { reset1CForm(); setShow1CModal(true); }}
+                      >
+                        <i className="bi bi-cloud-download me-1"></i>
+                        Загрузить из 1С
+                      </Button>
                     </div>
                   </CardHeader>
                   <CardBody>
@@ -1004,14 +1048,16 @@ const Admin: React.FC = () => {
                                     className="me-1"
                                     onClick={() => handleEditLibIndicator(ind)}
                                   >
-                                    <i className="bi bi-pencil"></i>
+                                    <i className="bi bi-pencil me-1"></i>
+                                    Ред.
                                   </Button>
                                   <Button 
                                     variant="outline-danger" 
                                     size="sm"
                                     onClick={() => handleDeleteLibIndicator(ind.id)}
                                   >
-                                    <i className="bi bi-trash"></i>
+                                    <i className="bi bi-trash me-1"></i>
+                                    Удалить
                                   </Button>
                                 </td>
                               </tr>
@@ -1029,11 +1075,15 @@ const Admin: React.FC = () => {
                 <span><i className="bi bi-people-fill me-1"></i>Пользователи</span>
               }>
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="d-flex justify-content-between align-items-center">
                     <CardTitle className="h5 mb-0">
                       <i className="bi bi-person-lines-fill me-2 text-primary"></i>
                       Управление пользователями
                     </CardTitle>
+                    <Button variant="primary" size="sm" onClick={() => setShowUserModal(true)}>
+                      <i className="bi bi-plus-circle me-1"></i>
+                      Создать пользователя
+                    </Button>
                   </CardHeader>
                   <CardBody>
                     {users.length === 0 ? (
@@ -1128,23 +1178,6 @@ const Admin: React.FC = () => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>Тип шаблона</Form.Label>
-              <Form.Select
-                value={templateType}
-                onChange={(e) => setTemplateType(e.target.value as 'pure' | 'hybrid')}
-                disabled={!!editingTemplate}
-              >
-                <option value="hybrid">Гибридный — справочник + пользовательские показатели</option>
-                <option value="pure">Чистый — только показатели из справочника</option>
-              </Form.Select>
-              <Form.Text className="text-muted">
-                {templateType === 'pure' 
-                  ? 'Только показатели из справочника. Пользовательские показатели недоступны.'
-                  : 'Можно добавлять как показатели из справочника, так и пользовательские.'}
-              </Form.Text>
-            </Form.Group>
-            
-            <Form.Group className="mb-3">
               <Form.Check
                 type="switch"
                 label="Активен"
@@ -1220,8 +1253,10 @@ const Admin: React.FC = () => {
                               variant="outline-danger" 
                               size="sm"
                               onClick={() => handleRemoveLibIndicator(ref.indicator_id)}
+                              title="Удалить из шаблона"
                             >
-                              <i className="bi bi-x"></i>
+                              <i className="bi bi-x me-1"></i>
+                              Убрать
                             </Button>
                           </div>
                         </CardBody>
@@ -1232,94 +1267,6 @@ const Admin: React.FC = () => {
               )}
             </div>
 
-            {/* Обычные показатели (старый подход) — только для hybrid */}
-            {templateType === 'hybrid' && (
-              <div className="mb-3">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <h5 className="mb-0">
-                    <i className="bi bi-speedometer2 me-1"></i>
-                    Пользовательские показатели
-                  </h5>
-                  <Button variant="outline-secondary" size="sm" onClick={() => setShowIndicatorModal(true)}>
-                    <i className="bi bi-plus-circle me-1"></i>
-                    Добавить показатель
-                  </Button>
-                </div>
-                
-                {templateIndicators.length === 0 ? (
-                  <Alert variant="info" className="py-2">
-                    <small><i className="bi bi-info-circle-fill me-1"></i>Нет пользовательских показателей.</small>
-                  </Alert>
-                ) : (
-                  <div>
-                    {templateIndicators.map((indicator, index) => {
-                      const isFirst = index === 0;
-                      const isLast = index === templateIndicators.length - 1;
-                      return (
-                        <Card key={indicator.id} className="mb-2">
-                          <CardBody className="py-2">
-                            <div className="d-flex justify-content-between align-items-center">
-                              <div className="d-flex align-items-center gap-2">
-                                <div className="d-flex flex-column">
-                                  <button 
-                                    className="btn btn-sm py-0 px-1 border-0 text-muted" 
-                                    disabled={isFirst}
-                                    onClick={() => handleMoveIndicator(indicator.id, 'up')}
-                                    title="Переместить вверх"
-                                  >
-                                    <i className="bi bi-chevron-up"></i>
-                                  </button>
-                                  <button 
-                                    className="btn btn-sm py-0 px-1 border-0 text-muted" 
-                                    disabled={isLast}
-                                    onClick={() => handleMoveIndicator(indicator.id, 'down')}
-                                    title="Переместить вниз"
-                                  >
-                                    <i className="bi bi-chevron-down"></i>
-                                  </button>
-                                </div>
-                                <div>
-                                  <strong>{indicator.name}</strong>, {indicator.unit}
-                                  {indicator.min_value !== null && indicator.max_value !== null && (
-                                    <small className="text-muted ms-2">
-                                      Норма: {indicator.min_value} - {indicator.max_value}
-                                    </small>
-                                  )}
-                                  <Badge bg="secondary" className="ms-2">{indicator.data_type}</Badge>
-                                </div>
-                              </div>
-                              <div>
-                                <Button 
-                                  variant="outline-primary" 
-                                  size="sm" 
-                                  className="me-1"
-                                  onClick={() => handleEditIndicator(indicator)}
-                                >
-                                  <i className="bi bi-pencil"></i>
-                                </Button>
-                                <Button 
-                                  variant="outline-danger" 
-                                  size="sm"
-                                  onClick={() => handleDeleteIndicator(indicator.id)}
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </Button>
-                              </div>
-                            </div>
-                          </CardBody>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-            {templateType === 'pure' && (
-              <Alert variant="info">
-                <i className="bi bi-info-circle-fill me-2"></i>
-                Чистый шаблон использует только показатели из справочника. Пользовательские показатели недоступны.
-              </Alert>
-            )}
           </Form>
         </Modal.Body>
         <Modal.Footer>
@@ -1407,94 +1354,6 @@ const Admin: React.FC = () => {
           <Button variant="success" onClick={handleCreateFromPreset}>
             <i className="bi bi-plus-circle me-1"></i>
             Создать шаблон
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Indicator Modal (старый подход) */}
-      <Modal show={showIndicatorModal} onHide={() => setShowIndicatorModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>
-            {editingIndicator ? 'Редактирование показателя' : 'Добавление показателя'}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form onSubmit={handleIndicatorSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Label>Название показателя</Form.Label>
-              <Form.Control
-                type="text"
-                value={indicatorName}
-                onChange={(e) => setIndicatorName(e.target.value)}
-                required
-              />
-            </Form.Group>
-            
-            <Form.Group className="mb-3">
-              <Form.Label>Единица измерения</Form.Label>
-              <Form.Control
-                type="text"
-                value={indicatorUnit}
-                onChange={(e) => setIndicatorUnit(e.target.value)}
-              />
-            </Form.Group>
-            
-            <Form.Group className="mb-3">
-              <Form.Label>Тип</Form.Label>
-              <Form.Select
-                value={indicatorType}
-                onChange={(e) => setIndicatorType(e.target.value as 'number' | 'text' | 'select')}
-              >
-                <option value="number">Число с плавающей точкой</option>
-                <option value="text">Текст</option>
-                <option value="select">Выбор из списка</option>
-              </Form.Select>
-            </Form.Group>
-            
-            {indicatorType === 'number' && (
-              <Row>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Минимальное значение</Form.Label>
-                    <Form.Control
-                      type="number"
-                      value={indicatorMin || ''}
-                      onChange={(e) => setIndicatorMin(e.target.value ? parseFloat(e.target.value) : null)}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Максимальное значение</Form.Label>
-                    <Form.Control
-                      type="number"
-                      value={indicatorMax || ''}
-                      onChange={(e) => setIndicatorMax(e.target.value ? parseFloat(e.target.value) : null)}
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
-            )}
-            
-            {indicatorType === 'select' && (
-              <Form.Group className="mb-3">
-                <Form.Label>Варианты выбора (через запятую)</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={indicatorOptions}
-                  onChange={(e) => setIndicatorOptions(e.target.value)}
-                  placeholder="Вариант 1, Вариант 2, Вариант 3"
-                />
-              </Form.Group>
-            )}
-          </Form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowIndicatorModal(false)}>
-            Отмена
-          </Button>
-          <Button variant="primary" onClick={handleIndicatorSubmit}>
-            {editingIndicator ? 'Сохранить изменения' : 'Добавить показатель'}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -1721,9 +1580,6 @@ const Admin: React.FC = () => {
           {previewTemplate && (
             <>
               <div className="mb-3">
-                <Badge bg={getTypeLabel(previewTemplate.template_type).color as any} className="me-2">
-                  {getTypeLabel(previewTemplate.template_type).label}
-                </Badge>
                 <Badge bg={previewTemplate.is_active ? 'success' : 'danger'}>
                   {previewTemplate.is_active ? 'Активен' : 'Неактивен'}
                 </Badge>
@@ -1761,32 +1617,7 @@ const Admin: React.FC = () => {
                 </div>
               )}
 
-              {/* Custom indicators */}
-              {previewTemplate.indicators && previewTemplate.indicators.length > 0 && (
-                <div>
-                  <small className="text-muted fw-bold d-block mb-1">
-                    <i className="bi bi-speedometer2 me-1"></i>Пользовательские:
-                  </small>
-                  <div className="list-group list-group-flush">
-                    {previewTemplate.indicators.map((ind, idx) => (
-                      <div key={ind.id} className="list-group-item py-1 px-2 d-flex justify-content-between align-items-center">
-                        <div>
-                          <span className="badge bg-secondary me-1">{idx + 1}</span>
-                          <strong>{ind.name}</strong>
-                          <small className="text-muted ms-1">{ind.unit}</small>
-                          {ind.max_value !== null && (
-                            <small className="text-muted ms-2">
-                              Норма: {ind.min_value ?? '?'} - {ind.max_value}
-                            </small>
-                          )}
-                          <Badge bg="secondary" className="ms-1">{ind.data_type}</Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+              </>
           )}
         </Modal.Body>
         <Modal.Footer>
@@ -1798,6 +1629,199 @@ const Admin: React.FC = () => {
               <i className="bi bi-pencil me-1"></i>Редактировать
             </Button>
           )}
+        </Modal.Footer>
+      </Modal>
+
+      {/* 1C Integration Modal */}
+      <Modal show={show1CModal} onHide={() => setShow1CModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <i className="bi bi-cloud-download me-2"></i>
+            Загрузка из 1С Предприятие
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label>URL сервера 1С</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="http://1c-server:8080"
+                value={c1CBaseUrl}
+                onChange={(e) => setC1CBaseUrl(e.target.value)}
+              />
+              <Form.Text className="text-muted">
+                Базовый URL для подключения к 1С (например, http://server:8080)
+              </Form.Text>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>API-ключ (опционально)</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder="Введите API-ключ"
+                value={c1CApiKey}
+                onChange={(e) => setC1CApiKey(e.target.value)}
+              />
+              <Form.Text className="text-muted">
+                Если используется авторизация по API-ключу
+              </Form.Text>
+            </Form.Group>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Логин (опционально)</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Имя пользователя"
+                    value={c1CUsername}
+                    onChange={(e) => setC1CUsername(e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Пароль (опционально)</Form.Label>
+                  <Form.Control
+                    type="password"
+                    placeholder="Пароль"
+                    value={c1CPassword}
+                    onChange={(e) => setC1CPassword(e.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {connection1CStatus !== 'idle' && (
+              <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>
+                <i className={`bi bi-${connection1CStatus === 'success' ? 'check-circle' : 'exclamation-triangle'}-fill me-2`}></i>
+                {connection1CMessage}
+              </Alert>
+            )}
+
+            {import1CResult && (
+              <div className="mt-3">
+                <h6>Результат импорта:</h6>
+                <ul className="list-unstyled">
+                  <li><strong>Всего получено:</strong> {import1CResult.total}</li>
+                  <li><strong>Создано:</strong> {import1CResult.created}</li>
+                  <li><strong>Пропущено (дубликаты):</strong> {import1CResult.skipped}</li>
+                  {import1CResult.errors.length > 0 && (
+                    <li className="text-danger">
+                      <strong>Ошибок:</strong> {import1CResult.errors.length}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShow1CModal(false)}>
+            Закрыть
+          </Button>
+          <Button
+            variant="outline-primary"
+            onClick={handleTest1CConnection}
+            disabled={is1CConnecting}
+          >
+            {is1CConnecting ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                Проверка...
+              </>
+            ) : (
+              <>
+                <i className="bi bi-check-circle me-1"></i>
+                Проверить подключение
+              </>
+            )}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleImportFrom1C}
+            disabled={is1CImporting}
+          >
+            {is1CImporting ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" className="me-2" />
+                Импорт...
+              </>
+            ) : (
+              <>
+                <i className="bi bi-cloud-download me-1"></i>
+                Загрузить показатели
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Create User Modal */}
+      <Modal show={showUserModal} onHide={() => setShowUserModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <i className="bi bi-person-plus me-2"></i>
+            Создание пользователя
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleUserSubmit}>
+            <Form.Group className="mb-3">
+              <Form.Label>Имя пользователя</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Введите имя пользователя"
+                value={userUsername}
+                onChange={(e) => setUserUsername(e.target.value)}
+                required
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Email</Form.Label>
+              <Form.Control
+                type="email"
+                placeholder="user@example.com"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                required
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Пароль</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder="Введите пароль"
+                value={userPassword}
+                onChange={(e) => setUserPassword(e.target.value)}
+                required
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="switch"
+                label="Администратор"
+                checked={userIsAdmin}
+                onChange={(e) => setUserIsAdmin(e.target.checked)}
+              />
+              <Form.Text className="text-muted">
+                Администраторы имеют доступ к управлению шаблонами и пользователями
+              </Form.Text>
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowUserModal(false)}>
+            Отмена
+          </Button>
+          <Button variant="primary" onClick={handleUserSubmit}>
+            <i className="bi bi-check-circle me-1"></i>
+            Создать
+          </Button>
         </Modal.Footer>
       </Modal>
 

@@ -16,6 +16,3 @@ class Indicator(Base):
     
     # Связь с моделью AnalysisType
     analysis_type = relationship("AnalysisType", back_populates="indicators")
-    
-    # Связь с моделью IndicatorValue
-    values = relationship("IndicatorValue", back_populates="indicator")
