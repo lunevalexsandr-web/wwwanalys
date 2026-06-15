@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
 from app.models import AnalysisPlan, PlanItem, IndicatorLibrary, TemplateIndicator
-from app.schemas import AnalysisPlanCreate, AnalysisPlanUpdate
+from app.schemas import AnalysisPlanCreate, AnalysisPlanUpdate, PlanItemUpdate
 from datetime import date
 from typing import Optional
 
