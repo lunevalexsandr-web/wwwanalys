@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Admin from './pages/Admin';
+import Plans from './pages/Plans';
 import './App.css';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
@@ -92,6 +93,14 @@ function App() {
             element={
               <ProtectedRoute adminOnly={true}>
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plans"
+            element={
+              <ProtectedRoute>
+                <Plans />
               </ProtectedRoute>
             }
           />

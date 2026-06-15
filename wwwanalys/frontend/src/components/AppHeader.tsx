@@ -30,6 +30,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                   Панель управления
                 </Link>
               )}
+              <Link to="/plans" className="text-decoration-none text-muted">
+                <i className="bi bi-calendar-week me-1"></i>
+                Планирование
+              </Link>
               {showAdminLink && user?.is_admin && (
                 <Link to="/admin" className="text-decoration-none text-muted">
                   <i className="bi bi-gear-fill me-1"></i>

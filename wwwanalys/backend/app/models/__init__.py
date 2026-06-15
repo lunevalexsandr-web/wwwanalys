@@ -7,6 +7,7 @@ from .template_indicator import TemplateIndicator
 from .process_log import ProcessLog, Status
 from .indicator_value import IndicatorValue
 from .preset import Preset, PresetIndicator
+from .analysis_plan import AnalysisPlan, PlanItem
 
 __all__ = [
     "User",
@@ -19,5 +20,7 @@ __all__ = [
     "Status",
     "IndicatorValue",
     "Preset",
-    "PresetIndicator"
+    "PresetIndicator",
+    "AnalysisPlan",
+    "PlanItem"
 ]

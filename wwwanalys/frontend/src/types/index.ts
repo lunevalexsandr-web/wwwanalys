@@ -154,3 +154,39 @@ export interface IndicatorLibraryVersion {
   changed_by?: number | null;
   created_at: string;
 }
+
+/** Planning types */
+export interface PlanItem {
+  id: number;
+  plan_id: number;
+  template_id: number;
+  batch_number?: string | null;
+  sort_order: number;
+  is_completed: boolean;
+  template?: PlanItemTemplateInfo;
+}
+
+export interface PlanItemTemplateInfo {
+  id: number;
+  name: string;
+  description?: string;
+  template_indicators?: TemplateIndicator[];
+}
+
+export interface AnalysisPlan {
+  id: number;
+  name: string;
+  description?: string;
+  plan_date: string;
+  created_by: number;
+  created_at: string;
+  is_completed: boolean;
+  plan_items: PlanItem[];
+}
+
+export interface PlanCreate {
+  name: string;
+  description?: string;
+  plan_date: string;
+  plan_items: { template_id: number; batch_number?: string; sort_order?: number }[];
+}

@@ -16,3 +16,4 @@ class User(Base):
     created_analysis_types = relationship("AnalysisType", back_populates="creator")
     process_logs = relationship("ProcessLog", back_populates="creator")
     created_presets = relationship("Preset", back_populates="creator")
+    analysis_plans = relationship("AnalysisPlan", back_populates="creator")

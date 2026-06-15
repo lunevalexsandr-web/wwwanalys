@@ -69,7 +69,7 @@ const Dashboard: React.FC = () => {
   };
 
   /**
-   * Получить все показатели шаблона (только из справочника).
+   * Получить все показатели шабона (только из справочника).
    */
   const getAllIndicators = (template: AnalysisType): (any)[] => {
     const libInds = (template.template_indicators || []).map(ti => ({
