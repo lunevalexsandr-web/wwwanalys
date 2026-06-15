@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.crud import analysis_plan as crud_plan
-from app.models import User, AnalysisType, TemplateIndicator
+from app.models import User, AnalysisType, TemplateIndicator, PlanItem
 from app.schemas import (
     AnalysisPlan,
     AnalysisPlanCreate,
