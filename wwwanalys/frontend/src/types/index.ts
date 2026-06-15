@@ -93,6 +93,16 @@ export interface TemplateFormData {
 }
 
 /** Preset types */
+// Legacy indicator type (для совместимости с TemplateBuilder)
+export interface Indicator {
+  id: number;
+  name: string;
+  unit: string;
+  data_type: 'number' | 'text' | 'select';
+  min_value: number | null;
+  max_value: number | null;
+}
+
 export interface PresetIndicator {
   id: number;
   preset_id: number;

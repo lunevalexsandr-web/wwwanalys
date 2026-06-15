@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, User as UserType, IndicatorLibrary, TemplateIndicator, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
+import type { AnalysisType, User as UserType, IndicatorLibrary, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
 
 const Admin: React.FC = () => {
   const [activeTab, setActiveTab] = useState('templates');
@@ -36,7 +36,6 @@ const Admin: React.FC = () => {
 
   // Create from preset state
   const [showCreateFromPresetModal, setShowCreateFromPresetModal] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
 
   // Library state
@@ -47,7 +46,6 @@ const Admin: React.FC = () => {
   const [libIndicatorUnit, setLibIndicatorUnit] = useState('');
   const [libIndicatorType, setLibIndicatorType] = useState<'number' | 'text' | 'select'>('number');
   const [libIndicatorOptions, setLibIndicatorOptions] = useState('');
-  const [isLoadingLib, setIsLoadingLib] = useState(false);
   const [libIndicatorDescription, setLibIndicatorDescription] = useState('');
   const [libIndicatorCategory, setLibIndicatorCategory] = useState('');
   const [libIndicatorRequired, setLibIndicatorRequired] = useState(false);
@@ -464,6 +462,14 @@ const Admin: React.FC = () => {
     setShowSelectLibModal(false);
   };
 
+  const handleUpdateLibNorm = (indicatorId: number, field: 'min' | 'max', value: string) => {
+    setTemplateLibIndicators(prev => prev.map(ref => 
+      ref.indicator_id === indicatorId 
+        ? { ...ref, [field === 'min' ? 'min_value' : 'max_value']: value ? parseFloat(value) : null }
+        : ref
+    ));
+  };
+
   const handleRemoveLibIndicator = (indicatorId: number) => {
     setTemplateLibIndicators(prev => prev.filter(ref => ref.indicator_id !== indicatorId));
   };
@@ -537,11 +543,6 @@ const Admin: React.FC = () => {
 
     // Сбросим input
     e.target.value = '';
-  };
-
-  const getLibIndicatorName = (indicatorId: number): string => {
-    const libInd = libIndicators.find(i => i.id === indicatorId);
-    return libInd ? `${libInd.name}${libInd.unit ? `, ${libInd.unit}` : ''}` : `#${indicatorId}`;
   };
 
   const getLibIndicator = (indicatorId: number): IndicatorLibrary | undefined => {
@@ -1232,32 +1233,47 @@ const Admin: React.FC = () => {
                                   <i className="bi bi-chevron-down"></i>
                                 </button>
                               </div>
-                              <div>
-                                <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
-                                <small className="text-muted ms-2">{libInd?.unit}</small>
-                                <Badge bg="info" className="ms-2" pill>Из справочника</Badge>
-                                {libInd?.category && (
-                                  <Badge bg="secondary" className="ms-1">{getCategoryLabel(libInd.category)}</Badge>
-                                )}
-                                {libInd?.description && (
-                                  <div className="text-muted small mt-1">{libInd.description}</div>
-                                )}
-                                {ref.min_value !== null && ref.max_value !== null && (
-                                  <small className="text-muted ms-2 d-block d-sm-inline">
-                                    Норма: {ref.min_value} - {ref.max_value}
-                                  </small>
-                                )}
-                              </div>
-                            </div>
-                            <Button 
-                              variant="outline-danger" 
-                              size="sm"
-                              onClick={() => handleRemoveLibIndicator(ref.indicator_id)}
-                              title="Удалить из шаблона"
-                            >
-                              <i className="bi bi-x me-1"></i>
-                              Убрать
-                            </Button>
+                              <div className="flex-grow-1">
+                                 <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
+                                 <small className="text-muted ms-2">{libInd?.unit}</small>
+                                 <Badge bg="info" className="ms-2" pill>Из справочника</Badge>
+                                 {libInd?.category && (
+                                   <Badge bg="secondary" className="ms-1">{getCategoryLabel(libInd.category)}</Badge>
+                                 )}
+                                 {libInd?.description && (
+                                   <div className="text-muted small mt-1">{libInd.description}</div>
+                                 )}
+                                 <div className="d-flex gap-2 mt-2 align-items-center">
+                                   <small className="text-muted">Норма:</small>
+                                   <Form.Control
+                                     type="number"
+                                     size="sm"
+                                     style={{ width: '80px' }}
+                                     value={ref.min_value ?? ''}
+                                     onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'min', e.target.value)}
+                                     placeholder="от"
+                                   />
+                                   <span className="text-muted">—</span>
+                                   <Form.Control
+                                     type="number"
+                                     size="sm"
+                                     style={{ width: '80px' }}
+                                     value={ref.max_value ?? ''}
+                                     onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'max', e.target.value)}
+                                     placeholder="до"
+                                   />
+                                 </div>
+                               </div>
+                             </div>
+                             <Button 
+                               variant="outline-danger" 
+                               size="sm"
+                               onClick={() => handleRemoveLibIndicator(ref.indicator_id)}
+                               title="Удалить из шаблона"
+                             >
+                               <i className="bi bi-x me-1"></i>
+                               Убрать
+                             </Button>
                           </div>
                         </CardBody>
                       </Card>
@@ -1604,9 +1620,9 @@ const Admin: React.FC = () => {
                           <span className="badge bg-secondary me-1">{idx + 1}</span>
                           <strong>{ti.name}</strong>
                           <small className="text-muted ms-1">{ti.unit}</small>
-                          {ti.max_value !== null && (
+                          {(ti.min_value !== null || ti.max_value !== null) && (
                             <small className="text-muted ms-2">
-                              Норма: {ti.min_value ?? '?'} - {ti.max_value}
+                              Норма: {ti.min_value !== null ? ti.min_value : 'от'} - {ti.max_value !== null ? ti.max_value : 'до'}
                             </small>
                           )}
                           <Badge bg="info" className="ms-1" pill>{ti.data_type}</Badge>

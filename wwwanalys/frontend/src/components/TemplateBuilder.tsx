@@ -22,7 +22,7 @@ interface TemplateBuilderProps {
   onChangeType: (value: 'pure' | 'hybrid') => void;
 
   // Library indicators
-  libIndicators: IndicatorLibrary[];
+  _libIndicators: IndicatorLibrary[];
   templateLibIndicators: LibraryIndicatorRef[];
   onOpenSelectLib: () => void;
   onRemoveLib: (id: number) => void;
@@ -37,16 +37,16 @@ interface TemplateBuilderProps {
 
   // Helpers
   getLibIndicator: (id: number) => IndicatorLibrary | undefined;
-  getCategoryLabel: (category: string | null) => string;
+  _getCategoryLabel: (category: string | null) => string;
 }
 
 const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   show, onHide, onSubmit,
   name, description, isActive, templateType, isEditing,
   onChangeName, onChangeDescription, onChangeActive, onChangeType,
-  libIndicators, templateLibIndicators, onOpenSelectLib, onRemoveLib, onMoveLib,
+  templateLibIndicators, onOpenSelectLib, onRemoveLib, onMoveLib,
   templateIndicators, onOpenCustom, onEditCustom, onRemoveCustom, onMoveCustom,
-  getLibIndicator, getCategoryLabel,
+  getLibIndicator,
 }) => {
   return (
     <Modal show={show} onHide={onHide} size="lg">

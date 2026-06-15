@@ -8,7 +8,7 @@ import AppHeader from '../components/AppHeader';
 import AppToast from '../components/AppToast';
 import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
-import type { AnalysisType, IndicatorValue, Report, ToastState } from '../types';
+import type { AnalysisType, IndicatorValue, Report } from '../types';
 
 const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-report');
@@ -341,16 +341,16 @@ const Dashboard: React.FC = () => {
                                     <Card>
                                       <CardBody>
                                         <div className="row g-3">
-                                          <div className="col-md-4">
+                                            <div className="col-md-4">
                                             <Form.Label>
                                               {indicator.name}, {indicator.unit}
                                               {indicator.is_library && (
                                                 <Badge bg="info" className="ms-1" pill>Справочник</Badge>
                                               )}
                                             </Form.Label>
-                                            {indicator.min_value !== null && indicator.max_value !== null && (
+                                            {(indicator.min_value !== null || indicator.max_value !== null) && (
                                               <small className="text-muted d-block">
-                                                Норма: {indicator.min_value} - {indicator.max_value}
+                                                Норма: {indicator.min_value !== null ? `от ${indicator.min_value}` : ''} {indicator.max_value !== null ? `до ${indicator.max_value}` : ''}
                                               </small>
                                             )}
                                           </div>
@@ -593,8 +593,8 @@ const Dashboard: React.FC = () => {
                           <td>{v.name}, {v.unit}</td>
                           <td><strong>{v.value || v.text_value || '-'}</strong></td>
                           <td>
-                            {v.min_value !== null && v.max_value !== null
-                              ? `${v.min_value} — ${v.max_value}`
+                            {(v.min_value !== null || v.max_value !== null)
+                              ? `от ${v.min_value ?? '?'} до ${v.max_value ?? '?'}`
                               : 'Не задана'}
                           </td>
                           <td>
