@@ -19,11 +19,9 @@ const Plans: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast, showToast, hideToast } = useToast();
   
-  // Today's date
   const today = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(today);
   
-  // Plan creation state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [planName, setPlanName] = useState('');
   const [planDescription, setPlanDescription] = useState('');
@@ -31,7 +29,6 @@ const Plans: React.FC = () => {
   const [selectedPlanItems, setSelectedPlanItems] = useState<number[]>([]);
   const [planItemBatchNumbers, setPlanItemBatchNumbers] = useState<Record<number, string>>({});
   
-  // View plan state
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewPlan, setViewPlan] = useState<AnalysisPlan | null>(null);
 
@@ -72,20 +69,55 @@ const Plans: React.FC = () => {
     fetchPlansForDate(date);
   };
 
-  const handleCreateReportFromPlanItem = async (item: PlanItem) => {
+  // Обновление номера партии в состоянии plans (иммутабельно)
+  const updatePlanItemBatchNumber = (planId: number, itemId: number, batchNumber: string) => {
+    setPlans(prevPlans => prevPlans.map(p => {
+      if (p.id !== planId) return p;
+      return {
+        ...p,
+        plan_items: p.plan_items?.map((i: PlanItem) =>
+          i.id === itemId ? { ...i, batch_number: batchNumber } : i
+        ),
+      };
+    }));
+  };
+
+  // Переход к созданию отчета из элемента плана
+  const handleCreateReportFromPlanItem = (item: PlanItem) => {
+    const batchNumber = item.batch_number || '';
+    
+    if (item?.template) {
+      // Передаём данные напрямую через navigate state
+      navigate('/dashboard', { 
+        state: { 
+          activeTab: 'new-report', 
+          autoCreate: true,
+          planData: {
+            template_id: item.template_id,
+            batch_number: batchNumber,
+            template: item.template,
+            plan_item_id: item.id,
+          }
+        } 
+      });
+    } else {
+      // Fallback: загружаем шаблон и используем localStorage
+      handleCreateReportFromPlanItemAsync(item);
+    }
+  };
+
+  // Асинхронная версия (fallback если шаблон не загружен)
+  const handleCreateReportFromPlanItemAsync = async (item: PlanItem) => {
     try {
-      // Загружаем полную информацию о шаблоне
       const templateResponse = await api.get(`/api/templates/${item.template_id}`);
       const template = templateResponse.data;
       
-      // Сохраняем данные в localStorage для передачи в Dashboard
       localStorage.setItem('planItemToReport', JSON.stringify({
         template_id: item.template_id,
         batch_number: item.batch_number || '',
         template: template,
         plan_item_id: item.id,
       }));
-      // Переходим на вкладку создания отчета
       navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
     } catch (error) {
       console.error('Error creating report from plan item:', error);
@@ -97,68 +129,37 @@ const Plans: React.FC = () => {
     if (!item.completed_report_id) return;
     
     try {
-      // Загружаем данные существующего отчета
       const reportResponse = await api.get(`/api/reports/${item.completed_report_id}`);
       const report = reportResponse.data;
       
-      // Загружаем полную информацию о шаблоне
       const templateResponse = await api.get(`/api/templates/${item.template_id}`);
       const template = templateResponse.data;
       
-      // Сохраняем данные в localStorage для передачи в Dashboard
-      localStorage.setItem('planItemToReport', JSON.stringify({
-        template_id: item.template_id,
-        batch_number: report.batch_number || item.batch_number || '',
-        template: template,
-        report_id: item.completed_report_id,
-        report: report,
-        is_editing: true,
-        plan_item_id: item.id,
-      }));
-      // Переходим на вкладку создания отчета
-      navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
+      // Передаём данные напрямую через navigate state
+      navigate('/dashboard', { 
+        state: { 
+          activeTab: 'new-report', 
+          autoCreate: true,
+          planData: {
+            template_id: item.template_id,
+            batch_number: report.batch_number || item.batch_number || '',
+            template: template,
+            report_id: item.completed_report_id,
+            report: report,
+            is_editing: true,
+            plan_item_id: item.id,
+          }
+        } 
+      });
     } catch (error) {
       console.error('Error editing report from plan item:', error);
       showToast('Ошибка при загрузке отчета для редактирования', 'danger');
     }
   };
 
-  const handleTogglePlanItem = async (itemId: number, completed: boolean, batchNumber?: string) => {
+  // Переключение статуса выполнения элемента плана
+  const handleTogglePlanItem = async (itemId: number, completed: boolean) => {
     try {
-      // Находим элемент плана
-      const plan = plans.find(p => p.plan_items?.some((item: PlanItem) => item.id === itemId));
-      let item = plan?.plan_items?.find((i: PlanItem) => i.id === itemId);
-      
-      // Если элемент не выполнен - переходим на Dashboard для заполнения показателей
-      if (!completed) {
-        // Если template есть, но template_indicators пустые - загружаем полную информацию
-        if (item?.template && (!item.template.template_indicators || item.template.template_indicators.length === 0)) {
-          try {
-            const templateResponse = await api.get(`/api/templates/${item.template_id}`);
-            item = { ...item, template: templateResponse.data };
-          } catch (e) {
-            console.error('Error loading template:', e);
-          }
-        }
-        
-        if (item?.template) {
-          // Передаем данные напрямую через navigate state
-          navigate('/dashboard', { 
-            state: { 
-              activeTab: 'new-report', 
-              autoCreate: true,
-              planData: {
-                template_id: item.template_id,
-                batch_number: batchNumber || item.batch_number || '',
-                template: item.template,
-                plan_item_id: item.id,
-              }
-            } 
-          });
-          return;
-        }
-      }
-      
       await api.patch(`/api/plans/items/${itemId}`, { is_completed: !completed });
       fetchPlansForDate(selectedDate);
     } catch (error) {
@@ -355,7 +356,7 @@ const Plans: React.FC = () => {
                                           <Form.Check
                                             type="checkbox"
                                             checked={item.is_completed}
-                                            onChange={() => handleTogglePlanItem(item.id, item.is_completed, item.batch_number || undefined)}
+                                            onChange={() => handleTogglePlanItem(item.id, item.is_completed)}
                                           />
                                         </td>
                                         <td>
@@ -369,17 +370,7 @@ const Plans: React.FC = () => {
                                             type="text"
                                             size="sm"
                                             value={item.batch_number || ''}
-                                            onChange={(e) => {
-                                              const updatedPlans = [...plans];
-                                              const planIdx = updatedPlans.findIndex(p => p.id === plan.id);
-                                              if (planIdx !== -1) {
-                                                const itemIdx = updatedPlans[planIdx].plan_items?.findIndex((i: PlanItem) => i.id === item.id);
-                                                if (itemIdx !== undefined && itemIdx !== -1) {
-                                                  updatedPlans[planIdx].plan_items![itemIdx].batch_number = e.target.value;
-                                                  setPlans(updatedPlans);
-                                                }
-                                              }
-                                            }}
+                                            onChange={(e) => updatePlanItemBatchNumber(plan.id, item.id, e.target.value)}
                                             placeholder="Введите номер партии"
                                             disabled={item.is_completed}
                                           />
@@ -399,15 +390,7 @@ const Plans: React.FC = () => {
                                             <Button 
                                                 variant="primary" 
                                                 size="sm"
-                                                onClick={() => {
-                                                  // Всегда переходим на Dashboard для заполнения показателей
-                                                  if (item.template) {
-                                                    handleTogglePlanItem(item.id, false, item.batch_number || undefined);
-                                                  } else {
-                                                    // Если template_indicators пустые - загружаем полную информацию
-                                                    handleCreateReportFromPlanItem(item);
-                                                  }
-                                                }}
+                                                onClick={() => handleCreateReportFromPlanItem(item)}
                                               >
                                                 <i className="bi bi-plus-circle me-1"></i>
                                                 Создать отчет

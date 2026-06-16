@@ -1,6 +1,6 @@
 /** Dashboard page - report creation and history */
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Card, CardHeader, CardTitle, CardBody, Tabs, Tab, Form, Button, 
   Alert, Badge, Table, Spinner
@@ -36,6 +36,7 @@ const Dashboard: React.FC = () => {
   
   const { toast, showToast, hideToast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
 
   /**
    * Получить все показатели шабона (только из справочника).
@@ -67,7 +68,10 @@ const Dashboard: React.FC = () => {
     
     try {
       const planData = JSON.parse(storedData);
-      console.log('Processing planItemToReport:', planData);
+      // Сохраняем plan_item_id заранее
+      if (planData.plan_item_id) {
+        setPlanItemId(planData.plan_item_id);
+      }
       
       // Проверяем, это режим редактирования существующего отчета
       if (planData.is_editing && planData.report && planData.report_id) {
@@ -129,10 +133,6 @@ const Dashboard: React.FC = () => {
           return true;
         }
       }
-      
-      if (planData.plan_item_id) {
-        setPlanItemId(planData.plan_item_id);
-      }
     } catch (e) {
       console.error('Error parsing planItemToReport:', e);
       localStorage.removeItem('planItemToReport');
@@ -144,9 +144,12 @@ const Dashboard: React.FC = () => {
   const processPlanData = (planData: any) => {
     if (!planData) return false;
     
-    console.log('Processing planData from navigate state:', planData);
-    
     try {
+      // Сохраняем plan_item_id заранее
+      if (planData.plan_item_id) {
+        setPlanItemId(planData.plan_item_id);
+      }
+
       // Проверяем, это режим редактирования существующего отчета
       if (planData.is_editing && planData.report && planData.report_id) {
         const template = planData.template as AnalysisType;
@@ -203,20 +206,30 @@ const Dashboard: React.FC = () => {
           return true;
         }
       }
-      
-      if (planData.plan_item_id) {
-        setPlanItemId(planData.plan_item_id);
-      }
     } catch (e) {
       console.error('Error processing planData:', e);
     }
     return false;
   };
 
+  // Флаг для предотвращения двойной обработки
+  const processedPlanDataRef = useRef<string | null>(null);
+
   // Обработка перехода из Plans с данными для создания отчета
   useEffect(() => {
     const state = location.state as any;
     if (state?.activeTab === 'new-report' && state?.autoCreate) {
+      // Создаём уникальный ключ для этих данных
+      const dataKey = state.planData 
+        ? `${state.planData.plan_item_id}-${state.planData.batch_number}-${state.planData.template_id}`
+        : 'localStorage';
+      
+      // Проверяем, не обрабатывали ли мы уже эти данные
+      if (processedPlanDataRef.current === dataKey) {
+        return;
+      }
+      processedPlanDataRef.current = dataKey;
+      
       setActiveTab('new-report');
       
       // Сначала пробуем данные из navigate state
@@ -260,8 +273,9 @@ const Dashboard: React.FC = () => {
       setTemplates(response.data);
       // Проверяем, есть ли данные из Plans в localStorage
       const storedData = localStorage.getItem('planItemToReport');
-      if (!storedData && response.data.length > 0) {
-        // Только если нет внешних данных - выбираем первый шаблон
+      const state = location.state as any;
+      const hasNavigateData = state?.activeTab === 'new-report' && state?.autoCreate && state?.planData;
+      if (!storedData && !hasNavigateData && response.data.length > 0) {
         handleTemplateSelect(response.data[0]);
       } else if (storedData) {
         // Данные из Plans будут обработаны отдельным useEffect
@@ -349,8 +363,26 @@ const Dashboard: React.FC = () => {
         const response = await api.post('/api/reports/', reportData);
         showToast('Отчет успешно отправлен!', 'success');
         
-        if (planItemId && response.data?.id) {
-          showToast(`Отчет #${response.data.id} создан и привязан к плану!`, 'success');
+        if (planItemId) {
+          const reportId = response.data?.id || 'создан';
+          showToast(`Отчет #${reportId} создан и привязан к плану!`, 'success');
+          
+          // Обновляем план: помечаем элемент как выполненный и сохраняем batch_number
+          try {
+            console.log('Updating plan item:', planItemId, 'batch_number:', batchNumber);
+            const patchResponse = await api.patch(`/api/plans/items/${planItemId}`, { 
+              is_completed: true,
+              batch_number: batchNumber,
+            });
+            console.log('Plan item updated successfully:', patchResponse.data);
+          } catch (planError: any) {
+            console.error('Error updating plan item:', planError);
+            showToast('Отчет создан, но ошибка при обновлении плана', 'warning');
+          }
+          
+          // Возвращаемся на страницу планирования
+          navigate('/plans');
+          return;
         }
       }
       
