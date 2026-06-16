@@ -121,16 +121,19 @@ async def test_1c_connection(
         }
     }
     """
-    from app.services.external_integration import OneCIntegrationService
-    
-    config = request.connection
-    service = OneCIntegrationService(
-        base_url=config.base_url,
-        api_key=config.api_key,
-        username=config.username,
-        password=config.password,
-        timeout=config.timeout,
+    from app.services.external_integration import (
+        OneCIntegrationService,
+        ExternalSystemConfig,
     )
+    
+    config = ExternalSystemConfig(
+        base_url=request.connection.base_url,
+        api_key=request.connection.api_key,
+        username=request.connection.username,
+        password=request.connection.password,
+        timeout=request.connection.timeout,
+    )
+    service = OneCIntegrationService(config)
     
     try:
         result = await service.test_connection()
@@ -139,7 +142,7 @@ async def test_1c_connection(
         await service.close()
 
 
-@router.post("/1c/import-indicators", response_model=OneCImportResponse)
+@router.post("/1c/import-indicators")
 async def import_indicators_from_1c(
     request: OneCImportRequest,
     db: Session = Depends(get_db),
@@ -222,14 +225,18 @@ async def fetch_indicators_from_1c(
     - username/password: Учётные данные (если используется Basic Auth)
     - endpoint: API-эндпоинт для получения показателей
     """
-    from app.services.external_integration import OneCIntegrationService
+    from app.services.external_integration import (
+        OneCIntegrationService,
+        ExternalSystemConfig,
+    )
     
-    service = OneCIntegrationService(
+    config = ExternalSystemConfig(
         base_url=base_url,
         api_key=api_key,
         username=username,
         password=password,
     )
+    service = OneCIntegrationService(config)
     
     try:
         indicators = await service.fetch_indicators_from_1c(endpoint)
