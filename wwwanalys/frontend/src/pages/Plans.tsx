@@ -142,15 +142,19 @@ const Plans: React.FC = () => {
         }
         
         if (item?.template) {
-          // Сохраняем данные в localStorage для передачи в Dashboard
-          localStorage.setItem('planItemToReport', JSON.stringify({
-            template_id: item.template_id,
-            batch_number: batchNumber || item.batch_number || '',
-            template: item.template,
-            plan_item_id: item.id,
-          }));
-          // Переходим на вкладку создания отчета
-          navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
+          // Передаем данные напрямую через navigate state
+          navigate('/dashboard', { 
+            state: { 
+              activeTab: 'new-report', 
+              autoCreate: true,
+              planData: {
+                template_id: item.template_id,
+                batch_number: batchNumber || item.batch_number || '',
+                template: item.template,
+                plan_item_id: item.id,
+              }
+            } 
+          });
           return;
         }
       }

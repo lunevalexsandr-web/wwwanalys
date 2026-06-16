@@ -140,13 +140,92 @@ const Dashboard: React.FC = () => {
     return false;
   };
 
+  // Обработка данных из Plans через navigate state
+  const processPlanData = (planData: any) => {
+    if (!planData) return false;
+    
+    console.log('Processing planData from navigate state:', planData);
+    
+    try {
+      // Проверяем, это режим редактирования существующего отчета
+      if (planData.is_editing && planData.report && planData.report_id) {
+        const template = planData.template as AnalysisType;
+        const report = planData.report;
+        
+        setSelectedTemplate(template);
+        setBatchNumber(report.batch_number || planData.batch_number || '');
+        setIsEditing(true);
+        setEditingReportId(planData.report_id);
+        
+        const allIndicators = getAllIndicators(template);
+        const values = allIndicators.map(indicator => {
+          const existingValue = report.indicator_values?.find(
+            (v: any) => v.indicator_id === indicator.id
+          );
+          return {
+            indicator_id: indicator.id,
+            value: existingValue?.value?.toString() || existingValue?.text_value || '',
+            is_normal: existingValue?.is_normal
+          };
+        });
+        setIndicatorValues(values);
+        return true;
+      }
+      // Используем переданный шаблон напрямую
+      else if (planData.template && planData.template.template_indicators) {
+        const template = planData.template as AnalysisType;
+        setSelectedTemplate(template);
+        setBatchNumber(planData.batch_number || '');
+        setIsEditing(false);
+        setEditingReportId(null);
+        const allIndicators = getAllIndicators(template);
+        const values = allIndicators.map(indicator => ({
+          indicator_id: indicator.id,
+          value: '',
+          is_normal: undefined
+        }));
+        setIndicatorValues(values);
+        return true;
+      } else if (planData.template_id) {
+        const template = templates.find(t => t.id === planData.template_id);
+        if (template) {
+          setSelectedTemplate(template);
+          setBatchNumber(planData.batch_number || '');
+          setIsEditing(false);
+          setEditingReportId(null);
+          const allIndicators = getAllIndicators(template);
+          const values = allIndicators.map(indicator => ({
+            indicator_id: indicator.id,
+            value: '',
+            is_normal: undefined
+          }));
+          setIndicatorValues(values);
+          return true;
+        }
+      }
+      
+      if (planData.plan_item_id) {
+        setPlanItemId(planData.plan_item_id);
+      }
+    } catch (e) {
+      console.error('Error processing planData:', e);
+    }
+    return false;
+  };
+
   // Обработка перехода из Plans с данными для создания отчета
   useEffect(() => {
     const state = location.state as any;
     if (state?.activeTab === 'new-report' && state?.autoCreate) {
       setActiveTab('new-report');
-      // Обрабатываем данные из localStorage
-      processPlanItemToReport();
+      
+      // Сначала пробуем данные из navigate state
+      if (state.planData) {
+        processPlanData(state.planData);
+      } else {
+        // Fallback на localStorage
+        processPlanItemToReport();
+      }
     }
   }, [location.state]);
 
@@ -155,20 +234,6 @@ const Dashboard: React.FC = () => {
     if (templates.length > 0) {
       processPlanItemToReport();
     }
-  }, [templates]);
-
-  // Слушаем изменения в localStorage (для случаев когда страница уже открыта)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'planItemToReport' && e.newValue) {
-        console.log('Storage event detected for planItemToReport');
-        setActiveTab('new-report');
-        processPlanItemToReport();
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, [templates]);
 
   const fetchReports = async () => {
