@@ -82,10 +82,14 @@ const Admin: React.FC = () => {
 
   // User modal state
   const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [userUsername, setUserUsername] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
+  const [userConfirmPassword, setUserConfirmPassword] = useState('');
   const [userIsAdmin, setUserIsAdmin] = useState(false);
+  const [userIsActive, setUserIsActive] = useState(true);
+  const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchTemplates();
@@ -646,31 +650,86 @@ const Admin: React.FC = () => {
 
   // ---- Пользователи ----
 
+  const validateUserForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!userUsername.trim()) {
+      errors.username = 'Имя пользователя обязательно';
+    } else if (userUsername.length < 3) {
+      errors.username = 'Минимум 3 символа';
+    }
+
+    if (!userEmail.trim()) {
+      errors.email = 'Email обязателен';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+      errors.email = 'Некорректный формат email';
+    }
+
+    // Пароль обязателен только при создании
+    if (!editingUser) {
+      if (!userPassword.trim()) {
+        errors.password = 'Пароль обязателен';
+      } else if (userPassword.length < 6) {
+        errors.password = 'Минимум 6 символов';
+      }
+    } else {
+      // При редактировании пароль опционален, но если заполнен - валидируем
+      if (userPassword && userPassword.length < 6) {
+        errors.password = 'Минимум 6 символов';
+      }
+    }
+
+    // Подтверждение пароля
+    if (userPassword && userPassword !== userConfirmPassword) {
+      errors.confirmPassword = 'Пароли не совпадают';
+    }
+
+    setUserFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!userUsername.trim() || !userEmail.trim() || !userPassword.trim()) {
-      showToast('Заполните все поля', 'warning');
+    if (!validateUserForm()) {
       return;
     }
 
     try {
-      await api.post('/auth/register', {
-        username: userUsername,
-        email: userEmail,
-        password: userPassword,
-        is_admin: userIsAdmin,
-      });
-      showToast('Пользователь успешно создан', 'success');
+      if (editingUser) {
+        // Режим редактирования
+        const updateData: any = {
+          username: userUsername,
+          email: userEmail,
+          is_admin: userIsAdmin,
+          is_active: userIsActive,
+        };
+
+        // Пароль отправляем только если заполнен
+        if (userPassword) {
+          updateData.password = userPassword;
+        }
+
+        await api.put(`/auth/users/${editingUser.id}`, updateData);
+        showToast('Пользователь успешно обновлен', 'success');
+      } else {
+        // Режим создания
+        await api.post('/auth/register', {
+          username: userUsername,
+          email: userEmail,
+          password: userPassword,
+          is_admin: userIsAdmin,
+        });
+        showToast('Пользователь успешно создан', 'success');
+      }
+
       setShowUserModal(false);
-      setUserUsername('');
-      setUserEmail('');
-      setUserPassword('');
-      setUserIsAdmin(false);
+      resetUserForm();
       fetchUsers();
     } catch (error: any) {
-      console.error('Error creating user:', error);
-      showToast(error.response?.data?.detail || 'Ошибка при создании пользователя', 'danger');
+      console.error('Error saving user:', error);
+      const errorMessage = error.response?.data?.detail || 'Ошибка при сохранении пользователя';
+      showToast(errorMessage, 'danger');
     }
   };
 
@@ -683,6 +742,34 @@ const Admin: React.FC = () => {
       console.error('Error toggling user:', error);
       showToast('Ошибка при изменении статуса пользователя', 'danger');
     }
+  };
+
+  const handleEditUser = (user: UserType) => {
+    setEditingUser(user);
+    setUserUsername(user.username || '');
+    setUserEmail(user.email);
+    setUserPassword('');
+    setUserConfirmPassword('');
+    setUserIsAdmin(user.is_admin);
+    setUserIsActive(user.is_active);
+    setUserFormErrors({});
+    setShowUserModal(true);
+  };
+
+  const handleCreateUser = () => {
+    resetUserForm();
+    setShowUserModal(true);
+  };
+
+  const resetUserForm = () => {
+    setEditingUser(null);
+    setUserUsername('');
+    setUserEmail('');
+    setUserPassword('');
+    setUserConfirmPassword('');
+    setUserIsAdmin(false);
+    setUserIsActive(true);
+    setUserFormErrors({});
   };
 
   const handleDeleteUser = async (id: number) => {
@@ -1081,7 +1168,7 @@ const Admin: React.FC = () => {
                       <i className="bi bi-person-lines-fill me-2 text-primary"></i>
                       Управление пользователями
                     </CardTitle>
-                    <Button variant="primary" size="sm" onClick={() => setShowUserModal(true)}>
+                    <Button variant="primary" size="sm" onClick={handleCreateUser}>
                       <i className="bi bi-plus-circle me-1"></i>
                       Создать пользователя
                     </Button>
@@ -1097,6 +1184,7 @@ const Admin: React.FC = () => {
                         <Table striped hover>
                           <thead>
                             <tr>
+                              <th>Имя пользователя</th>
                               <th>Email</th>
                               <th>Роль</th>
                               <th>Статус</th>
@@ -1106,7 +1194,8 @@ const Admin: React.FC = () => {
                           <tbody>
                             {users.map((user) => (
                               <tr key={user.id}>
-                                <td><strong>{user.email}</strong></td>
+                                <td><strong>{user.username || '-'}</strong></td>
+                                <td>{user.email}</td>
                                 <td>
                                   <Badge bg={user.is_admin ? 'primary' : 'secondary'}>
                                     {user.is_admin ? 'ADMIN' : 'USER'}
@@ -1119,16 +1208,25 @@ const Admin: React.FC = () => {
                                 </td>
                                 <td className="text-end">
                                   <Button 
+                                    variant="outline-primary" 
+                                    size="sm"
+                                    className="me-1"
+                                    onClick={() => handleEditUser(user)}
+                                  >
+                                    <i className="bi bi-pencil me-1"></i>
+                                    Ред.
+                                  </Button>
+                                  <Button 
                                     variant={user.is_active ? 'warning' : 'success'} 
                                     size="sm"
+                                    className="me-1"
                                     onClick={() => handleToggleUser(user.id, user.is_active)}
                                   >
                                     {user.is_active ? 'Деактивировать' : 'Активировать'}
                                   </Button>
                                   <Button 
                                     variant="outline-danger" 
-                                    size="sm" 
-                                    className="ms-1"
+                                    size="sm"
                                     onClick={() => handleDeleteUser(user.id)}
                                   >
                                     <i className="bi bi-trash me-1"></i>
@@ -1774,16 +1872,16 @@ const Admin: React.FC = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* Create User Modal */}
-      <Modal show={showUserModal} onHide={() => setShowUserModal(false)}>
+      {/* User Modal - Create/Edit */}
+      <Modal show={showUserModal} onHide={() => { setShowUserModal(false); resetUserForm(); }}>
         <Modal.Header closeButton>
           <Modal.Title>
-            <i className="bi bi-person-plus me-2"></i>
-            Создание пользователя
+            <i className={`bi bi-${editingUser ? 'pencil' : 'person-plus'} me-2`}></i>
+            {editingUser ? 'Редактирование пользователя' : 'Создание пользователя'}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form onSubmit={handleUserSubmit}>
+          <Form onSubmit={handleUserSubmit} noValidate>
             <Form.Group className="mb-3">
               <Form.Label>Имя пользователя</Form.Label>
               <Form.Control
@@ -1791,8 +1889,12 @@ const Admin: React.FC = () => {
                 placeholder="Введите имя пользователя"
                 value={userUsername}
                 onChange={(e) => setUserUsername(e.target.value)}
+                isInvalid={!!userFormErrors.username}
                 required
               />
+              <Form.Control.Feedback type="invalid">
+                {userFormErrors.username}
+              </Form.Control.Feedback>
             </Form.Group>
 
             <Form.Group className="mb-3">
@@ -1802,41 +1904,93 @@ const Admin: React.FC = () => {
                 placeholder="user@example.com"
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.target.value)}
+                isInvalid={!!userFormErrors.email}
                 required
               />
+              <Form.Control.Feedback type="invalid">
+                {userFormErrors.email}
+              </Form.Control.Feedback>
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>Пароль</Form.Label>
+              <Form.Label>
+                Пароль
+                {editingUser && <small className="text-muted ms-1">(оставьте пустым, чтобы не менять)</small>}
+              </Form.Label>
               <Form.Control
                 type="password"
-                placeholder="Введите пароль"
+                placeholder={editingUser ? "Введите новый пароль" : "Введите пароль"}
                 value={userPassword}
                 onChange={(e) => setUserPassword(e.target.value)}
-                required
+                isInvalid={!!userFormErrors.password}
+                required={!editingUser}
               />
+              <Form.Control.Feedback type="invalid">
+                {userFormErrors.password}
+              </Form.Control.Feedback>
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Check
-                type="switch"
-                label="Администратор"
-                checked={userIsAdmin}
-                onChange={(e) => setUserIsAdmin(e.target.checked)}
+              <Form.Label>Подтверждение пароля</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder="Подтвердите пароль"
+                value={userConfirmPassword}
+                onChange={(e) => setUserConfirmPassword(e.target.value)}
+                isInvalid={!!userFormErrors.confirmPassword}
+                required={!editingUser || !!userPassword}
               />
-              <Form.Text className="text-muted">
-                Администраторы имеют доступ к управлению шаблонами и пользователями
-              </Form.Text>
+              <Form.Control.Feedback type="invalid">
+                {userFormErrors.confirmPassword}
+              </Form.Control.Feedback>
             </Form.Group>
+
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    label="Администратор"
+                    checked={userIsAdmin}
+                    onChange={(e) => setUserIsAdmin(e.target.checked)}
+                  />
+                  <Form.Text className="text-muted">
+                    Администраторы имеют доступ к управлению шаблонами и пользователями
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    label="Активен"
+                    checked={userIsActive}
+                    onChange={(e) => setUserIsActive(e.target.checked)}
+                  />
+                  <Form.Text className="text-muted">
+                    Неактивные пользователи не могут войти в систему
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            {editingUser && (
+              <Alert variant="info" className="py-2">
+                <small>
+                  <i className="bi bi-info-circle me-1"></i>
+                  ID пользователя: {editingUser.id}
+                </small>
+              </Alert>
+            )}
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowUserModal(false)}>
+          <Button variant="secondary" onClick={() => { setShowUserModal(false); resetUserForm(); }}>
             Отмена
           </Button>
           <Button variant="primary" onClick={handleUserSubmit}>
-            <i className="bi bi-check-circle me-1"></i>
-            Создать
+            <i className={`bi bi-${editingUser ? 'check' : 'plus-circle'} me-1`}></i>
+            {editingUser ? 'Сохранить изменения' : 'Создать'}
           </Button>
         </Modal.Footer>
       </Modal>

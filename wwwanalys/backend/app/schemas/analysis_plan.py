@@ -3,6 +3,18 @@ from typing import Optional, List
 from datetime import date, datetime
 
 
+# Схемы для фронтенда - ответ с полной информацией о шаблоне
+class PlanItemTemplateInfo(BaseModel):
+    """Информация о шаблоне внутри плана."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    template_indicators: List[dict] = []
+    
+    class Config:
+        from_attributes = True
+
+
 class PlanItemBase(BaseModel):
     template_id: int
     batch_number: Optional[str] = None
@@ -18,7 +30,9 @@ class PlanItemDetail(PlanItemBase):
     id: int
     plan_id: int
     is_completed: bool = False
+    completed_report_id: Optional[int] = None
     template_name: Optional[str] = None
+    template: Optional[PlanItemTemplateInfo] = None
     
     class Config:
         from_attributes = True
@@ -61,23 +75,12 @@ class AnalysisPlan(AnalysisPlanBase):
         from_attributes = True
 
 
-# Схемы для фронтенда - ответ с полной информацией о шаблоне
-class PlanItemTemplateInfo(BaseModel):
-    """Информация о шаблоне внутри плана."""
-    id: int
-    name: str
-    description: Optional[str] = None
-    template_indicators: List[dict] = []
-    
-    class Config:
-        from_attributes = True
-
-
 class PlanItemResponse(PlanItemBase):
     """Элемент плана для ответа API с полной информацией о шаблоне."""
     id: int
     plan_id: int
     is_completed: bool = False
+    completed_report_id: Optional[int] = None
     template: Optional[PlanItemTemplateInfo] = None
     
     class Config:

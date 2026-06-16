@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_
-from app.models import AnalysisType, IndicatorLibrary, ProcessLog, IndicatorValue, TemplateIndicator
+from app.models import AnalysisType, IndicatorLibrary, ProcessLog, IndicatorValue, TemplateIndicator, PlanItem
 from app.schemas import ReportCreate, IndicatorValue as IndicatorValueSchema
 from typing import List
 from datetime import datetime, date
@@ -134,6 +134,95 @@ def get_reports_filtered(
         query = query.filter(ProcessLog.started_at <= datetime.combine(date_to, datetime.max.time()))
     
     return query.order_by(ProcessLog.started_at.desc()).offset(skip).limit(limit).all()
+
+def update_report(db: Session, report_id: int, report: ReportCreate):
+    """Обновить существующий отчет"""
+    db_report = db.query(ProcessLog).filter(ProcessLog.id == report_id).first()
+    if not db_report:
+        return None
+    
+    try:
+        db_report.batch_number = report.batch_number
+        
+        # Удаляем старые значения показателей
+        db.query(IndicatorValue).filter(IndicatorValue.process_log_id == report_id).delete()
+        
+        # Создаем новые значения для каждого индикатора
+        for value_data in report.values:
+            lib_indicator = db.query(IndicatorLibrary).filter(
+                IndicatorLibrary.id == value_data.indicator_id
+            ).first()
+            
+            if not lib_indicator:
+                continue
+            
+            template_indicator = db.query(TemplateIndicator).filter(
+                TemplateIndicator.indicator_id == value_data.indicator_id,
+                TemplateIndicator.template_id == report.template_id
+            ).first()
+            
+            min_value = template_indicator.min_value if template_indicator else None
+            max_value = template_indicator.max_value if template_indicator else None
+            
+            data_type = lib_indicator.data_type
+            options = lib_indicator.options
+            
+            import json
+            
+            numeric_value = None
+            text_value = None
+            is_normal = True
+            
+            if data_type == 'text':
+                text_value = str(value_data.value) if value_data.value is not None else None
+                
+            elif data_type == 'select':
+                text_value = str(value_data.value) if value_data.value is not None else None
+                if options and text_value:
+                    try:
+                        allowed_options = json.loads(options)
+                        if text_value not in allowed_options:
+                            is_normal = False
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                        
+            else:
+                value = value_data.value
+                if isinstance(value, str):
+                    try:
+                        numeric_value = float(value)
+                    except ValueError:
+                        numeric_value = 0.0
+                elif isinstance(value, (int, float)):
+                    numeric_value = float(value)
+                
+                if numeric_value is not None and min_value is not None and max_value is not None:
+                    is_normal = min_value <= numeric_value <= max_value
+            
+            db_indicator_value = IndicatorValue(
+                indicator_id=value_data.indicator_id,
+                value=numeric_value,
+                text_value=text_value,
+                is_normal=is_normal,
+                process_log_id=db_report.id
+            )
+            db.add(db_indicator_value)
+        
+        # Обновляем связь с планом, если передан plan_item_id
+        if report.plan_item_id:
+            from app.models import PlanItem
+            plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
+            if plan_item:
+                plan_item.completed_report_id = db_report.id
+                plan_item.is_completed = True
+        
+        db.commit()
+        db.refresh(db_report)
+        return db_report
+        
+    except Exception as e:
+        db.rollback()
+        raise e
 
 def delete_all_reports_by_user(db: Session, user_id: int):
     """Удалить все отчеты пользователя"""

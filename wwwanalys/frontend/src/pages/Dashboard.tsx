@@ -1,5 +1,6 @@
 /** Dashboard page - report creation and history */
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Card, CardHeader, CardTitle, CardBody, Tabs, Tab, Form, Button, 
   Alert, Badge, Table, Spinner
@@ -17,6 +18,9 @@ const Dashboard: React.FC = () => {
   const [batchNumber, setBatchNumber] = useState('');
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingReportId, setEditingReportId] = useState<number | null>(null);
+  const [planItemId, setPlanItemId] = useState<number | null>(null);
   
   // History state
   const [reports, setReports] = useState<Report[]>([]);
@@ -31,11 +35,112 @@ const Dashboard: React.FC = () => {
   const [viewReportIndicators, setViewReportIndicators] = useState<any[]>([]);
   
   const { toast, showToast, hideToast } = useToast();
+  const location = useLocation();
+
+  /**
+   * Получить все показатели шабона (только из справочника).
+   */
+  const getAllIndicators = (template: AnalysisType): (any)[] => {
+    const libInds = (template.template_indicators || []).map(ti => ({
+      id: ti.indicator_id,
+      name: ti.name,
+      unit: ti.unit,
+      min_value: ti.min_value,
+      max_value: ti.max_value,
+      data_type: ti.data_type,
+      options: ti.options,
+      is_library: true
+    }));
+    
+    return libInds;
+  };
 
   useEffect(() => {
     fetchTemplates();
     fetchReports();
   }, []);
+
+  // Обработка перехода из Plans с данными для создания отчета
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.activeTab === 'new-report' && state?.autoCreate) {
+      setActiveTab('new-report');
+    }
+  }, [location.state]);
+
+  // Обработка localStorage после загрузки шаблонов
+  useEffect(() => {
+    const storedData = localStorage.getItem('planItemToReport');
+    if (storedData && templates.length > 0) {
+      try {
+        const planData = JSON.parse(storedData);
+        
+        // Проверяем, это режим редактирования существующего отчета
+        if (planData.is_editing && planData.report && planData.report_id) {
+          const template = planData.template as AnalysisType;
+          const report = planData.report;
+          
+          setSelectedTemplate(template);
+          setBatchNumber(report.batch_number || planData.batch_number || '');
+          setIsEditing(true);
+          setEditingReportId(planData.report_id);
+          
+          // Заполняем значения показателей из существующего отчета
+          const allIndicators = getAllIndicators(template);
+          const values = allIndicators.map(indicator => {
+            const existingValue = report.indicator_values?.find(
+              (v: any) => v.indicator_id === indicator.id
+            );
+            return {
+              indicator_id: indicator.id,
+              value: existingValue?.value?.toString() || existingValue?.text_value || '',
+              is_normal: existingValue?.is_normal
+            };
+          });
+          setIndicatorValues(values);
+          localStorage.removeItem('planItemToReport');
+        }
+        // Используем переданный шаблон напрямую (он уже содержит template_indicators)
+        else if (planData.template && planData.template.template_indicators) {
+          const template = planData.template as AnalysisType;
+          setSelectedTemplate(template);
+          setBatchNumber(planData.batch_number || '');
+          setIsEditing(false);
+          setEditingReportId(null);
+          const allIndicators = getAllIndicators(template);
+          const values = allIndicators.map(indicator => ({
+            indicator_id: indicator.id,
+            value: '',
+            is_normal: undefined
+          }));
+          setIndicatorValues(values);
+          localStorage.removeItem('planItemToReport');
+        } else if (planData.template_id) {
+          const template = templates.find(t => t.id === planData.template_id);
+          if (template) {
+            setSelectedTemplate(template);
+            setBatchNumber(planData.batch_number || '');
+            setIsEditing(false);
+            setEditingReportId(null);
+            const allIndicators = getAllIndicators(template);
+            const values = allIndicators.map(indicator => ({
+              indicator_id: indicator.id,
+              value: '',
+              is_normal: undefined
+            }));
+            setIndicatorValues(values);
+            localStorage.removeItem('planItemToReport');
+          }
+        }
+        
+        if (planData.plan_item_id) {
+          setPlanItemId(planData.plan_item_id);
+        }
+      } catch (e) {
+        console.error('Error parsing planItemToReport:', e);
+      }
+    }
+  }, [templates]);
 
   const fetchReports = async () => {
     setIsLoadingHistory(true);
@@ -59,8 +164,13 @@ const Dashboard: React.FC = () => {
     try {
       const response = await api.get('/api/templates/active');
       setTemplates(response.data);
-      if (response.data.length > 0) {
+      // Проверяем, есть ли данные из Plans в localStorage
+      const storedData = localStorage.getItem('planItemToReport');
+      if (!storedData && response.data.length > 0) {
+        // Только если нет внешних данных - выбираем первый шаблон
         handleTemplateSelect(response.data[0]);
+      } else if (storedData) {
+        // Данные из Plans будут обработаны отдельным useEffect
       }
     } catch (error) {
       console.error('Error fetching templates:', error);
@@ -68,27 +178,11 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  /**
-   * Получить все показатели шабона (только из справочника).
-   */
-  const getAllIndicators = (template: AnalysisType): (any)[] => {
-    const libInds = (template.template_indicators || []).map(ti => ({
-      id: ti.indicator_id,
-      name: ti.name,
-      unit: ti.unit,
-      min_value: ti.min_value,
-      max_value: ti.max_value,
-      data_type: ti.data_type,
-      options: ti.options,
-      is_library: true
-    }));
-    
-    return libInds;
-  };
-
   const handleTemplateSelect = (template: AnalysisType) => {
     setSelectedTemplate(template);
     setBatchNumber('');
+    setIsEditing(false);
+    setEditingReportId(null);
     const allIndicators = getAllIndicators(template);
     const values = allIndicators.map(indicator => ({
       indicator_id: indicator.id,
@@ -136,7 +230,7 @@ const Dashboard: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      const reportData = {
+      const reportData: any = {
         template_id: selectedTemplate.id,
         batch_number: batchNumber,
         values: indicatorValues.map(v => ({
@@ -147,12 +241,27 @@ const Dashboard: React.FC = () => {
           is_normal: v.is_normal
         }))
       };
+
+      if (!isEditing && planItemId) {
+        reportData.plan_item_id = planItemId;
+      }
+
+      if (isEditing && editingReportId) {
+        await api.put(`/api/reports/${editingReportId}`, reportData);
+        showToast('Отчет успешно обновлен!', 'success');
+        setIsEditing(false);
+        setEditingReportId(null);
+      } else {
+        const response = await api.post('/api/reports/', reportData);
+        showToast('Отчет успешно отправлен!', 'success');
+        
+        if (planItemId && response.data?.id) {
+          showToast(`Отчет #${response.data.id} создан и привязан к плану!`, 'success');
+        }
+      }
       
-      await api.post('/api/reports/', reportData);
-      showToast('Отчет успешно отправлен!', 'success');
-      
-      // Reset form
       setBatchNumber('');
+      setPlanItemId(null);
       if (selectedTemplate) {
         const allIndicators = getAllIndicators(selectedTemplate);
         setIndicatorValues(allIndicators.map(indicator => ({
@@ -163,9 +272,10 @@ const Dashboard: React.FC = () => {
       }
       
       fetchReports();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting report:', error);
-      showToast('Ошибка при отправке отчета', 'danger');
+      const errorMsg = error.response?.data?.detail || error.message || 'Неизвестная ошибка';
+      showToast(`Ошибка при отправке отчета: ${errorMsg}`, 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -189,18 +299,55 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleEditReport = async (reportId: number) => {
+    try {
+      const response = await api.get(`/api/reports/${reportId}`);
+      const report = response.data;
+      
+      const templateResponse = await api.get(`/api/templates/${report.analysis_type_id}`);
+      const template = templateResponse.data;
+      
+      setSelectedTemplate(template);
+      setBatchNumber(report.batch_number || '');
+      setIsEditing(true);
+      setEditingReportId(reportId);
+      
+      const allIndicators = getAllIndicators(template);
+      const values = allIndicators.map(indicator => {
+        const existingValue = report.indicator_values?.find(
+          (v: any) => v.indicator_id === indicator.id
+        );
+        return {
+          indicator_id: indicator.id,
+          value: existingValue?.value?.toString() || existingValue?.text_value || '',
+          is_normal: existingValue?.is_normal
+        };
+      });
+      setIndicatorValues(values);
+      
+      setActiveTab('new-report');
+    } catch (error) {
+      console.error('Error loading report for editing:', error);
+      showToast('Ошибка при загрузке отчета для редактирования', 'danger');
+    }
+  };
+
   const handleClearHistory = async () => {
     if (!window.confirm('Вы уверены, что хотите очистить всю историю отчетов? Это действие нельзя отменить.')) {
       return;
     }
 
     try {
-      await api.delete('/api/reports/history/clear');
-      showToast('История отчетов успешно очищена!', 'success');
+      const response = await api.delete('/api/reports/history/clear');
+      console.log('Clear history response:', response.data);
+      showToast(response.data?.message || 'История отчетов успешно очищена!', 'success');
       setReports([]);
-    } catch (error) {
+      // Перезагружаем список отчетов с сервера для подтверждения
+      await fetchReports();
+    } catch (error: any) {
       console.error('Error clearing history:', error);
-      showToast('Ошибка при очистке истории', 'danger');
+      const errorMessage = error.response?.data?.detail || 'Ошибка при очистке истории';
+      showToast(errorMessage, 'danger');
     }
   };
 
@@ -260,12 +407,24 @@ const Dashboard: React.FC = () => {
                   <CardHeader>
                     <CardTitle className="h5 mb-0">
                       <i className="bi bi-file-earmark-text me-2 text-primary"></i>
-                      Внесение данных анализа
+                      {isEditing ? 'Редактирование отчета' : 'Внесение данных анализа'}
+                      {isEditing && editingReportId && (
+                        <Badge bg="warning" className="ms-2">Отчет #{editingReportId}</Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardBody>
+                    {isEditing && (
+                      <Alert variant="info">
+                        <i className="bi bi-info-circle me-2"></i>
+                        Вы редактируете существующий отчет. Внесите изменения и нажмите "Сохранить изменения".
+                      </Alert>
+                    )}
                     <p className="text-muted mb-4">
-                      Выберите шаблон анализа, заполните показатели и отправьте отчет
+                      {isEditing 
+                        ? 'Измените значения показателей и сохраните отчет'
+                        : 'Выберите шаблон анализа, заполните показатели и отправьте отчет'
+                      }
                     </p>
 
                     {/* Template Selection */}
@@ -284,6 +443,7 @@ const Dashboard: React.FC = () => {
                               const template = templates.find(t => t.id === parseInt(e.target.value));
                               if (template) handleTemplateSelect(template);
                             }}
+                            disabled={isEditing}
                           >
                             <option value="" disabled>-- Выберите шаблон --</option>
                             {templates.map((template) => (
@@ -402,7 +562,28 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="d-flex justify-content-end">
+                        <div className="d-flex justify-content-end gap-2">
+                          {isEditing && (
+                            <Button 
+                              variant="secondary" 
+                              onClick={() => {
+                                setIsEditing(false);
+                                setEditingReportId(null);
+                                setBatchNumber('');
+                                if (selectedTemplate) {
+                                  const allIndicators = getAllIndicators(selectedTemplate);
+                                  setIndicatorValues(allIndicators.map(indicator => ({
+                                    indicator_id: indicator.id,
+                                    value: '',
+                                    is_normal: undefined
+                                  })));
+                                }
+                              }}
+                            >
+                              <i className="bi bi-x-circle me-1"></i>
+                              Отменить редактирование
+                            </Button>
+                          )}
                           <Button type="submit" variant="primary" disabled={isSubmitting}>
                             {isSubmitting ? (
                               <>
@@ -411,8 +592,8 @@ const Dashboard: React.FC = () => {
                               </>
                             ) : (
                               <>
-                                <i className="bi bi-send-fill me-2"></i>
-                                Отправить отчет
+                                <i className={`bi ${isEditing ? 'bi-check-circle' : 'bi-send-fill'} me-2`}></i>
+                                {isEditing ? 'Сохранить изменения' : 'Отправить отчет'}
                               </>
                             )}
                           </Button>
@@ -521,6 +702,9 @@ const Dashboard: React.FC = () => {
                                   <td className="text-end">
                                     <Button variant="outline-primary" size="sm" onClick={() => handleViewReport(report.id)}>
                                       <i className="bi bi-eye me-1"></i>Просмотр
+                                    </Button>
+                                    <Button variant="outline-warning" size="sm" className="ms-2" onClick={() => handleEditReport(report.id)}>
+                                      <i className="bi bi-pencil me-1"></i>Редактировать
                                     </Button>
                                   </td>
                                 </tr>

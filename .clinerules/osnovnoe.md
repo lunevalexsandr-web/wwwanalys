@@ -15,3 +15,5 @@
 ## Ограничения
 - Никогда не удаляй файлы без `requires_approval=true`
 - Не форматируй ответ как Markdown с блоками кода, если не просят — только вызовы инструментов
+
+«Never use replace_in_file. Instead, use write_to_file for updating files» (Никогда не используй replace_in_file. Вместо этого используй write_to_file для обновления файлов).

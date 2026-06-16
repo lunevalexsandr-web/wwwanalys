@@ -163,6 +163,7 @@ export interface PlanItem {
   batch_number?: string | null;
   sort_order: number;
   is_completed: boolean;
+  completed_report_id?: number | null;
   template?: PlanItemTemplateInfo;
 }
 

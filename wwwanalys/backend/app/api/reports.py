@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.crud import report as crud_report
-from app.models import User
+from app.models import User, PlanItem
 from app.schemas import ReportCreate, Report
 from app.auth.auth import get_current_active_user
 
@@ -24,6 +24,15 @@ def create_report(
     db_report = crud_report.create_report(db=db, report=report, user_id=current_user.id)
     if not db_report:
         raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Если отчет создан из элемента плана - обновляем связь
+    if report.plan_item_id:
+        plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
+        if plan_item:
+            plan_item.completed_report_id = db_report.id
+            plan_item.is_completed = True
+            db.commit()
+    
     return {
         "id": db_report.id,
         "batch_number": db_report.batch_number,
@@ -31,6 +40,38 @@ def create_report(
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
         "notes": db_report.notes,
+        "values": []
+    }
+
+
+@router.put("/{report_id}")
+def update_report(
+    report_id: int,
+    report: ReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update an existing report."""
+    db_report = crud_report.get_report(db, report_id=report_id)
+    if not db_report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Check permissions for non-admin users
+    if not current_user.is_admin and db_report.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # Update report
+    updated_report = crud_report.update_report(db=db, report_id=report_id, report=report)
+    if not updated_report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return {
+        "id": updated_report.id,
+        "batch_number": updated_report.batch_number,
+        "analysis_type_id": updated_report.analysis_type_id,
+        "started_at": updated_report.started_at,
+        "status": updated_report.status.value if hasattr(updated_report.status, 'value') else updated_report.status,
+        "notes": updated_report.notes,
         "values": []
     }
 
@@ -151,5 +192,6 @@ def get_report(
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
         "notes": db_report.notes,
         "created_by": db_report.created_by,
+        "indicator_values": indicator_values,
         "values": indicator_values
     }

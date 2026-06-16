@@ -13,6 +13,7 @@ class ReportCreate(BaseModel):
     template_id: int
     batch_number: str
     values: List[IndicatorValue]
+    plan_item_id: Optional[int] = None
 
 
 class IndicatorValueReport(BaseModel):

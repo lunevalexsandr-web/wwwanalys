@@ -10,6 +10,7 @@ import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
 import type { AnalysisPlan, AnalysisType, PlanItem } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Plans: React.FC = () => {
   const [activeTab, setActiveTab] = useState('today');
@@ -35,6 +36,8 @@ const Plans: React.FC = () => {
   const [viewPlan, setViewPlan] = useState<AnalysisPlan | null>(null);
 
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.is_admin ?? false;
 
   useEffect(() => {
     fetchTemplates();
@@ -69,20 +72,82 @@ const Plans: React.FC = () => {
     fetchPlansForDate(date);
   };
 
+  const handleCreateReportFromPlanItem = async (item: PlanItem) => {
+    try {
+      // Загружаем полную информацию о шаблоне
+      const templateResponse = await api.get(`/api/templates/${item.template_id}`);
+      const template = templateResponse.data;
+      
+      // Сохраняем данные в localStorage для передачи в Dashboard
+      localStorage.setItem('planItemToReport', JSON.stringify({
+        template_id: item.template_id,
+        batch_number: item.batch_number || '',
+        template: template,
+        plan_item_id: item.id,
+      }));
+      // Переходим на вкладку создания отчета
+      navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
+    } catch (error) {
+      console.error('Error creating report from plan item:', error);
+      showToast('Ошибка при переходе к созданию отчета', 'danger');
+    }
+  };
+
+  const handleEditReportFromPlanItem = async (item: PlanItem) => {
+    if (!item.completed_report_id) return;
+    
+    try {
+      // Загружаем данные существующего отчета
+      const reportResponse = await api.get(`/api/reports/${item.completed_report_id}`);
+      const report = reportResponse.data;
+      
+      // Загружаем полную информацию о шаблоне
+      const templateResponse = await api.get(`/api/templates/${item.template_id}`);
+      const template = templateResponse.data;
+      
+      // Сохраняем данные в localStorage для передачи в Dashboard
+      localStorage.setItem('planItemToReport', JSON.stringify({
+        template_id: item.template_id,
+        batch_number: report.batch_number || item.batch_number || '',
+        template: template,
+        report_id: item.completed_report_id,
+        report: report,
+        is_editing: true,
+        plan_item_id: item.id,
+      }));
+      // Переходим на вкладку создания отчета
+      navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
+    } catch (error) {
+      console.error('Error editing report from plan item:', error);
+      showToast('Ошибка при загрузке отчета для редактирования', 'danger');
+    }
+  };
+
   const handleTogglePlanItem = async (itemId: number, completed: boolean, batchNumber?: string) => {
     try {
-      // Если элемент не выполнен и есть batch_number, создаем отчет
-      if (!completed && batchNumber) {
-        // Находим элемент плана
-        const plan = plans.find(p => p.plan_items?.some((item: PlanItem) => item.id === itemId));
-        const item = plan?.plan_items?.find((i: PlanItem) => i.id === itemId);
+      // Находим элемент плана
+      const plan = plans.find(p => p.plan_items?.some((item: PlanItem) => item.id === itemId));
+      let item = plan?.plan_items?.find((i: PlanItem) => i.id === itemId);
+      
+      // Если элемент не выполнен - переходим на Dashboard для заполнения показателей
+      if (!completed) {
+        // Если template есть, но template_indicators пустые - загружаем полную информацию
+        if (item?.template && (!item.template.template_indicators || item.template.template_indicators.length === 0)) {
+          try {
+            const templateResponse = await api.get(`/api/templates/${item.template_id}`);
+            item = { ...item, template: templateResponse.data };
+          } catch (e) {
+            console.error('Error loading template:', e);
+          }
+        }
         
         if (item?.template) {
           // Сохраняем данные в localStorage для передачи в Dashboard
           localStorage.setItem('planItemToReport', JSON.stringify({
             template_id: item.template_id,
-            batch_number: batchNumber,
+            batch_number: batchNumber || item.batch_number || '',
             template: item.template,
+            plan_item_id: item.id,
           }));
           // Переходим на вкладку создания отчета
           navigate('/dashboard', { state: { activeTab: 'new-report', autoCreate: true } });
@@ -100,6 +165,11 @@ const Plans: React.FC = () => {
 
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!isAdmin) {
+      showToast('У вас нет прав на создание плана. Обратитесь к администратору.', 'warning');
+      return;
+    }
     
     if (!planName.trim()) {
       showToast('Введите название плана', 'warning');
@@ -172,9 +242,13 @@ const Plans: React.FC = () => {
       await api.delete(`/api/plans/${planId}`);
       showToast('План успешно удален', 'success');
       fetchPlansForDate(selectedDate);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting plan:', error);
-      showToast('Ошибка при удалении плана', 'danger');
+      if (error.response?.status === 403) {
+        showToast('У вас нет прав на удаление плана. Обратитесь к администратору.', 'warning');
+      } else {
+        showToast('Ошибка при удалении плана', 'danger');
+      }
     }
   };
 
@@ -208,10 +282,12 @@ const Plans: React.FC = () => {
                   onChange={(e) => handleDateChange(e.target.value)}
                   style={{ width: '200px' }}
                 />
-                <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
-                  <i className="bi bi-plus-circle-fill me-1"></i>
-                  Новый план
-                </Button>
+                {isAdmin && (
+                  <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
+                    <i className="bi bi-plus-circle-fill me-1"></i>
+                    Новый план
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -228,9 +304,11 @@ const Plans: React.FC = () => {
                   <div className="text-center py-4">
                     <i className="bi bi-calendar-x display-1 text-muted"></i>
                     <p className="text-muted mt-2">Нет планов на выбранную дату</p>
-                    <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
-                      Создать план на этот день
-                    </Button>
+                    {isAdmin && (
+                      <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
+                        Создать план на этот день
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="row g-3">
@@ -262,6 +340,7 @@ const Plans: React.FC = () => {
                                       <th>Статус</th>
                                       <th>Шаблон</th>
                                       <th>Номер партии</th>
+                                      <th>Отчет</th>
                                       <th>Действия</th>
                                     </tr>
                                   </thead>
@@ -302,19 +381,44 @@ const Plans: React.FC = () => {
                                           />
                                         </td>
                                         <td>
-                                          {!item.is_completed && (
+                                          {item.completed_report_id ? (
+                                            <Badge bg="info">
+                                              <i className="bi bi-file-earmark-text me-1"></i>
+                                              Отчет #{item.completed_report_id}
+                                            </Badge>
+                                          ) : (
+                                            <span className="text-muted">—</span>
+                                          )}
+                                        </td>
+                                        <td>
+                                          {!item.is_completed ? (
                                             <Button 
-                                              variant="primary" 
-                                              size="sm"
-                                              onClick={() => {
-                                                if (item.template) {
-                                                  handleTogglePlanItem(item.id, false, item.batch_number || undefined);
-                                                }
-                                              }}
-                                            >
-                                              <i className="bi bi-plus-circle me-1"></i>
-                                              Создать отчет
-                                            </Button>
+                                                variant="primary" 
+                                                size="sm"
+                                                onClick={() => {
+                                                  // Всегда переходим на Dashboard для заполнения показателей
+                                                  if (item.template) {
+                                                    handleTogglePlanItem(item.id, false, item.batch_number || undefined);
+                                                  } else {
+                                                    // Если template_indicators пустые - загружаем полную информацию
+                                                    handleCreateReportFromPlanItem(item);
+                                                  }
+                                                }}
+                                              >
+                                                <i className="bi bi-plus-circle me-1"></i>
+                                                Создать отчет
+                                              </Button>
+                                          ) : (
+                                            item.completed_report_id && (
+                                              <Button 
+                                                  variant="outline-primary" 
+                                                  size="sm"
+                                                  onClick={() => handleEditReportFromPlanItem(item)}
+                                                >
+                                                  <i className="bi bi-pencil me-1"></i>
+                                                  Редактировать
+                                                </Button>
+                                            )
                                           )}
                                         </td>
                                       </tr>
@@ -328,10 +432,12 @@ const Plans: React.FC = () => {
                                   <i className="bi bi-eye me-1"></i>
                                   Подробно
                                 </Button>
-                                <Button variant="outline-danger" size="sm" onClick={() => handleDeletePlan(plan.id)}>
-                                  <i className="bi bi-trash me-1"></i>
-                                  Удалить
-                                </Button>
+                                {isAdmin && (
+                                  <Button variant="outline-danger" size="sm" onClick={() => handleDeletePlan(plan.id)}>
+                                    <i className="bi bi-trash me-1"></i>
+                                    Удалить
+                                  </Button>
+                                )}
                               </div>
                             </CardBody>
                           </Card>
@@ -404,7 +510,7 @@ const Plans: React.FC = () => {
                               <div>
                                 <strong>{template.name}</strong>
                                 <small className="text-muted d-block">{template.description}</small>
-                                <small className="text-muted">{template.template_indicators?.length || 0} показателей</small>
+                                 <small className="text-muted">{template.template_indicators?.length || 0} показателей</small>
                               </div>
                             }
                           />
@@ -456,6 +562,7 @@ const Plans: React.FC = () => {
                 <th>Номер партии</th>
                 <th>Показатели</th>
                 <th>Статус</th>
+                <th>Отчет</th>
               </tr>
             </thead>
             <tbody>
@@ -468,6 +575,15 @@ const Plans: React.FC = () => {
                     <Badge bg={item.is_completed ? 'success' : 'warning'}>
                       {item.is_completed ? 'Выполнено' : 'В ожидании'}
                     </Badge>
+                  </td>
+                  <td>
+                    {item.completed_report_id ? (
+                      <Badge bg="info">
+                        Отчет #{item.completed_report_id}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

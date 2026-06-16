@@ -2,36 +2,58 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
 from app.models import AnalysisPlan, PlanItem, IndicatorLibrary, TemplateIndicator
+from app.models.analysis_type import AnalysisType
 from app.schemas import AnalysisPlanCreate, AnalysisPlanUpdate, PlanItemUpdate
 from datetime import date
 from typing import Optional
 
 
 def get_plan(db: Session, plan_id: int):
-    """Получить план по ID с элементами."""
+    """Получить план по ID с элементами и template_indicators."""
     return db.query(AnalysisPlan)\
-        .options(joinedload(AnalysisPlan.plan_items).joinedload(PlanItem.template))\
+        .options(
+            joinedload(AnalysisPlan.plan_items)
+            .joinedload(PlanItem.template)
+            .joinedload(AnalysisType.template_indicators)
+            .joinedload(TemplateIndicator.indicator_ref)
+        )\
         .filter(AnalysisPlan.id == plan_id).first()
 
 
 def get_plans(db: Session, skip: int = 0, limit: int = 100):
     """Получить все планы."""
     return db.query(AnalysisPlan)\
-        .options(joinedload(AnalysisPlan.plan_items))\
+        .options(
+            joinedload(AnalysisPlan.plan_items)
+            .joinedload(PlanItem.template)
+            .joinedload(AnalysisType.template_indicators)
+            .joinedload(TemplateIndicator.indicator_ref)
+        )\
         .offset(skip).limit(limit).all()
 
 
 def get_plans_by_date(db: Session, plan_date: date):
     """Получить планы на конкретную дату."""
+    from app.models import TemplateIndicator
     return db.query(AnalysisPlan)\
-        .options(joinedload(AnalysisPlan.plan_items).joinedload(PlanItem.template))\
+        .options(
+            joinedload(AnalysisPlan.plan_items)
+            .joinedload(PlanItem.template)
+            .joinedload(AnalysisType.template_indicators)
+            .joinedload(TemplateIndicator.indicator_ref)
+        )\
         .filter(AnalysisPlan.plan_date == plan_date).all()
 
 
 def get_plans_by_date_range(db: Session, date_from: date, date_to: date):
     """Получить планы за период."""
     return db.query(AnalysisPlan)\
-        .options(joinedload(AnalysisPlan.plan_items).joinedload(PlanItem.template))\
+        .options(
+            joinedload(AnalysisPlan.plan_items)
+            .joinedload(PlanItem.template)
+            .joinedload(AnalysisType.template_indicators)
+            .joinedload(TemplateIndicator.indicator_ref)
+        )\
         .filter(AnalysisPlan.plan_date >= date_from, AnalysisPlan.plan_date <= date_to)\
         .order_by(AnalysisPlan.plan_date).all()
 
@@ -139,6 +161,3 @@ def update_plan_item(db: Session, item_id: int, item_update: PlanItemUpdate):
     db.refresh(db_item)
     return db_item
 
-
-# Импорт AnalysisType после определения моделей для избежания циклической зависимости
-from app.models.analysis_type import AnalysisType
