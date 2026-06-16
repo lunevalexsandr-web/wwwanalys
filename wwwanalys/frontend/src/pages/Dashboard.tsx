@@ -60,49 +60,60 @@ const Dashboard: React.FC = () => {
     fetchReports();
   }, []);
 
-  // Обработка перехода из Plans с данными для создания отчета
-  useEffect(() => {
-    const state = location.state as any;
-    if (state?.activeTab === 'new-report' && state?.autoCreate) {
-      setActiveTab('new-report');
-    }
-  }, [location.state]);
-
-  // Обработка localStorage после загрузки шаблонов
-  useEffect(() => {
+  // Функция для обработки данных из Plans
+  const processPlanItemToReport = () => {
     const storedData = localStorage.getItem('planItemToReport');
-    if (storedData && templates.length > 0) {
-      try {
-        const planData = JSON.parse(storedData);
+    if (!storedData) return false;
+    
+    try {
+      const planData = JSON.parse(storedData);
+      console.log('Processing planItemToReport:', planData);
+      
+      // Проверяем, это режим редактирования существующего отчета
+      if (planData.is_editing && planData.report && planData.report_id) {
+        const template = planData.template as AnalysisType;
+        const report = planData.report;
         
-        // Проверяем, это режим редактирования существующего отчета
-        if (planData.is_editing && planData.report && planData.report_id) {
-          const template = planData.template as AnalysisType;
-          const report = planData.report;
-          
-          setSelectedTemplate(template);
-          setBatchNumber(report.batch_number || planData.batch_number || '');
-          setIsEditing(true);
-          setEditingReportId(planData.report_id);
-          
-          // Заполняем значения показателей из существующего отчета
-          const allIndicators = getAllIndicators(template);
-          const values = allIndicators.map(indicator => {
-            const existingValue = report.indicator_values?.find(
-              (v: any) => v.indicator_id === indicator.id
-            );
-            return {
-              indicator_id: indicator.id,
-              value: existingValue?.value?.toString() || existingValue?.text_value || '',
-              is_normal: existingValue?.is_normal
-            };
-          });
-          setIndicatorValues(values);
-          localStorage.removeItem('planItemToReport');
-        }
-        // Используем переданный шаблон напрямую (он уже содержит template_indicators)
-        else if (planData.template && planData.template.template_indicators) {
-          const template = planData.template as AnalysisType;
+        setSelectedTemplate(template);
+        setBatchNumber(report.batch_number || planData.batch_number || '');
+        setIsEditing(true);
+        setEditingReportId(planData.report_id);
+        
+        // Заполняем значения показателей из существующего отчета
+        const allIndicators = getAllIndicators(template);
+        const values = allIndicators.map(indicator => {
+          const existingValue = report.indicator_values?.find(
+            (v: any) => v.indicator_id === indicator.id
+          );
+          return {
+            indicator_id: indicator.id,
+            value: existingValue?.value?.toString() || existingValue?.text_value || '',
+            is_normal: existingValue?.is_normal
+          };
+        });
+        setIndicatorValues(values);
+        localStorage.removeItem('planItemToReport');
+        return true;
+      }
+      // Используем переданный шаблон напрямую (он уже содержит template_indicators)
+      else if (planData.template && planData.template.template_indicators) {
+        const template = planData.template as AnalysisType;
+        setSelectedTemplate(template);
+        setBatchNumber(planData.batch_number || '');
+        setIsEditing(false);
+        setEditingReportId(null);
+        const allIndicators = getAllIndicators(template);
+        const values = allIndicators.map(indicator => ({
+          indicator_id: indicator.id,
+          value: '',
+          is_normal: undefined
+        }));
+        setIndicatorValues(values);
+        localStorage.removeItem('planItemToReport');
+        return true;
+      } else if (planData.template_id) {
+        const template = templates.find(t => t.id === planData.template_id);
+        if (template) {
           setSelectedTemplate(template);
           setBatchNumber(planData.batch_number || '');
           setIsEditing(false);
@@ -115,31 +126,49 @@ const Dashboard: React.FC = () => {
           }));
           setIndicatorValues(values);
           localStorage.removeItem('planItemToReport');
-        } else if (planData.template_id) {
-          const template = templates.find(t => t.id === planData.template_id);
-          if (template) {
-            setSelectedTemplate(template);
-            setBatchNumber(planData.batch_number || '');
-            setIsEditing(false);
-            setEditingReportId(null);
-            const allIndicators = getAllIndicators(template);
-            const values = allIndicators.map(indicator => ({
-              indicator_id: indicator.id,
-              value: '',
-              is_normal: undefined
-            }));
-            setIndicatorValues(values);
-            localStorage.removeItem('planItemToReport');
-          }
+          return true;
         }
-        
-        if (planData.plan_item_id) {
-          setPlanItemId(planData.plan_item_id);
-        }
-      } catch (e) {
-        console.error('Error parsing planItemToReport:', e);
       }
+      
+      if (planData.plan_item_id) {
+        setPlanItemId(planData.plan_item_id);
+      }
+    } catch (e) {
+      console.error('Error parsing planItemToReport:', e);
+      localStorage.removeItem('planItemToReport');
     }
+    return false;
+  };
+
+  // Обработка перехода из Plans с данными для создания отчета
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.activeTab === 'new-report' && state?.autoCreate) {
+      setActiveTab('new-report');
+      // Обрабатываем данные из localStorage
+      processPlanItemToReport();
+    }
+  }, [location.state]);
+
+  // Обработка localStorage после загрузки шаблонов
+  useEffect(() => {
+    if (templates.length > 0) {
+      processPlanItemToReport();
+    }
+  }, [templates]);
+
+  // Слушаем изменения в localStorage (для случаев когда страница уже открыта)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'planItemToReport' && e.newValue) {
+        console.log('Storage event detected for planItemToReport');
+        setActiveTab('new-report');
+        processPlanItemToReport();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [templates]);
 
   const fetchReports = async () => {
