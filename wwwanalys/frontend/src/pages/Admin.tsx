@@ -805,61 +805,56 @@ const Admin: React.FC = () => {
   };
 
   return (
-    <div className="min-vh-100 bg-light">
+    <div className="min-h-screen bg-background">
       <AppHeader showDashboardLink />
 
-      <main className="app-main">
+      <main className="app-main py-6">
         <div className="container-fluid">
           <div className="page-wrapper">
-            <div className="mb-4">
-              <h2 className="h3 mb-1">Администрирование</h2>
-              <p className="text-muted mb-0">Управление шаблонами анализа, справочником показателей и пользователями</p>
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-text-primary mb-1">Администрирование</h1>
+              <p className="text-text-secondary text-sm">Управление шаблонами, справочником показателей и пользователями</p>
             </div>
 
-            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} className="mb-4">
+            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} className="mb-6">
               {/* Templates Tab */}
               <Tab eventKey="templates" title={
                 <span><i className="bi bi-list-ul me-1"></i>Шаблоны анализа</span>
               }>
-                <Card>
-                    <CardHeader className="d-flex justify-content-between align-items-center">
-                      <CardTitle className="h5 mb-0">
-                        <i className="bi bi-file-earmark-text me-2 text-primary"></i>
-                        Управление шаблонами анализа
+                <Card className="border-0 shadow-md">
+                    <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center">
+                      <CardTitle className="h5 mb-0 flex items-center gap-2">
+                        <i className="bi bi-file-earmark-text text-primary"></i>
+                        Управление шаблонами
                       </CardTitle>
-                      <div>
+                      <div className="flex gap-2">
                         {templates.length > 0 && (
-                          <Button 
-                            variant="outline-danger" 
-                            size="sm" 
-                            className="me-2"
-                            onClick={handleClearAllTemplates}
-                          >
-                            <i className="bi bi-trash me-1"></i>
+                          <Button variant="outline-danger" size="sm" onClick={handleClearAllTemplates} className="flex items-center gap-1">
+                            <i className="bi bi-trash"></i>
                             Очистить все
                           </Button>
                         )}
-                        <Button variant="primary" onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }}>
-                          <i className="bi bi-plus-circle me-1"></i>
+                        <Button variant="primary" onClick={() => { resetTemplateForm(); setShowTemplateModal(true); }} className="flex items-center gap-1">
+                          <i className="bi bi-plus-circle"></i>
                           Создать шаблон
                         </Button>
                       </div>
                     </CardHeader>
-                  <CardBody>
+                  <CardBody className="p-6">
                     {isLoading ? (
-                      <div className="text-center py-4">
+                      <div className="text-center py-8">
                         <Spinner animation="border" />
-                        <p className="text-muted mt-2">Загрузка...</p>
+                        <p className="text-text-muted mt-2">Загрузка...</p>
                       </div>
                     ) : templates.length === 0 ? (
-                      <div className="text-center py-4">
-                        <i className="bi bi-inbox display-1 text-muted"></i>
-                        <p className="text-muted mt-2">Нет шаблонов анализа</p>
+                      <div className="text-center py-8">
+                        <i className="bi bi-inbox display-1 text-text-muted"></i>
+                        <p className="text-text-muted mt-2">Нет шаблонов анализа</p>
                       </div>
                     ) : (
                       <div className="table-responsive">
-                        <Table striped hover>
-                          <thead>
+                        <Table striped hover className="rounded-lg overflow-hidden">
+                          <thead className="bg-background-gray">
                             <tr>
                               <th>Название</th>
                               <th>Описание</th>
@@ -869,65 +864,40 @@ const Admin: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {templates.map((template) => {
-                              return (
-                                <tr key={template.id}>
-                                  <td><strong>{template.name}</strong></td>
-                                  <td>{template.description || '-'}</td>
-                                  <td>{getTotalIndicators(template)}</td>
-                                  <td>
-                                    <Badge bg={template.is_active ? 'success' : 'danger'}>
-                                      {template.is_active ? 'Активен' : 'Неактивен'}
-                                    </Badge>
-                                  </td>
-                                   <td className="text-end">
-                                    <Button 
-                                      variant="outline-primary" 
-                                      size="sm" 
-                                      className="me-1"
-                                      onClick={() => handleEditTemplate(template)}
-                                    >
-                                      <i className="bi bi-pencil me-1"></i>
-                                      Ред.
+                            {templates.map((template) => (
+                              <tr key={template.id}>
+                                <td><strong>{template.name}</strong></td>
+                                <td>{template.description || '-'}</td>
+                                <td>
+                                  <Badge bg="info" className="font-mono">{getTotalIndicators(template)}</Badge>
+                                </td>
+                                <td>
+                                  <Badge bg={template.is_active ? 'success' : 'danger'} className="flex items-center gap-1 w-fit">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${template.is_active ? 'bg-white' : 'bg-white'}`} />
+                                    {template.is_active ? 'Активен' : 'Неактивен'}
+                                  </Badge>
+                                </td>
+                                <td className="text-end">
+                                  <div className="flex gap-1 justify-content-end">
+                                    <Button variant="outline-primary" size="sm" onClick={() => handleEditTemplate(template)} className="p-1.5" title="Редактировать">
+                                      <i className="bi bi-pencil"></i>
                                     </Button>
-                                    <Button 
-                                      variant="outline-secondary" 
-                                      size="sm"
-                                      className="me-1"
-                                      onClick={() => handleOpenPreview(template)}
-                                    >
-                                      <i className="bi bi-eye me-1"></i>
-                                      Просмотр
+                                    <Button variant="outline-secondary" size="sm" onClick={() => handleOpenPreview(template)} className="p-1.5" title="Просмотр">
+                                      <i className="bi bi-eye"></i>
                                     </Button>
-                                    <Button 
-                                      variant="outline-info" 
-                                      size="sm"
-                                      className="me-1"
-                                      onClick={() => handleOpenCopyModal(template)}
-                                    >
-                                      <i className="bi bi-copy me-1"></i>
-                                      Копия
+                                    <Button variant="outline-info" size="sm" onClick={() => handleOpenCopyModal(template)} className="p-1.5" title="Копировать">
+                                      <i className="bi bi-copy"></i>
                                     </Button>
-                                    <Button 
-                                      variant={template.is_active ? 'warning' : 'success'} 
-                                      size="sm"
-                                      className="me-1"
-                                      onClick={() => handleToggleTemplate(template.id, template.is_active)}
-                                    >
-                                      {template.is_active ? 'Деакт.' : 'Акт.'}
+                                    <Button variant={template.is_active ? 'warning' : 'success'} size="sm" onClick={() => handleToggleTemplate(template.id, template.is_active)} className="p-1.5" title={template.is_active ? 'Деактивировать' : 'Активировать'}>
+                                      <i className={`bi ${template.is_active ? 'bi-pause-fill' : 'bi-play-fill'}`}></i>
                                     </Button>
-                                    <Button 
-                                      variant="outline-danger" 
-                                      size="sm"
-                                      onClick={() => handleDeleteTemplate(template.id)}
-                                    >
-                                      <i className="bi bi-trash me-1"></i>
-                                      Удалить
+                                    <Button variant="outline-danger" size="sm" onClick={() => handleDeleteTemplate(template.id)} className="p-1.5" title="Удалить">
+                                      <i className="bi bi-trash"></i>
                                     </Button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
                           </tbody>
                         </Table>
                       </div>
@@ -940,24 +910,24 @@ const Admin: React.FC = () => {
               <Tab eventKey="presets" title={
                 <span><i className="bi bi-collection-fill me-1"></i>Пресеты</span>
               }>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="h5 mb-0">
-                      <i className="bi bi-layers me-2 text-primary"></i>
-                      Предустановленные наборы показателей (пресеты)
+                <Card className="border-0 shadow-md">
+                  <CardHeader className="bg-white border-b border-border">
+                    <CardTitle className="h5 mb-0 flex items-center gap-2">
+                      <i className="bi bi-layers text-primary"></i>
+                      Предустановленные наборы показателей
                     </CardTitle>
                   </CardHeader>
-                  <CardBody>
+                  <CardBody className="p-6">
                     {presets.length === 0 ? (
-                      <div className="text-center py-4">
-                        <i className="bi bi-inbox display-1 text-muted"></i>
-                        <p className="text-muted mt-2">Нет пресетов</p>
-                        <p className="text-muted">Пресеты — это предустановленные наборы показателей из справочника. На их основе можно быстро создать шаблон анализа.</p>
+                      <div className="text-center py-8">
+                        <i className="bi bi-inbox display-1 text-text-muted"></i>
+                        <p className="text-text-muted mt-2">Нет пресетов</p>
+                        <p className="text-text-secondary text-sm">Пресеты — это предустановленные наборы показателей из справочника.</p>
                       </div>
                     ) : (
                       <div className="table-responsive">
-                        <Table striped hover>
-                          <thead>
+                        <Table striped hover className="rounded-lg overflow-hidden">
+                          <thead className="bg-background-gray">
                             <tr>
                               <th>Название</th>
                               <th>Категория</th>
@@ -970,18 +940,12 @@ const Admin: React.FC = () => {
                               <tr key={preset.id}>
                                 <td><strong>{preset.name}</strong></td>
                                 <td>
-                                  <Badge bg="secondary">
-                                    {getCategoryLabel(preset.category)}
-                                  </Badge>
+                                  <Badge bg="secondary">{getCategoryLabel(preset.category)}</Badge>
                                 </td>
-                                <td>{preset.indicators_count}</td>
+                                <td><Badge bg="info" className="font-mono">{preset.indicators_count}</Badge></td>
                                 <td className="text-end">
-                                  <Button 
-                                    variant="success" 
-                                    size="sm"
-                                    onClick={() => handleOpenCreateFromPresetModal(preset.id)}
-                                  >
-                                    <i className="bi bi-plus-circle me-1"></i>
+                                  <Button variant="success" size="sm" onClick={() => handleOpenCreateFromPresetModal(preset.id)} className="flex items-center gap-1">
+                                    <i className="bi bi-plus-circle"></i>
                                     Создать шаблон
                                   </Button>
                                 </td>
@@ -999,24 +963,20 @@ const Admin: React.FC = () => {
               <Tab eventKey="library" title={
                 <span><i className="bi bi-book me-1"></i>Справочник показателей</span>
               }>
-                <Card>
-                  <CardHeader className="d-flex justify-content-between align-items-center">
-                    <CardTitle className="h5 mb-0">
-                      <i className="bi bi-collection me-2 text-primary"></i>
+                <Card className="border-0 shadow-md">
+                  <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <CardTitle className="h5 mb-0 flex items-center gap-2">
+                      <i className="bi bi-collection text-primary"></i>
                       Справочник показателей
                     </CardTitle>
-                    <div className="d-flex gap-2 align-items-center">
+                    <div className="d-flex gap-2 align-items-center flex-wrap">
                       <div className="btn-group">
                         <button className="btn btn-outline-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                           <i className="bi bi-download me-1"></i>Экспорт
                         </button>
                         <ul className="dropdown-menu dropdown-menu-end">
-                          <li><button className="dropdown-item" onClick={() => handleExport('csv')}>
-                            <i className="bi bi-filetype-csv me-2"></i>CSV
-                          </button></li>
-                          <li><button className="dropdown-item" onClick={() => handleExport('excel')}>
-                            <i className="bi bi-file-earmark-excel me-2"></i>Excel (.xlsx)
-                          </button></li>
+                          <li><button className="dropdown-item" onClick={() => handleExport('csv')}><i className="bi bi-filetype-csv me-2"></i>CSV</button></li>
+                          <li><button className="dropdown-item" onClick={() => handleExport('excel')}><i className="bi bi-file-earmark-excel me-2"></i>Excel</button></li>
                         </ul>
                       </div>
                       <div className="btn-group">
@@ -1038,62 +998,39 @@ const Admin: React.FC = () => {
                           </li>
                         </ul>
                       </div>
-                      <Button variant="primary" size="sm" onClick={() => setShowLibModal(true)}>
-                        <i className="bi bi-plus-circle me-1"></i>
-                        Добавить
-                      </Button>
-                      <Button 
-                        variant="outline-info" 
-                        size="sm" 
-                        className="ms-2"
-                        onClick={() => { reset1CForm(); setShow1CModal(true); }}
-                      >
-                        <i className="bi bi-cloud-download me-1"></i>
-                        Загрузить из 1С
+                      <Button variant="primary" size="sm" onClick={() => setShowLibModal(true)} className="flex items-center gap-1">
+                        <i className="bi bi-plus-circle"></i>Добавить
                       </Button>
                     </div>
                   </CardHeader>
-                  <CardBody>
+                  <CardBody className="p-6">
                     {/* Search & filters */}
-                    <div className="row g-2 mb-3">
-                      <div className="col-md-5">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 p-4 bg-background-gray rounded-xl">
+                      <div className="md:col-span-2">
                         <div className="input-group input-group-sm">
                           <span className="input-group-text"><i className="bi bi-search"></i></span>
-                          <Form.Control
-                            type="text"
-                            placeholder="Поиск по названию, описанию, категории..."
-                            value={libSearch}
-                            onChange={(e) => handleLibSearchChange(e.target.value)}
-                          />
-                          {libSearch && (
-                            <button className="btn btn-outline-secondary" onClick={() => handleLibSearchChange('')}>
-                              <i className="bi bi-x"></i>
-                            </button>
-                          )}
+                          <Form.Control type="text" placeholder="Поиск по названию, описанию..." value={libSearch} onChange={(e) => handleLibSearchChange(e.target.value)} />
+                          {libSearch && (<button className="btn btn-outline-secondary" onClick={() => handleLibSearchChange('')}><i className="bi bi-x"></i></button>)}
                         </div>
                       </div>
-                      <div className="col-md-3">
-                        <Form.Select size="sm" value={libFilterCategory} onChange={(e) => handleLibFilterChange('category', e.target.value)}>
-                          <option value="">Все категории</option>
-                          <option value="quality">Качество</option>
-                          <option value="safety">Безопасность</option>
-                          <option value="performance">Производительность</option>
-                          <option value="chemical">Химический состав</option>
-                          <option value="physical">Физические свойства</option>
-                          <option value="microbiology">Микробиология</option>
-                        </Form.Select>
-                      </div>
-                      <div className="col-md-2">
-                        <Form.Select size="sm" value={libFilterType} onChange={(e) => handleLibFilterChange('type', e.target.value)}>
+                      <Form.Select size="sm" value={libFilterCategory} onChange={(e) => handleLibFilterChange('category', e.target.value)}>
+                        <option value="">Все категории</option>
+                        <option value="quality">Качество</option>
+                        <option value="safety">Безопасность</option>
+                        <option value="performance">Производительность</option>
+                        <option value="chemical">Химический состав</option>
+                        <option value="physical">Физические свойства</option>
+                        <option value="microbiology">Микробиология</option>
+                      </Form.Select>
+                      <div className="d-flex align-items-center gap-2">
+                        <Form.Select size="sm" value={libFilterType} onChange={(e) => handleLibFilterChange('type', e.target.value)} className="flex-1">
                           <option value="">Все типы</option>
                           <option value="number">Число</option>
                           <option value="text">Текст</option>
                           <option value="select">Выбор</option>
                         </Form.Select>
-                      </div>
-                      <div className="col-md-2 d-flex align-items-center">
-                        {libIsSearching && <Spinner animation="border" size="sm" className="me-2" />}
-                        <small className="text-muted">Найдено: {libIndicators.length}</small>
+                        {libIsSearching && <Spinner animation="border" size="sm" />}
+                        <small className="text-text-muted font-mono">{libIndicators.length}</small>
                       </div>
                     </div>
                     {libIndicators.length === 0 && !libIsSearching ? (
@@ -1162,83 +1099,126 @@ const Admin: React.FC = () => {
               <Tab eventKey="users" title={
                 <span><i className="bi bi-people-fill me-1"></i>Пользователи</span>
               }>
-                <Card>
-                  <CardHeader className="d-flex justify-content-between align-items-center">
-                    <CardTitle className="h5 mb-0">
-                      <i className="bi bi-person-lines-fill me-2 text-primary"></i>
+                <Card className="border-0 shadow-md">
+                  <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center">
+                    <CardTitle className="h5 mb-0 flex items-center gap-2">
+                      <i className="bi bi-person-lines-fill text-primary"></i>
                       Управление пользователями
                     </CardTitle>
-                    <Button variant="primary" size="sm" onClick={handleCreateUser}>
-                      <i className="bi bi-plus-circle me-1"></i>
-                      Создать пользователя
+                    <Button variant="primary" size="sm" onClick={handleCreateUser} className="flex items-center gap-1">
+                      <i className="bi bi-plus-circle"></i>
+                      Создать
                     </Button>
                   </CardHeader>
-                  <CardBody>
+                  <CardBody className="p-0">
                     {users.length === 0 ? (
-                      <div className="text-center py-4">
-                        <i className="bi bi-inbox display-1 text-muted"></i>
-                        <p className="text-muted mt-2">Нет пользователей</p>
+                      <div className="text-center py-8">
+                        <i className="bi bi-inbox display-1 text-text-muted"></i>
+                        <p className="text-text-muted mt-2">Нет пользователей</p>
                       </div>
                     ) : (
-                      <div className="table-responsive">
-                        <Table striped hover>
-                          <thead>
-                            <tr>
-                              <th>Имя пользователя</th>
-                              <th>Email</th>
-                              <th>Роль</th>
-                              <th>Статус</th>
-                              <th className="text-end">Действия</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {users.map((user) => (
-                              <tr key={user.id}>
-                                <td><strong>{user.username || '-'}</strong></td>
-                                <td>{user.email}</td>
-                                <td>
-                                  <Badge bg={user.is_admin ? 'primary' : 'secondary'}>
-                                    {user.is_admin ? 'ADMIN' : 'USER'}
-                                  </Badge>
-                                </td>
-                                <td>
-                                  <Badge bg={user.is_active ? 'success' : 'danger'}>
-                                    {user.is_active ? 'Активен' : 'Неактивен'}
-                                  </Badge>
-                                </td>
-                                <td className="text-end">
-                                  <Button 
-                                    variant="outline-primary" 
-                                    size="sm"
-                                    className="me-1"
-                                    onClick={() => handleEditUser(user)}
-                                  >
-                                    <i className="bi bi-pencil me-1"></i>
-                                    Ред.
-                                  </Button>
-                                  <Button 
-                                    variant={user.is_active ? 'warning' : 'success'} 
-                                    size="sm"
-                                    className="me-1"
-                                    onClick={() => handleToggleUser(user.id, user.is_active)}
-                                  >
-                                    {user.is_active ? 'Деактивировать' : 'Активировать'}
-                                  </Button>
-                                  <Button 
-                                    variant="outline-danger" 
-                                    size="sm"
-                                    onClick={() => handleDeleteUser(user.id)}
-                                  >
-                                    <i className="bi bi-trash me-1"></i>
-                                    Удалить
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </Table>
+                      <div className="divide-y divide-border">
+                        {users.map((user) => (
+                          <div key={user.id} className="flex items-center justify-between p-4 hover:bg-background-gray transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ${user.is_admin ? 'bg-primary' : 'bg-secondary'}`}>
+                                {(user.username || user.email || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-medium text-text-primary">{user.username || '—'}</p>
+                                <p className="text-sm text-text-muted">{user.email}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge bg={user.is_admin ? 'primary' : 'secondary'} className="text-xs">
+                                {user.is_admin ? 'Админ' : 'Пользователь'}
+                              </Badge>
+                              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${user.is_active ? 'bg-success-light text-success' : 'bg-danger-light text-danger'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-success' : 'bg-danger'}`} />
+                                {user.is_active ? 'Активен' : 'Заблокирован'}
+                              </div>
+                              <div className="flex gap-1">
+                                <Button variant="outline-primary" size="sm" onClick={() => handleEditUser(user)} className="p-1.5">
+                                  <i className="bi bi-pencil"></i>
+                                </Button>
+                                <Button variant={user.is_active ? 'warning' : 'success'} size="sm" onClick={() => handleToggleUser(user.id, user.is_active)} className="p-1.5">
+                                  <i className={`bi ${user.is_active ? 'bi-pause-fill' : 'bi-play-fill'}`}></i>
+                                </Button>
+                                <Button variant="outline-danger" size="sm" onClick={() => handleDeleteUser(user.id)} className="p-1.5">
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
+                  </CardBody>
+                </Card>
+              </Tab>
+
+              {/* Integrations Tab */}
+              <Tab eventKey="integrations" title={
+                <span><i className="bi bi-plug-fill me-1"></i>Интеграции</span>
+              }>
+                <Card className="border-0 shadow-md">
+                  <CardHeader className="bg-white border-b border-border">
+                    <CardTitle className="h5 mb-0 flex items-center gap-2">
+                      <i className="bi bi-plug text-primary"></i>
+                      Внешние интеграции
+                    </CardTitle>
+                  </CardHeader>
+                  <CardBody className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 1C Integration Card */}
+                      <div className="p-5 border border-border rounded-xl hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-warning-light rounded-xl flex items-center justify-center">
+                              <i className="bi bi-building text-warning text-xl"></i>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-text-primary">1С Предприятие</h3>
+                              <p className="text-sm text-text-muted">Импорт справочника показателей</p>
+                            </div>
+                          </div>
+                          <Badge bg="success" className="flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                            Доступно
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-text-secondary mb-4">
+                          Подключите 1С для автоматического импорта справочника показателей. Поддерживается маппинг полей.
+                        </p>
+                        <Button variant="primary" size="sm" onClick={() => { reset1CForm(); setShow1CModal(true); }} className="flex items-center gap-1">
+                          <i className="bi bi-gear"></i>
+                          Настроить
+                        </Button>
+                      </div>
+
+                      {/* API Settings Card */}
+                      <div className="p-5 border border-border rounded-xl hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-info-light rounded-xl flex items-center justify-center">
+                              <i className="bi bi-key text-info text-xl"></i>
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-text-primary">API Ключ</h3>
+                              <p className="text-sm text-text-muted">Управление доступом к API</p>
+                            </div>
+                          </div>
+                          <Badge bg="secondary">Системное</Badge>
+                        </div>
+                        <p className="text-sm text-text-secondary mb-4">
+                          Настройте API-ключ для защиты внешних запросов к системе.
+                        </p>
+                        <Button variant="outline-secondary" size="sm" disabled>
+                          <i className="bi bi-lock"></i>
+                          Скоро
+                        </Button>
+                      </div>
+                    </div>
                   </CardBody>
                 </Card>
               </Tab>
@@ -1249,144 +1229,93 @@ const Admin: React.FC = () => {
 
       {/* Template Modal */}
       <Modal show={showTemplateModal} onHide={() => setShowTemplateModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>
+        <Modal.Header closeButton className="border-b border-border">
+          <Modal.Title className="flex items-center gap-2">
+            <i className="bi bi-file-earmark-text text-primary"></i>
             {editingTemplate ? 'Редактирование шаблона' : 'Создание шаблона'}
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body className="p-6">
           <Form onSubmit={handleTemplateSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Label>Название шаблона</Form.Label>
-              <Form.Control
-                type="text"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                required
-              />
+            <Form.Group className="mb-4">
+              <Form.Label className="font-medium">Название шаблона</Form.Label>
+              <Form.Control type="text" value={templateName} onChange={(e) => setTemplateName(e.target.value)} className="h-12" required />
             </Form.Group>
             
-            <Form.Group className="mb-3">
-              <Form.Label>Описание</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={templateDescription}
-                onChange={(e) => setTemplateDescription(e.target.value)}
-              />
+            <Form.Group className="mb-4">
+              <Form.Label className="font-medium">Описание</Form.Label>
+              <Form.Control as="textarea" rows={3} value={templateDescription} onChange={(e) => setTemplateDescription(e.target.value)} />
             </Form.Group>
 
-            <Form.Group className="mb-3">
-              <Form.Check
-                type="switch"
-                label="Активен"
-                checked={templateActive}
-                onChange={(e) => setTemplateActive(e.target.checked)}
-              />
+            <Form.Group className="mb-4">
+              <Form.Check type="switch" label="Активен" checked={templateActive} onChange={(e) => setTemplateActive(e.target.checked)} />
             </Form.Group>
 
             {/* Показатели из справочника */}
-            <div className="mb-3">
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <h5 className="mb-0">
-                  <i className="bi bi-book me-1"></i>
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h5 className="mb-0 flex items-center gap-2">
+                  <i className="bi bi-book text-primary"></i>
                   Показатели из справочника
                 </h5>
-                <Button variant="outline-primary" size="sm" onClick={handleOpenSelectLibModal}>
-                  <i className="bi bi-plus-circle me-1"></i>
-                  Выбрать из справочника
+                <Button variant="outline-primary" size="sm" onClick={handleOpenSelectLibModal} className="flex items-center gap-1">
+                  <i className="bi bi-plus-circle"></i>Выбрать
                 </Button>
               </div>
               
               {templateLibIndicators.length === 0 ? (
-                <Alert variant="info" className="py-2">
-                  <small><i className="bi bi-info-circle-fill me-1"></i>Нет показателей из справочника. Нажмите "Выбрать из справочника", чтобы добавить.</small>
-                </Alert>
+                <div className="border-2 border-dashed border-border rounded-xl p-6 text-center bg-background-gray">
+                  <i className="bi bi-inbox text-text-muted text-2xl"></i>
+                  <p className="text-text-muted text-sm mt-2">Нет показателей. Нажмите "Выбрать" для добавления.</p>
+                </div>
               ) : (
-                <div>
+                <div className="space-y-2">
                   {templateLibIndicators.map((ref, index) => {
                     const libInd = getLibIndicator(ref.indicator_id);
                     const isFirst = index === 0;
                     const isLast = index === templateLibIndicators.length - 1;
                     return (
-                      <Card key={ref.indicator_id} className="mb-2 bg-light">
-                        <CardBody className="py-2">
-                          <div className="d-flex justify-content-between align-items-center">
-                            <div className="d-flex align-items-center gap-2">
-                              <div className="d-flex flex-column">
-                                <button 
-                                  className="btn btn-sm py-0 px-1 border-0 text-muted" 
-                                  disabled={isFirst}
-                                  onClick={() => handleMoveLibIndicator(ref.indicator_id, 'up')}
-                                  title="Переместить вверх"
-                                >
-                                  <i className="bi bi-chevron-up"></i>
-                                </button>
-                                <button 
-                                  className="btn btn-sm py-0 px-1 border-0 text-muted" 
-                                  disabled={isLast}
-                                  onClick={() => handleMoveLibIndicator(ref.indicator_id, 'down')}
-                                  title="Переместить вниз"
-                                >
-                                  <i className="bi bi-chevron-down"></i>
-                                </button>
+                      <div key={ref.indicator_id} className="p-3 border border-border rounded-xl bg-background-gray">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start gap-3">
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              <button className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isFirst} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'up')} title="Вверх">
+                                <i className="bi bi-chevron-up"></i>
+                              </button>
+                              <button className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isLast} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'down')} title="Вниз">
+                                <i className="bi bi-chevron-down"></i>
+                              </button>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
+                                <small className="text-text-muted font-mono">{libInd?.unit}</small>
+                                <Badge bg="info" pill>Справочник</Badge>
+                                {libInd?.category && <Badge bg="secondary">{getCategoryLabel(libInd.category)}</Badge>}
                               </div>
-                              <div className="flex-grow-1">
-                                 <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
-                                 <small className="text-muted ms-2">{libInd?.unit}</small>
-                                 <Badge bg="info" className="ms-2" pill>Из справочника</Badge>
-                                 {libInd?.category && (
-                                   <Badge bg="secondary" className="ms-1">{getCategoryLabel(libInd.category)}</Badge>
-                                 )}
-                                 {libInd?.description && (
-                                   <div className="text-muted small mt-1">{libInd.description}</div>
-                                 )}
-                                 <div className="d-flex gap-2 mt-2 align-items-center">
-                                   <small className="text-muted">Норма:</small>
-                                   <Form.Control
-                                     type="number"
-                                     size="sm"
-                                     style={{ width: '80px' }}
-                                     value={ref.min_value ?? ''}
-                                     onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'min', e.target.value)}
-                                     placeholder="от"
-                                   />
-                                   <span className="text-muted">—</span>
-                                   <Form.Control
-                                     type="number"
-                                     size="sm"
-                                     style={{ width: '80px' }}
-                                     value={ref.max_value ?? ''}
-                                     onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'max', e.target.value)}
-                                     placeholder="до"
-                                   />
-                                 </div>
-                               </div>
-                             </div>
-                             <Button 
-                               variant="outline-danger" 
-                               size="sm"
-                               onClick={() => handleRemoveLibIndicator(ref.indicator_id)}
-                               title="Удалить из шаблона"
-                             >
-                               <i className="bi bi-x me-1"></i>
-                               Убрать
-                             </Button>
+                              {libInd?.description && <p className="text-text-muted text-sm mt-1">{libInd.description}</p>}
+                              <div className="flex gap-2 mt-2 items-center">
+                                <small className="text-text-muted">Норма:</small>
+                                <Form.Control type="number" size="sm" style={{ width: '80px' }} value={ref.min_value ?? ''} onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'min', e.target.value)} placeholder="от" />
+                                <span className="text-text-muted">—</span>
+                                <Form.Control type="number" size="sm" style={{ width: '80px' }} value={ref.max_value ?? ''} onChange={(e) => handleUpdateLibNorm(ref.indicator_id, 'max', e.target.value)} placeholder="до" />
+                              </div>
+                            </div>
                           </div>
-                        </CardBody>
-                      </Card>
+                          <Button variant="outline-danger" size="sm" onClick={() => handleRemoveLibIndicator(ref.indicator_id)} className="p-1.5" title="Убрать">
+                            <i className="bi bi-x"></i>
+                          </Button>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </div>
-
           </Form>
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowTemplateModal(false)}>
-            Отмена
-          </Button>
+        <Modal.Footer className="border-t border-border">
+          <Button variant="secondary" onClick={() => setShowTemplateModal(false)}>Отмена</Button>
           <Button variant="primary" onClick={handleTemplateSubmit}>
             {editingTemplate ? 'Сохранить изменения' : 'Создать шаблон'}
           </Button>
