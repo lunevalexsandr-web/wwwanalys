@@ -1,104 +1,138 @@
 # Аудит проекта WWWAnalys
 
-**Дата:** 02.06.2026 (обновлено)
-**Версия проекта:** 1.0.0
+**Дата:** 17.06.2026 (обновлено)
+**Версия проекта:** 3.2.0
 
 ---
 
 ## 1. Общая информация
 
-**WWWAnalys** — веб-приложение для учета производственных анализов (пивоварение).
+**WWWAnalys** — веб-приложение для сбора, анализа и хранения данных различных показателей с библиотекой индикаторов, шаблонами анализа и интеграцией с внешними системами (1С Предприятие).
 
 | Компонент | Технологии |
 |-----------|------------|
-| **Backend** | FastAPI, SQLAlchemy 2.0, Python-JOSE, Passlib, Pydantic |
-| **Frontend** | React 18, TypeScript, React-Bootstrap, Vite |
-| **База данных** | SQLite (dev) / PostgreSQL 15 (prod) |
+| **Backend** | FastAPI, SQLAlchemy 2.0, Python-JOSE, Passlib (bcrypt), Pydantic |
+| **Frontend** | React 19, TypeScript, Bootstrap 5, React-Bootstrap, Vite |
+| **База данных** | SQLite (dev) / PostgreSQL (prod) |
 | **Аутентификация** | JWT-токены, Bearer-схема |
-| **Деплой** | Docker Compose (4 сервиса: db, backend, seed, frontend) |
+| **Деплой** | Docker Compose |
 
 ---
 
 ## 2. Структура проекта
 
-> **Примечание:** В корне репозитория находился старый неиспользуемый `backend/` (пустой alembic) и `docker-compose.yml` от другого проекта (`brewery`). Они удалены. Весь код — в директории `wwwanalys/`.
-
 ```
 wwwanalys/
-├── docker-compose.yml          # Оркестрация контейнеров
-├── AUDIT.md                    # Настоящий отчет
+├── docker-compose.yml           # Оркестрация контейнеров
+├── AUDIT.md                     # Настоящий отчет
+├── PROJECT_STRUCTURE.md         # Детальное описание структуры
 ├── backend/
-│   ├── .dockerignore           # 🆕 Исключения для Docker-образа
-│   ├── .env.example            # 🆕 Пример переменных окружения
+│   ├── .dockerignore            # Исключения для Docker-образа
+│   ├── .env.example             # Пример переменных окружения
+│   ├── .env                     # Файл окружения (не в Git)
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                 # Точка входа FastAPI
-│   ├── seed.py                 # Сид-данные (только ручной запуск)
-│   ├── test_api.py
-│   ├── test.db                 # SQLite для локальной разработки
-│   ├── alembic/                # Миграции (не настроены)
-│   │   └── versions/           # Пусто
+│   ├── main.py                  # Точка входа FastAPI
+│   ├── seed.py                  # Сид-данные (ручной запуск)
+│   ├── test_api.py              # Скрипт тестирования API
+│   ├── alembic/                 # Миграции Alembic
+│   │   └── versions/            # Файлы версий миграций
+│   ├── tests/                   # Тесты
+│   │   └── test_indicators.py   # Тесты показателей
 │   └── app/
 │       ├── core/
-│       │   ├── config.py       # ✅ Читает SECRET_KEY, API_KEY из env
-│       │   ├── database.py
-│       │   └── deps.py         # ✅ Единый get_db()
-│       ├── models/
+│       │   ├── config.py        # Конфигурация (env vars)
+│       │   ├── database.py      # Подключение к БД
+│       │   └── deps.py          # Зависимости (get_db, get_current_user)
+│       ├── models/              # 11 моделей данных
 │       │   ├── user.py
-│       │   ├── analysis_type.py
+│       │   ├── indicator_library.py
+│       │   ├── indicator_library_version.py
 │       │   ├── indicator.py
+│       │   ├── indicator_value.py
+│       │   ├── analysis_type.py
+│       │   ├── template_indicator.py
+│       │   ├── report.py
+│       │   ├── preset.py
 │       │   ├── process_log.py
-│       │   └── indicator_value.py
-│       ├── schemas/
-│       │   ├── report.py       # ✅ Report.values теперь IndicatorValueReport
-│       │   ├── ...
-│       ├── crud/
-│       │   └── ...
-│       ├── api/
+│       │   └── analysis_plan.py
+│       ├── schemas/             # 9 схем Pydantic
+│       ├── crud/                # 8 CRUD модулей
+│       ├── api/                 # 11 API эндпоинтов
 │       │   ├── auth.py
+│       │   ├── indicators.py
 │       │   ├── templates.py
-│       │   ├── reports.py      # ✅ Статические маршруты до динамических
-│       │   ├── analysis_type.py # ✅ Использует deps.get_db()
-│       │   ├── process_log.py   # ✅ Использует deps.get_db()
-│       │   └── external.py     # ✅ API_KEY из config, использует deps.get_db()
-│       └── auth/
-│           └── auth.py         # ✅ bcrypt вместо sha256_crypt
-└── frontend/
-    ├── Dockerfile
-    ├── package.json
-    ├── vite.config.ts
-    ├── tailwind.config.js
-    └── src/
-        ├── App.tsx
-        ├── pages/
-        │   ├── Dashboard.tsx   # ✅ setTimeout для сброса фильтра
-        │   ├── Admin.tsx
-        │   └── Login.tsx
-        └── ...
+│       │   ├── reports.py
+│       │   ├── analysis_type.py
+│       │   ├── presets.py
+│       │   ├── plans.py
+│       │   ├── statistics.py
+│       │   ├── process_log.py
+│       │   └── external.py
+│       ├── auth/
+│       │   └── auth.py          # JWT + bcrypt
+│       └── services/
+│           └── external_integration.py  # Интеграция с 1С
+├── frontend/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── eslint.config.js
+│   ├── tailwind.config.js
+│   ├── index.html
+│   └── src/
+│       ├── main.tsx             # Точка входа
+│       ├── App.tsx              # Маршрутизация
+│       ├── App.css
+│       ├── index.css            # Глобальные стили + Bootstrap
+│       ├── components/          # 11 компонентов
+│       │   ├── AuthModal.tsx    # Модальное окно авторизации (SaaS)
+│       │   ├── AuthModal.css    # Стили с CSS-переменными
+│       │   ├── AppHeader.tsx
+│       │   ├── AppToast.tsx
+│       │   ├── AlertToast.tsx
+│       │   ├── PageHeader.tsx
+│       │   ├── ActionButtons.tsx
+│       │   ├── IndicatorInput.tsx
+│       │   ├── IndicatorPreview.tsx
+│       │   ├── IndicatorSelector.tsx
+│       │   └── TemplateBuilder.tsx
+│       ├── pages/               # 4 страницы
+│       │   ├── Login.tsx
+│       │   ├── Dashboard.tsx
+│       │   ├── Admin.tsx
+│       │   └── Plans.tsx
+│       ├── context/
+│       │   └── AuthContext.tsx  # Контекст аутентификации
+│       ├── hooks/
+│       │   └── useToast.ts      # Хук уведомлений
+│       ├── types/
+│       │   └── index.ts         # TypeScript типы
+│       └── api/
+│           └── axios.ts         # HTTP клиент
+├── docs/
+│   └── API.md                   # Документация API
+└── README.md                    # Основная документация
 ```
 
 ---
 
-## 3. 🔴 ИСПРАВЛЕННЫЕ КРИТИЧЕСКИЕ ПРОБЛЕМЫ
+## 3. 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
 
 ### 3.1 Безопасность ✅
 
 | № | Файл | Проблема | Статус | Исправление |
 |---|------|----------|--------|-------------|
-| 1 | `config.py` | Хардкодный `SECRET_KEY` | ✅ Исправлено | Читается из env, в .env.example шаблон |
+| 1 | `config.py` | Хардкодный `SECRET_KEY` | ✅ Исправлено | Читается из env |
 | 2 | `external.py` | Хардкодный `API_KEY` | ✅ Исправлено | Читается из `settings.api_key` |
 | 3 | `main.py` | CORS открыт всем `["*"]` | ✅ Исправлено | Читается из `settings.cors_origins_list` |
 | 4 | `auth.py` | `sha256_crypt` вместо `bcrypt` | ✅ Исправлено | `schemes=["bcrypt"]` |
 
 ### 3.2 Дублирование `get_db()` ✅
 
-| Файл | Статус |
-|------|--------|
-| `api/analysis_type.py` | ✅ Исправлено — использует `from app.core.deps import get_db` |
-| `api/process_log.py` | ✅ Исправлено — использует `from app.core.deps import get_db` |
-| `api/external.py` | ✅ Исправлено — использует `from app.core.deps import get_db` |
+Все API-модули используют единый `get_db()` из `app.core.deps`.
 
-### 3.3 Дублирование API-роутов ⚠️ НЕ ИСПРАВЛЕНО
+### 3.3 Дублирование API-роутов ⚠️
 
 | Префикс | Файл | Статус |
 |---------|------|--------|
@@ -107,62 +141,46 @@ wwwanalys/
 
 Рекомендуется удалить `/analysis-types/` или сделать его редиректом.
 
-### 3.4 Несоответствие схем ✅
+---
 
-| Файл | Проблема | Статус |
-|------|----------|--------|
-| `schemas/report.py` | `values: List[IndicatorSchema]` → `IndicatorValueReport` | ✅ Исправлено |
-| `schemas/report.py` | `from_orm_with_alias` возвращал пустой `values` | ✅ Исправлено — наполняется из `obj.indicator_values` |
-
-### 3.5 Docker-деплой ✅
+## 4. 🟡 СРЕДНИЕ ПРОБЛЕМЫ
 
 | № | Проблема | Статус |
 |---|----------|--------|
-| 1 | Отсутствует `.dockerignore` | ✅ Добавлен `backend/.dockerignore` |
-| 2 | Volume перетирает pip-пакеты | ⚠️ Осталось — volume оставлен для hot-reload |
-| 3 | seed.py при каждом запуске | ✅ Вынесен в отдельный сервис `seed` с профилем |
-| 4 | `DATABASE_URL` не читается | ✅ Исправлено — config.py читает `DATABASE_URL` из env |
+| 1 | Alembic не настроен | ⚠️ Требует инициализации |
+| 2 | Нет версионирования API | ⚠️ Не реализовано |
+| 3 | Порядок маршрутов в reports.py | ✅ Исправлено |
 
 ---
 
-## 4. 🟡 ИСПРАВЛЕННЫЕ СРЕДНИЕ ПРОБЛЕМЫ
-
-| № | Проблема | Статус |
-|---|----------|--------|
-| 1 | Alembic не настроен | ⚠️ НЕ ИСПРАВЛЕНО — требует инициализации |
-| 2 | Нет версионирования API | ⚠️ НЕ ИСПРАВЛЕНО |
-| 3 | `null` в URL при сбросе фильтра | ✅ Исправлено — `setTimeout(fetchReports, 0)` |
-| 4 | Порядок маршрутов в reports.py | ✅ Исправлено — статические маршруты до `/{report_id}` |
-
----
-
-## 5. 🟢 ЗЕЛЕНАЯ ЗОНА (сделано хорошо)
+## 5. 🟢 ЗЕЛЁНАЯ ЗОНА (сделано хорошо)
 
 | Аспект | Оценка |
 |--------|--------|
-| **Архитектура** | ✅ Отлично |
-| **Модели данных** | ✅ Отлично |
-| **Frontend UI** | ✅ Отлично |
-| **Seed data** | ✅ Хорошо |
-| **Типизация** | ✅ Хорошо |
-| **Локализация** | ✅ Отлично |
-| **Аутентификация** | ✅ Хорошо |
-| **CRUD-операции** | ✅ Хорошо |
-| **Фильтрация отчетов** | ✅ Хорошо |
-| **Docker Compose** | ✅ Хорошо (после исправлений) |
+| **Архитектура** | ✅ Отлично — разделение на слои (API, CRUD, Models, Schemas) |
+| **Модели данных** | ✅ Отлично — 11 моделей с правильными связями |
+| **Frontend UI** | ✅ Отлично — Bootstrap 5, компонентный подход |
+| **Аутентификация** | ✅ Отлично — JWT + bcrypt |
+| **Типизация** | ✅ Хорошо — TypeScript на фронтенде, Pydantic на бэкенде |
+| **Локализация** | ✅ Отлично — весь интерфейс на русском |
+| **CRUD-операции** | ✅ Хорошо — полный CRUD для всех сущностей |
+| **Docker** | ✅ Хорошо — docker-compose с профилями |
+| **AuthModal** | ✅ Новое — SaaS-стиль, CSS-переменные, адаптивность |
 
 ---
 
-## 6. 📋 ОСТАВШИЕСЯ РЕКОМЕНДАЦИИ
+## 6. 📋 РЕКОМЕНДАЦИИ
 
 ### Приоритет 2 (среднесрочно)
 - [ ] Удалить или задепрекейтить дублирующийся роут `/analysis-types/`
-- [ ] Настроить чтение `DATABASE_URL` из переменных окружения в `config.py` ✅
+- [ ] Настроить Alembic для автоматических миграций
+- [ ] Добавить версионирование API (`/v1/`)
 
 ### Приоритет 3 (долгосрочно)
-- [ ] Настроить Alembic для миграций схемы БД
-- [ ] Добавить версионирование API (`/v1/`)
-- [ ] Ограничить CORS конкретными доменами
+- [ ] Ограничить CORS конкретными доменами в production
+- [ ] Добавить rate limiting
+- [ ] Добавить логирование действий пользователей
+- [ ] Покрыть тестами все API-эндпоинты
 
 ---
 
@@ -187,64 +205,77 @@ docker compose --profile seed run seed
 ## 8. 📊 Модель данных (ER-диаграмма)
 
 ```
-┌──────────────┐       ┌────────────────┐       ┌────────────────┐
-│     User     │       │  AnalysisType  │       │   ProcessLog   │
-├──────────────┤       ├────────────────┤       ├────────────────┤
-│ id           │──┐    │ id             │──┐    │ id             │
-│ username     │  │    │ name           │  │    │ batch_number   │
-│ email        │  │    │ description    │  │    │ analysis_type_id│─┘
-│ hashed_pwd   │  │    │ created_by     │──┤    │ created_by     │──┐
-│ is_active    │  │    │ is_active      │  │    │ status         │  │
-│ is_admin     │  └──┐ │ created_at     │  │    │ started_at     │  │
-└──────────────┘      │ └────────────────┘  │    │ completed_at    │  │
-                      │                    │    │ notes           │  │
-┌──────────────┐      │ ┌────────────────┐  │    └────────────────┘  │
-│  Indicator   │      │ │ IndicatorValue │  │                        │
-├──────────────┤      │ ├────────────────┤  │                        │
-│ id           │      │ │ id             │  │                        │
-│ name         │      │ │ indicator_id   │──┘                        │
-│ unit         │      │ │ process_log_id │──┘                        │
-│ min_value    │      │ │ value (float)  │                           │
-│ max_value    │      │ │ text_value     │                           │
-│ data_type    │      │ │ is_normal      │                           │
-│ options      │      │ │ measured_at    │                           │
-│ analysis_type_id│───┘  │ notes          │                           │
-└──────────────┘       └────────────────┘                           │
-                                                                    │
-                    ┌────────────────┐                              │
-                    │  Связи         │                              │
-                    ├────────────────┤                              │
-                    │ User → AnalysisType │                         │
-                    │ User → ProcessLog   │                         │
-                    │ AnalysisType → Indicator │                    │
-                    │ AnalysisType → ProcessLog │                   │
-                    │ ProcessLog → IndicatorValue │                │
-                    │ Indicator → IndicatorValue │                  │
-                    └────────────────┘                              │
+┌──────────────┐       ┌────────────────────┐       ┌────────────────────┐
+│     User     │       │  IndicatorLibrary  │       │ IndicatorLibrary   │
+├──────────────┤       ├────────────────────┤       │      Version       │
+│ id           │──┐    │ id                 │──┐    ├────────────────────┤
+│ username     │  │    │ name               │  │    │ id                 │
+│ email        │  │    │ description        │  │    │ library_id         │──┘
+│ hashed_pwd   │  │    │ category           │  │    │ version            │
+│ is_active    │  │    │ created_by         │──┤    │ created_at         │
+│ is_admin     │  └──┐ │ created_at         │  │    │ created_by         │
+└──────────────┘     │ └────────────────────┘  │    └────────────────────┘
+                     │                         │
+┌──────────────┐     │ ┌────────────────────┐  │    ┌────────────────────┐
+│  Indicator   │     │ │      Indicator     │  │    │   AnalysisType     │
+├──────────────┤     │ ├────────────────────┤  │    ├────────────────────┤
+│ id           │     │ │ id                 │  │    │ id                 │
+│ library_id   │─────┘ │ library_id         │──┘    │ name               │
+│ name         │       │ name               │       │ description        │
+│ unit         │       │ unit               │       │ created_by         │──┐
+│ data_type    │       │ data_type          │       │ is_active          │  │
+│ options      │       │ options            │       │ created_at         │  │
+│ description  │       │ description        │       └────────────────────┘  │
+│ category     │       │ category           │                               │
+│ is_required  │       │ is_required        │       ┌────────────────────┐  │
+│ default_value│       │ default_value      │       │  TemplateIndicator │  │
+│ validation   │       │ validation_rules   │       ├────────────────────┤  │
+│ created_by   │       │ created_by         │       │ id                 │  │
+│ created_at   │       │ created_at         │       │ template_id        │──┘
+└──────────────┘       └────────────────────┘       │ indicator_id       │──┐
+        │                        │                  │ min_value          │  │
+        │                        │                  │ max_value          │  │
+        │                        │                  │ sort_order         │  │
+        │                        │                  └────────────────────┘  │
+        │                        │                                          │
+        │  ┌────────────────────┐│  ┌────────────────────┐  ┌──────────────┐
+        │  │  IndicatorValue    ││  │    ProcessLog      │  │ AnalysisPlan │
+        │  ├────────────────────┤│  ├────────────────────┤  ├──────────────┤
+        │  │ id                 ││  │ id                 │  │ id           │
+        │  │ indicator_id       │┘  │ batch_number       │  │ name         │
+        │  │ process_log_id     │───┤ analysis_type_id   │──┤ description  │
+        │  │ value (float)      │   │ created_by         │──┤ analysis_type│
+        │  │ text_value         │   │ status             │  │ created_by   │
+        │  │ is_normal          │   │ started_at         │  │ status       │
+        │  └────────────────────┘   │ completed_at       │  └──────────────┘
+        │                           │ notes              │
+        │                           └────────────────────┘
+        │
+        │   ┌────────────────────┐
+        └──►│      Preset        │
+            ├────────────────────┤
+            │ id                 │
+            │ name               │
+            │ description        │
+            │ category           │
+            │ created_by         │
+            └────────────────────┘
 ```
 
 ---
 
-## 9. Изменения в этом обновлении
+## 9. История изменений
 
-| № | Файл | Что сделано |
-|---|------|-------------|
-| 1 | `config.py` | ✅ Добавлены `cors_origins`, `api_key`, свойство `cors_origins_list` |
-| 2 | `auth.py` | ✅ `sha256_crypt` → `bcrypt` |
-| 3 | `main.py` | ✅ CORS из `settings.cors_origins_list`, импорт `settings` |
-| 4 | `analysis_type.py` | ✅ Удален дублирующийся `get_db()`, импорт из `deps` |
-| 5 | `process_log.py` | ✅ Удален дублирующийся `get_db()`, импорт из `deps` |
-| 6 | `external.py` | ✅ API_KEY из config, `get_db()` из deps |
-| 7 | `report.py` (schemas) | ✅ `IndicatorValueReport` вместо `IndicatorSchema`, наполнение `values` |
-| 8 | `reports.py` | ✅ Статические маршруты до динамического `/{report_id}` |
-| 9 | `docker-compose.yml` | ✅ Seed вынесен в отдельный сервис с профилем, env vars |
-| 10 | `.dockerignore` | 🆕 Добавлен |
-| 11 | `.env.example` | 🆕 Добавлен |
-| 12 | `Dashboard.tsx` | ✅ `setTimeout` для сброса фильтра |
-| 13 | `AUDIT.md` | ✅ Обновлен |
-| 14 | `backend/` (корень) | 🗑️ Удалён — старый пустой проект (`brewery`) |
-| 15 | `docker-compose.yml` (корень) | 🗑️ Удалён — неиспользуемый, от другого проекта |
+| Версия | Дата | Что сделано |
+|--------|------|-------------|
+| v1.0.0 | — | Initial release with admin panel and analysis constructor |
+| v2.0.0 | — | Save current version |
+| v3.0.0 | — | Full fix for reports and templates with UI improvements |
+| v3.0.0-bootstrap | — | Migrate frontend from Tailwind CSS to Bootstrap 5 |
+| v3.1.0 | — | Add indicator library with versioning and presets support |
+| v3.2.0 | 02.06.2026 | Remove template_type, remove custom indicators, add 1C integration |
+| v3.2.0 | 17.06.2026 | Add AuthModal component (SaaS-style), add Plans page, update documentation |
 
 ---
 
-*Отчет создан: 02.06.2026, последнее обновление: 02.06.2026*
+*Отчёт создан: 02.06.2026, последнее обновление: 17.06.2026*

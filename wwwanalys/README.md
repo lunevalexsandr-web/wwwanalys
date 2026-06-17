@@ -12,6 +12,7 @@
 - 📚 Библиотека показателей с версионированием и категориями
 - 📝 Заполнение показателей с поддержкой числовых, текстовых и select типов
 - 📈 Просмотр истории отчётов с фильтрацией и статистикой
+- 📋 Планирование анализов и управление планами
 - 👤 Аутентификация пользователей (администратор/пользователь)
 - 🔗 Интеграция с 1С Предприятие для импорта справочника показателей
 - 📥 Импорт/экспорт показателей (CSV, JSON, Excel)
@@ -22,31 +23,34 @@
 
 ```
 wwwanalys/
-├── backend/                 # Бэкенд на FastAPI
+├── backend/                    # Бэкенд на FastAPI
 │   ├── app/
-│   │   ├── api/            # API эндпоинты
-│   │   ├── auth/           # Аутентификация
-│   │   ├── core/           # Конфигурация и зависимости
-│   │   ├── crud/           # Бизнес-логика
-│   │   ├── models/         # SQLAlchemy модели
-│   │   ├── schemas/        # Pydantic схемы
-│   │   └── services/       # Внешние сервисы (интеграция с 1С)
-│   ├── main.py             # Точка входа
-│   ├── requirements.txt    # Зависимости
-│   └── .env.example       # Пример конфигурации
-├── frontend/               # Фронтенд на React
+│   │   ├── api/               # API эндпоинты (11 модулей)
+│   │   ├── auth/              # Аутентификация (JWT, bcrypt)
+│   │   ├── core/              # Конфигурация и зависимости
+│   │   ├── crud/              # CRUD операции (8 модулей)
+│   │   ├── models/            # SQLAlchemy модели (11 модулей)
+│   │   ├── schemas/           # Pydantic схемы (9 модулей)
+│   │   └── services/          # Внешние сервисы (интеграция с 1С)
+│   ├── alembic/               # Миграции Alembic
+│   ├── tests/                 # Тесты
+│   ├── main.py                # Точка входа
+│   ├── requirements.txt       # Зависимости
+│   └── .env.example           # Пример конфигурации
+├── frontend/                  # Фронтенд на React
 │   ├── src/
-│   │   ├── components/     # UI компоненты
-│   │   ├── pages/         # Страницы
-│   │   ├── hooks/         # Кастомные хуки
-│   │   ├── types/         # TypeScript типы
-│   │   └── api/           # API клиент
-│   ├── package.json       # Зависимости
-│   └── vite.config.ts     # Конфигурация Vite
-├── docs/                   # Документация
-│   └── API.md             # API документация
-├── docker-compose.yml     # Docker Compose
-└── README.md              # Документация
+│   │   ├── components/        # UI компоненты (AuthModal, Header, ...)
+│   │   ├── pages/             # Страницы (Login, Dashboard, Admin, Plans)
+│   │   ├── context/           # React контексты (AuthContext)
+│   │   ├── hooks/             # Кастомные хуки (useToast)
+│   │   ├── types/             # TypeScript типы
+│   │   └── api/               # API клиент (axios)
+│   ├── package.json           # Зависимости
+│   └── vite.config.ts         # Конфигурация Vite
+├── docs/                      # Документация
+│   └── API.md                 # API документация
+├── docker-compose.yml         # Docker Compose
+└── README.md                  # Документация
 ```
 
 ## Технологии
@@ -62,9 +66,9 @@ wwwanalys/
 - **httpx** — HTTP клиент для интеграции с 1С
 
 ### Фронтенд
-- **React 18** — UI библиотека
+- **React 19** — UI библиотека
 - **TypeScript** — статическая типизация
-- **Bootstrap 5** — CSS фреймворк
+- **Bootstrap 5 + React-Bootstrap** — CSS фреймворк
 - **React Router DOM** — маршрутизация
 - **Vite** — сборщик проектов
 - **Axios** — HTTP клиент
@@ -106,6 +110,7 @@ docker-compose up -d
 ### Аутентификация
 - `POST /auth/token` — Получение JWT токена
 - `POST /auth/register` — Регистрация пользователя
+- `GET /auth/users/me` — Текущий пользователь
 
 ### Шаблоны (Templates)
 - `GET /api/templates/` — Получение всех шаблонов
@@ -147,6 +152,12 @@ docker-compose up -d
 - `PUT /api/presets/{id}` — Обновление пресета
 - `DELETE /api/presets/{id}` — Удаление пресета
 
+### Планы анализа (Plans)
+- `GET /api/plans/` — Получение всех планов
+- `POST /api/plans/` — Создание плана
+- `PUT /api/plans/{id}` — Обновление плана
+- `DELETE /api/plans/{id}` — Удаление плана
+
 ### Отчёты (Reports)
 - `GET /api/reports/` — Получение списка отчётов
 - `POST /api/reports/` — Создание отчёта
@@ -157,6 +168,10 @@ docker-compose up -d
 ### Статистика
 - `GET /api/statistics/` — Получение статистики по отчётам
 
+### Логирование процессов
+- `GET /api/process-log/` — Получение логов процессов
+- `POST /api/process-log/` — Создание записи лога
+
 ## Модели данных
 
 ### Пользователь (User)
@@ -164,34 +179,59 @@ docker-compose up -d
 - username: str
 - email: str
 - is_admin: bool
-- hashed_password: str
-
-### Шаблон анализа (AnalysisType)
-- id: int
-- name: str
-- description: str
-- created_by: int
 - is_active: bool
-- template_indicators: List[TemplateIndicator] — показатели из справочника
+- hashed_password: str
 
 ### Библиотека показателей (IndicatorLibrary)
 - id: int
+- name: str
+- description: str
+- category: str
+- created_by: int
+- created_at: datetime
+
+### Версия библиотеки (IndicatorLibraryVersion)
+- id: int
+- library_id: int
+- version: int
+- created_at: datetime
+- created_by: int
+
+### Показатель (Indicator)
+- id: int
+- library_id: int
 - name: str
 - unit: str
 - data_type: str ('number', 'text', 'select')
 - options: str (JSON для select)
 - description: str
-- category: str ('quality', 'safety', 'performance', 'chemical', 'physical', 'microbiology')
+- category: str
 - is_required: bool
 - default_value: str
 - validation_rules: str (JSON)
 - created_by: int
 - created_at: datetime
 
+### Значение показателя (IndicatorValue)
+- id: int
+- indicator_id: int
+- value: float | null
+- text_value: str | null
+- is_normal: bool
+- process_log_id: int
+
+### Тип анализа (AnalysisType)
+- id: int
+- name: str
+- description: str
+- created_by: int
+- is_active: bool
+- template_indicators: List[TemplateIndicator]
+
 ### Показатель шаблона (TemplateIndicator)
 - id: int
 - template_id: int
-- indicator_id: int (ссылка на IndicatorLibrary)
+- indicator_id: int (ссылка на Indicator)
 - min_value: float | null
 - max_value: float | null
 - sort_order: int
@@ -204,9 +244,16 @@ docker-compose up -d
 - description: str
 - category: str
 - created_by: int
-- indicators: List[PresetIndicator]
 
-### Отчёт (ProcessLog)
+### План анализа (AnalysisPlan)
+- id: int
+- name: str
+- description: str
+- analysis_type_id: int
+- created_by: int
+- status: str
+
+### Процесс лог (ProcessLog)
 - id: int
 - batch_number: str
 - analysis_type_id: int
@@ -214,14 +261,6 @@ docker-compose up -d
 - status: str ('pending', 'completed', 'failed')
 - started_at: datetime
 - notes: str | null
-
-### Значение показателя (IndicatorValue)
-- id: int
-- indicator_id: int
-- value: float | null
-- text_value: str | null
-- is_normal: bool
-- process_log_id: int
 
 ## Интеграция с 1С Предприятие
 
@@ -350,7 +389,7 @@ docker build -t wwwanalys-frontend ./frontend
 
 ## Контакты
 
-Для вопросов ипредложений:
+Для вопросов и предложений:
 - GitHub Issues: [wwwanalys/issues](https://github.com/lunevalexsandr-web/wwwanalys/issues)
 
 ---
