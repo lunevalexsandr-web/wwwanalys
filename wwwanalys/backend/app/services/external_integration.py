@@ -1,15 +1,18 @@
 """
 Сервис для интеграции с внешними системами (1С Предприятие и др.)
-Поддерживает импорт справочника показателей из внешних источников.
+Поддерживает:
+- Импорт справочника показателей из внешних источников
+- Синхронизацию шаблонов анализов с 1С
+- Синхронизацию планов анализов с 1С
 """
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.models import IndicatorLibrary
+from app.models import IndicatorLibrary, AnalysisType, TemplateIndicator, AnalysisPlan, PlanItem
 from app.schemas.indicator_library import (
     IndicatorLibraryCreate,
     BatchCreateItem,
@@ -43,7 +46,8 @@ class OneCIntegrationService:
     
     Поддерживает:
     - Загрузку справочника показателей из 1С
-    - Синхронизацию данных
+    - Синхронизацию шаблонов анализов
+    - Синхронизацию планов анализов
     - Обработку ошибок и логирование
     """
 
@@ -77,6 +81,32 @@ class OneCIntegrationService:
             await self._client.aclose()
             self._client = None
 
+    async def _fetch_list(
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Универсальный метод для загрузки списка из 1С."""
+        client = await self._get_client()
+        response = await client.get(endpoint, params=params or {})
+        response.raise_for_status()
+        data = response.json()
+
+        if isinstance(data, list):
+            return data
+        elif isinstance(data, dict):
+            if key and key in data:
+                return data[key]
+            for k in ("items", "data", "results", "value"):
+                if k in data:
+                    return data[k]
+            return [data]
+        else:
+            raise ValueError(f"Unexpected response format: {type(data)}")
+
+    # ==================== Показатели ====================
+
     async def fetch_indicators_from_1c(
         self,
         endpoint: str = "/api/v1/indicators",
@@ -84,75 +114,20 @@ class OneCIntegrationService:
     ) -> List[Dict[str, Any]]:
         """
         Загрузить список показателей из 1С.
-        
-        Args:
-            endpoint: API-эндпоинт в 1С для получения показателей
-            params: Дополнительные параметры запроса
-            
-        Returns:
-            Список показателей в формате 1С
-            
-        Raises:
-            httpx.HTTPError: При ошибке HTTP-запроса
-            ValueError: При невалидном ответе
         """
-        client = await self._get_client()
-        
-        try:
-            response = await client.get(endpoint, params=params or {})
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            # Поддержка разных форматов ответа от 1С
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict):
-                # Стандартный формат 1С: { "items": [...] }
-                if "items" in data:
-                    return data["items"]
-                elif "data" in data:
-                    return data["data"]
-                elif "indicators" in data:
-                    return data["indicators"]
-                else:
-                    # Возможно, вернулся один объект
-                    return [data]
-            else:
-                raise ValueError(f"Unexpected response format: {type(data)}")
-                
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching indicators from 1C: {e.response.status_code} - {e.response.text}")
-            raise
-        except httpx.RequestError as e:
-            logger.error(f"Request error fetching indicators from 1C: {str(e)}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error fetching indicators from 1C: {str(e)}")
-            raise
+        return await self._fetch_list(endpoint, params)
 
     async def fetch_indicator_by_id_from_1c(
         self,
         indicator_id: str,
         endpoint_prefix: str = "/api/v1/indicators",
     ) -> Optional[Dict[str, Any]]:
-        """
-        Загрузить один показатель из 1С по ID.
-        
-        Args:
-            indicator_id: ID показателя в системе 1С
-            endpoint_prefix: Префикс API-эндпоинта
-            
-        Returns:
-            Данные показателя или None, если не найден
-        """
+        """Загрузить один показатель из 1С по ID."""
         client = await self._get_client()
-        
         try:
             response = await client.get(f"{endpoint_prefix}/{indicator_id}")
             response.raise_for_status()
             return response.json()
-            
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 return None
@@ -162,22 +137,167 @@ class OneCIntegrationService:
             logger.error(f"Error fetching indicator {indicator_id} from 1C: {str(e)}")
             raise
 
+    # ==================== Шаблоны анализов ====================
+
+    async def fetch_templates_from_1c(
+        self,
+        endpoint: str = "/api/v1/analysis-templates",
+        params: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Загрузить список шаблонов анализов из 1С.
+        
+        Ожидаемый формат ответа 1С:
+        [
+            {
+                "id": 1,
+                "name": "Общий анализ крови",
+                "description": "Шаблон для общего анализа",
+                "is_active": true,
+                "indicators": [
+                    {"indicator_id": 1, "min_value": 3.5, "max_value": 5.5, "sort_order": 0},
+                    ...
+                ]
+            }
+        ]
+        """
+        return await self._fetch_list(endpoint, params)
+
+    async def fetch_template_by_id_from_1c(
+        self,
+        template_id: str,
+        endpoint_prefix: str = "/api/v1/analysis-templates",
+    ) -> Optional[Dict[str, Any]]:
+        """Загрузить один шаблон из 1С по ID."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"{endpoint_prefix}/{template_id}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"HTTP error fetching template {template_id} from 1C: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching template {template_id} from 1C: {str(e)}")
+            raise
+
+    # ==================== Планы анализов ====================
+
+    async def fetch_plans_from_1c(
+        self,
+        endpoint: str = "/api/v1/analysis-plans",
+        params: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Загрузить список планов анализов из 1С.
+        
+        Ожидаемый формат ответа 1С:
+        [
+            {
+                "id": 1,
+                "name": "План на 18.06.2026",
+                "description": "План анализов на день",
+                "plan_date": "2026-06-18",
+                "items": [
+                    {
+                        "template_id": 1,
+                        "batch_number": "П-001",
+                        "sort_order": 0
+                    },
+                    ...
+                ]
+            }
+        ]
+        """
+        return await self._fetch_list(endpoint, params)
+
+    async def fetch_plan_by_id_from_1c(
+        self,
+        plan_id: str,
+        endpoint_prefix: str = "/api/v1/analysis-plans",
+    ) -> Optional[Dict[str, Any]]:
+        """Загрузить один план из 1С по ID."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"{endpoint_prefix}/{plan_id}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"HTTP error fetching plan {plan_id} from 1C: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching plan {plan_id} from 1C: {str(e)}")
+            raise
+
+    # ==================== Отправка данных в 1С ====================
+
+    async def push_report_to_1c(
+        self,
+        report_data: Dict[str, Any],
+        endpoint: str = "/api/v1/reports",
+    ) -> Dict[str, Any]:
+        """
+        Отправить отчёт в 1С.
+        
+        Args:
+            report_data: Данные отчёта для отправки
+            endpoint: API-эндпоинт в 1С
+            
+        Returns:
+            Ответ от 1С
+        """
+        client = await self._get_client()
+        try:
+            response = await client.post(endpoint, json=report_data)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error pushing report to 1C: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Error pushing report to 1C: {str(e)}")
+            raise
+
+    async def push_plan_to_1c(
+        self,
+        plan_data: Dict[str, Any],
+        endpoint: str = "/api/v1/analysis-plans",
+    ) -> Dict[str, Any]:
+        """
+        Отправить план в 1С.
+        
+        Args:
+            plan_data: Данные плана для отправки
+            endpoint: API-эндпоинт в 1С
+            
+        Returns:
+            Ответ от 1С
+        """
+        client = await self._get_client()
+        try:
+            response = await client.post(endpoint, json=plan_data)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error pushing plan to 1C: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Error pushing plan to 1C: {str(e)}")
+            raise
+
+    # ==================== Проверка связи ====================
+
     async def test_connection(self) -> Dict[str, Any]:
         """
         Проверить подключение к 1С.
-        
-        Returns:
-            Словарь с результатом проверки:
-            - status: "ok" или "error"
-            - message: Описание результата
-            - timestamp: Время проверки
         """
         client = await self._get_client()
-        
         try:
-            # Пробуем выполнить простой запрос
             response = await client.get("/api/v1/health", timeout=10)
-            
             if response.status_code == 200:
                 return {
                     "status": "ok",
@@ -190,7 +310,6 @@ class OneCIntegrationService:
                     "message": f"1C responded with status {response.status_code}",
                     "timestamp": datetime.utcnow().isoformat(),
                 }
-                
         except httpx.ConnectError:
             return {
                 "status": "error",
@@ -205,21 +324,15 @@ class OneCIntegrationService:
             }
 
 
+# ==================== Трансформация данных ====================
+
 def transform_1c_indicator_to_local(
     indicator_1c: Dict[str, Any],
     field_mapping: Optional[Dict[str, str]] = None,
 ) -> Optional[BatchCreateItem]:
     """
     Преобразовать показатель из формата 1С в локальный формат.
-    
-    Args:
-        indicator_1c: Данные показателя из 1С
-        field_mapping: Маппинг полей {local_field: 1c_field}
-        
-    Returns:
-        BatchCreateItem для создания в локальной БД или None если данные невалидны
     """
-    # Маппинг полей по умолчанию
     default_mapping = {
         "name": "name",
         "unit": "unit",
@@ -230,54 +343,33 @@ def transform_1c_indicator_to_local(
         "default_value": "default_value",
         "options": "options",
     }
-    
     mapping = field_mapping or default_mapping
-    
     try:
-        # Извлекаем имя (обязательное поле)
         name = indicator_1c.get(mapping.get("name", "name"))
         if not name:
             logger.warning(f"Indicator without name: {indicator_1c}")
             return None
-        
-        # Преобразуем данные
         result = {"name": name}
-        
         if "unit" in mapping:
             result["unit"] = indicator_1c.get(mapping["unit"])
-        
         if "data_type" in mapping:
             data_type_1c = indicator_1c.get(mapping["data_type"], "number")
-            # Преобразуем типы данных из 1С в локальные
             data_type_mapping = {
-                "number": "number",
-                "numeric": "number",
-                "integer": "number",
-                "string": "text",
-                "text": "text",
-                "boolean": "number",  # 1С boolean -> локальный number
-                "select": "select",
-                "enum": "select",
+                "number": "number", "numeric": "number", "integer": "number",
+                "string": "text", "text": "text",
+                "boolean": "number", "select": "select", "enum": "select",
             }
-            result["data_type"] = data_type_mapping.get(
-                str(data_type_1c).lower(), "number"
-            )
-        
+            result["data_type"] = data_type_mapping.get(str(data_type_1c).lower(), "number")
         if "description" in mapping:
             result["description"] = indicator_1c.get(mapping["description"])
-        
         if "category" in mapping:
             result["category"] = indicator_1c.get(mapping["category"])
-        
         if "is_required" in mapping:
-            is_required = indicator_1c.get(mapping["is_required"], False)
-            result["is_required"] = bool(is_required)
-        
+            result["is_required"] = bool(indicator_1c.get(mapping["is_required"], False))
         if "default_value" in mapping:
             default_val = indicator_1c.get(mapping["default_value"])
             if default_val is not None:
                 result["default_value"] = str(default_val)
-        
         if "options" in mapping:
             options = indicator_1c.get(mapping["options"])
             if options:
@@ -285,13 +377,128 @@ def transform_1c_indicator_to_local(
                     result["options"] = [x.strip() for x in options.split(",") if x.strip()]
                 elif isinstance(options, list):
                     result["options"] = [str(x) for x in options]
-        
         return BatchCreateItem(**result)
-        
     except Exception as e:
         logger.error(f"Error transforming indicator: {e}, data: {indicator_1c}")
         return None
 
+
+def transform_1c_template_to_local(
+    template_1c: Dict[str, Any],
+    field_mapping: Optional[Dict[str, str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Преобразовать шаблон из формата 1С в локальный формат.
+    
+    Ожидаемый формат 1С:
+    {
+        "id": 1,
+        "name": "Общий анализ",
+        "description": "Описание",
+        "is_active": true,
+        "indicators": [
+            {"indicator_id": 1, "min_value": 3.5, "max_value": 5.5, "sort_order": 0}
+        ]
+    }
+    """
+    name_field = (field_mapping or {}).get("name", "name")
+    desc_field = (field_mapping or {}).get("description", "description")
+    active_field = (field_mapping or {}).get("is_active", "is_active")
+    indicators_field = (field_mapping or {}).get("indicators", "indicators")
+
+    try:
+        name = template_1c.get(name_field)
+        if not name:
+            logger.warning(f"Template without name: {template_1c}")
+            return None
+
+        result = {
+            "name": name,
+            "description": template_1c.get(desc_field),
+            "is_active": bool(template_1c.get(active_field, True)),
+            "library_indicators": [],
+        }
+
+        indicators_1c = template_1c.get(indicators_field, [])
+        if isinstance(indicators_1c, list):
+            for idx, ind_ref in enumerate(indicators_1c):
+                lib_ref = {
+                    "indicator_id": ind_ref.get("indicator_id", ind_ref.get("id")),
+                    "min_value": ind_ref.get("min_value"),
+                    "max_value": ind_ref.get("max_value"),
+                    "sort_order": ind_ref.get("sort_order", idx),
+                }
+                if lib_ref["indicator_id"]:
+                    result["library_indicators"].append(lib_ref)
+
+        return result
+    except Exception as e:
+        logger.error(f"Error transforming template: {e}, data: {template_1c}")
+        return None
+
+
+def transform_1c_plan_to_local(
+    plan_1c: Dict[str, Any],
+    field_mapping: Optional[Dict[str, str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Преобразовать план из формата 1С в локальный формат.
+    
+    Ожидаемый формат 1С:
+    {
+        "id": 1,
+        "name": "План на 18.06",
+        "description": "Описание",
+        "plan_date": "2026-06-18",
+        "items": [
+            {"template_id": 1, "batch_number": "П-001", "sort_order": 0}
+        ]
+    }
+    """
+    name_field = (field_mapping or {}).get("name", "name")
+    desc_field = (field_mapping or {}).get("description", "description")
+    date_field = (field_mapping or {}).get("plan_date", "plan_date")
+    items_field = (field_mapping or {}).get("items", "items")
+
+    try:
+        name = plan_1c.get(name_field)
+        if not name:
+            logger.warning(f"Plan without name: {plan_1c}")
+            return None
+
+        plan_date_raw = plan_1c.get(date_field)
+        if isinstance(plan_date_raw, str):
+            plan_date = date.fromisoformat(plan_date_raw)
+        elif isinstance(plan_date_raw, date):
+            plan_date = plan_date_raw
+        else:
+            plan_date = date.today()
+
+        result = {
+            "name": name,
+            "description": plan_1c.get(desc_field),
+            "plan_date": plan_date,
+            "plan_items": [],
+        }
+
+        items_1c = plan_1c.get(items_field, [])
+        if isinstance(items_1c, list):
+            for idx, item in enumerate(items_1c):
+                plan_item = {
+                    "template_id": item.get("template_id", item.get("analysis_type_id")),
+                    "batch_number": item.get("batch_number", ""),
+                    "sort_order": item.get("sort_order", idx),
+                }
+                if plan_item["template_id"]:
+                    result["plan_items"].append(plan_item)
+
+        return result
+    except Exception as e:
+        logger.error(f"Error transforming plan: {e}, data: {plan_1c}")
+        return None
+
+
+# ==================== Функции импорта ====================
 
 async def import_indicators_from_1c(
     db: Session,
@@ -302,95 +509,47 @@ async def import_indicators_from_1c(
 ) -> Dict[str, Any]:
     """
     Импортировать показатели из 1С в локальную БД.
-    
-    Args:
-        db: SQLAlchemy сессия
-        config: Конфигурация подключения к 1С
-        endpoint: API-эндпоинт для получения показателей
-        field_mapping: Маппинг полей {local_field: 1c_field}
-        skip_duplicates: Пропускать дубликаты (по имени)
-        
-    Returns:
-        Словарь с результатами импорта:
-        - total: Всего получено из 1С
-        - created: Создано новых
-        - skipped: Пропущено (дубликаты)
-        - errors: Ошибки
     """
     service = OneCIntegrationService(config)
-    
     result = {
-        "total": 0,
-        "created": 0,
-        "skipped": 0,
-        "errors": [],
-        "timestamp": datetime.utcnow().isoformat(),
+        "total": 0, "created": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
     }
-    
     try:
-        # Загружаем показатели из 1C
         indicators_1c = await service.fetch_indicators_from_1c(endpoint)
         result["total"] = len(indicators_1c)
-        
         logger.info(f"Fetched {len(indicators_1c)} indicators from 1C")
-        
-        # Получаем существующие имена для проверки дубликатов
+
         existing_names = set()
         if skip_duplicates:
             existing = db.query(IndicatorLibrary.name).all()
             existing_names = {row[0] for row in existing}
-        
-        # Обрабатываем каждый показатель
+
         for indicator_data in indicators_1c:
             try:
-                # Преобразуем формат
-                local_item = transform_1c_indicator_to_local(
-                    indicator_data, field_mapping
-                )
-                
+                local_item = transform_1c_indicator_to_local(indicator_data, field_mapping)
                 if local_item is None:
-                    result["errors"].append({
-                        "indicator": indicator_data,
-                        "error": "Failed to transform indicator",
-                    })
+                    result["errors"].append({"indicator": indicator_data, "error": "Failed to transform"})
                     continue
-                
-                # Проверяем дубликаты
                 if skip_duplicates and local_item.name in existing_names:
                     result["skipped"] += 1
                     continue
-                
-                # Создаём показатель в локальной БД
                 db_indicator = IndicatorLibrary(
-                    name=local_item.name,
-                    unit=local_item.unit,
+                    name=local_item.name, unit=local_item.unit,
                     data_type=local_item.data_type,
                     options=",".join(local_item.options) if local_item.options else None,
-                    description=local_item.description,
-                    category=local_item.category,
-                    is_required=local_item.is_required,
-                    default_value=local_item.default_value,
-                    validation_rules=local_item.validation_rules,
+                    description=local_item.description, category=local_item.category,
+                    is_required=local_item.is_required, default_value=local_item.default_value,
                 )
                 db.add(db_indicator)
                 result["created"] += 1
                 existing_names.add(local_item.name)
-                
             except Exception as e:
                 logger.error(f"Error processing indicator: {e}")
-                result["errors"].append({
-                    "indicator": indicator_data,
-                    "error": str(e),
-                })
-        
-        # Сохраняем изменения
+                result["errors"].append({"indicator": indicator_data, "error": str(e)})
+
         db.commit()
-        
-        logger.info(
-            f"Import completed: {result['created']} created, "
-            f"{result['skipped']} skipped, {len(result['errors'])} errors"
-        )
-        
+        logger.info(f"Import completed: {result['created']} created, {result['skipped']} skipped, {len(result['errors'])} errors")
     except Exception as e:
         db.rollback()
         logger.error(f"Import failed: {str(e)}")
@@ -398,5 +557,205 @@ async def import_indicators_from_1c(
         raise
     finally:
         await service.close()
+    return result
+
+
+async def import_templates_from_1c(
+    db: Session,
+    config: ExternalSystemConfig,
+    endpoint: str = "/api/v1/analysis-templates",
+    field_mapping: Optional[Dict[str, str]] = None,
+    skip_duplicates: bool = True,
+    user_id: int = 1,
+) -> Dict[str, Any]:
+    """
+    Импортировать шаблоны анализов из 1С в локальную БД.
     
+    Returns:
+        {
+            "total": 10,
+            "created": 5,
+            "skipped": 3,
+            "updated": 2,
+            "errors": []
+        }
+    """
+    service = OneCIntegrationService(config)
+    result = {
+        "total": 0, "created": 0, "skipped": 0, "updated": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        templates_1c = await service.fetch_templates_from_1c(endpoint)
+        result["total"] = len(templates_1c)
+        logger.info(f"Fetched {len(templates_1c)} templates from 1C")
+
+        for template_data in templates_1c:
+            try:
+                local_data = transform_1c_template_to_local(template_data, field_mapping)
+                if local_data is None:
+                    result["errors"].append({"template": template_data, "error": "Failed to transform"})
+                    continue
+
+                # Проверяем существование по имени
+                existing = db.query(AnalysisType).filter(
+                    AnalysisType.name == local_data["name"]
+                ).first()
+
+                if existing:
+                    if skip_duplicates:
+                        result["skipped"] += 1
+                        continue
+                    # Обновляем существующий
+                    existing.description = local_data.get("description") or existing.description
+                    existing.is_active = local_data.get("is_active", existing.is_active)
+                    # Обновляем показатели
+                    if local_data.get("library_indicators"):
+                        for ti in existing.template_indicators:
+                            db.delete(ti)
+                        db.flush()
+                        for lib_ref in local_data["library_indicators"]:
+                            ti = TemplateIndicator(
+                                template_id=existing.id,
+                                indicator_id=lib_ref["indicator_id"],
+                                min_value=lib_ref.get("min_value"),
+                                max_value=lib_ref.get("max_value"),
+                                sort_order=lib_ref.get("sort_order", 0),
+                            )
+                            db.add(ti)
+                    result["updated"] += 1
+                else:
+                    # Создаём новый
+                    db_template = AnalysisType(
+                        name=local_data["name"],
+                        description=local_data.get("description"),
+                        created_by=user_id,
+                        is_active=local_data.get("is_active", True),
+                    )
+                    db.add(db_template)
+                    db.flush()
+                    for lib_ref in local_data.get("library_indicators", []):
+                        ti = TemplateIndicator(
+                            template_id=db_template.id,
+                            indicator_id=lib_ref["indicator_id"],
+                            min_value=lib_ref.get("min_value"),
+                            max_value=lib_ref.get("max_value"),
+                            sort_order=lib_ref.get("sort_order", 0),
+                        )
+                        db.add(ti)
+                    result["created"] += 1
+
+            except Exception as e:
+                logger.error(f"Error processing template: {e}")
+                result["errors"].append({"template": template_data, "error": str(e)})
+
+        db.commit()
+        logger.info(
+            f"Templates import: {result['created']} created, {result['updated']} updated, "
+            f"{result['skipped']} skipped, {len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Templates import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result
+
+
+async def import_plans_from_1c(
+    db: Session,
+    config: ExternalSystemConfig,
+    endpoint: str = "/api/v1/analysis-plans",
+    field_mapping: Optional[Dict[str, str]] = None,
+    skip_duplicates: bool = True,
+    user_id: int = 1,
+) -> Dict[str, Any]:
+    """
+    Импортировать планы анализов из 1С в локальную БД.
+    
+    Returns:
+        {
+            "total": 5,
+            "created": 3,
+            "skipped": 2,
+            "errors": []
+        }
+    """
+    service = OneCIntegrationService(config)
+    result = {
+        "total": 0, "created": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        plans_1c = await service.fetch_plans_from_1c(endpoint)
+        result["total"] = len(plans_1c)
+        logger.info(f"Fetched {len(plans_1c)} plans from 1C")
+
+        for plan_data in plans_1c:
+            try:
+                local_data = transform_1c_plan_to_local(plan_data, field_mapping)
+                if local_data is None:
+                    result["errors"].append({"plan": plan_data, "error": "Failed to transform"})
+                    continue
+
+                # Проверяем существование по имени + дате
+                existing = db.query(AnalysisPlan).filter(
+                    AnalysisPlan.name == local_data["name"],
+                    AnalysisPlan.plan_date == local_data["plan_date"],
+                ).first()
+
+                if existing:
+                    if skip_duplicates:
+                        result["skipped"] += 1
+                        continue
+                    # Обновляем — удаляем старые items, создаём новые
+                    for item in existing.plan_items:
+                        db.delete(item)
+                    db.flush()
+                    for item_data in local_data.get("plan_items", []):
+                        item = PlanItem(
+                            plan_id=existing.id,
+                            template_id=item_data["template_id"],
+                            batch_number=item_data.get("batch_number", ""),
+                            sort_order=item_data.get("sort_order", 0),
+                        )
+                        db.add(item)
+                else:
+                    # Создаём новый план
+                    db_plan = AnalysisPlan(
+                        name=local_data["name"],
+                        description=local_data.get("description"),
+                        plan_date=local_data["plan_date"],
+                        created_by=user_id,
+                    )
+                    db.add(db_plan)
+                    db.flush()
+                    for item_data in local_data.get("plan_items", []):
+                        item = PlanItem(
+                            plan_id=db_plan.id,
+                            template_id=item_data["template_id"],
+                            batch_number=item_data.get("batch_number", ""),
+                            sort_order=item_data.get("sort_order", 0),
+                        )
+                        db.add(item)
+                    result["created"] += 1
+
+            except Exception as e:
+                logger.error(f"Error processing plan: {e}")
+                result["errors"].append({"plan": plan_data, "error": str(e)})
+
+        db.commit()
+        logger.info(
+            f"Plans import: {result['created']} created, "
+            f"{result['skipped']} skipped, {len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Plans import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
     return result
