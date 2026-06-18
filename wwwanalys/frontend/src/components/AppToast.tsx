@@ -9,13 +9,6 @@ interface AppToastProps {
 }
 
 const AppToast: React.FC<AppToastProps> = ({ toast, onClose }) => {
-  const iconMap = {
-    success: 'check-circle',
-    danger: 'exclamation-triangle',
-    warning: 'exclamation-triangle',
-    info: 'info-circle'
-  };
-
   return (
     <Toast 
       show={toast.show} 
@@ -26,7 +19,6 @@ const AppToast: React.FC<AppToastProps> = ({ toast, onClose }) => {
       autohide
     >
       <Toast.Header>
-        <i className={`bi bi-${iconMap[toast.variant]} me-2`}></i>
         <strong className="me-auto">WWWAnalys</strong>
       </Toast.Header>
       <Toast.Body className={toast.variant === 'warning' ? 'text-dark' : ''}>

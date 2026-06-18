@@ -289,7 +289,6 @@ const Plans: React.FC = () => {
                 />
                 {isAdmin && (
                   <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
-                    <i className="bi bi-plus-circle-fill me-1"></i>
                     Новый план
                   </Button>
                 )}
@@ -298,7 +297,7 @@ const Plans: React.FC = () => {
 
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'today')} className="mb-4">
               <Tab eventKey="today" title={
-                <span><i className="bi bi-calendar-day me-1"></i>Планы на {new Date(selectedDate).toLocaleDateString('ru-RU')}</span>
+                <span>Планы на {new Date(selectedDate).toLocaleDateString('ru-RU')}</span>
               }>
                 {isLoading ? (
                   <div className="text-center py-4">
@@ -307,7 +306,6 @@ const Plans: React.FC = () => {
                   </div>
                 ) : plans.length === 0 ? (
                   <div className="text-center py-4">
-                    <i className="bi bi-calendar-x display-1 text-muted"></i>
                     <p className="text-muted mt-2">Нет планов на выбранную дату</p>
                     {isAdmin && (
                       <Button variant="primary" onClick={() => { resetPlanForm(); setPlanDate(selectedDate); setShowCreateModal(true); }}>
@@ -326,7 +324,6 @@ const Plans: React.FC = () => {
                           <Card>
                             <CardHeader className="d-flex justify-content-between align-items-center">
                               <CardTitle className="h5 mb-0">
-                                <i className="bi bi-clipboard2-fill me-2 text-primary"></i>
                                 {plan.name}
                               </CardTitle>
                               <Badge bg={isComplete ? 'success' : 'warning'}>
@@ -378,7 +375,6 @@ const Plans: React.FC = () => {
                                         <td>
                                           {item.completed_report_id ? (
                                             <Badge bg="info">
-                                              <i className="bi bi-file-earmark-text me-1"></i>
                                               Отчет #{item.completed_report_id}
                                             </Badge>
                                           ) : (
@@ -392,7 +388,6 @@ const Plans: React.FC = () => {
                                                 size="sm"
                                                 onClick={() => handleCreateReportFromPlanItem(item)}
                                               >
-                                                <i className="bi bi-plus-circle me-1"></i>
                                                 Создать отчет
                                               </Button>
                                           ) : (
@@ -402,7 +397,6 @@ const Plans: React.FC = () => {
                                                   size="sm"
                                                   onClick={() => handleEditReportFromPlanItem(item)}
                                                 >
-                                                  <i className="bi bi-pencil me-1"></i>
                                                   Редактировать
                                                 </Button>
                                             )
@@ -416,12 +410,10 @@ const Plans: React.FC = () => {
                               
                               <div className="d-flex gap-2 justify-content-end mt-3">
                                 <Button variant="outline-primary" size="sm" onClick={() => handleViewPlan(plan)}>
-                                  <i className="bi bi-eye me-1"></i>
                                   Подробно
                                 </Button>
                                 {isAdmin && (
                                   <Button variant="outline-danger" size="sm" onClick={() => handleDeletePlan(plan.id)}>
-                                    <i className="bi bi-trash me-1"></i>
                                     Удалить
                                   </Button>
                                 )}

@@ -17,7 +17,6 @@ const AlertToast: React.FC<AlertToastProps> = ({ show, onClose, message, variant
       bg={variant}
     >
       <Toast.Header>
-        <i className={`bi bi-${variant === 'success' ? 'check-circle' : variant === 'danger' ? 'exclamation-triangle' : variant === 'warning' ? 'exclamation-circle' : 'info-circle'} me-2`}></i>
         <strong className="me-auto">WWWAnalys</strong>
       </Toast.Header>
       <Toast.Body>{message}</Toast.Body>

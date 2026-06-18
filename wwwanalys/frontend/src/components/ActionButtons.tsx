@@ -72,7 +72,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           size={buttonSize}
           onClick={onEdit}
         >
-          <i className="bi bi-pencil me-1"></i>
           {editText}
         </Button>
       )}
@@ -93,7 +92,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
           size={buttonSize}
           onClick={onDelete}
         >
-          <i className="bi bi-trash me-1"></i>
           {deleteText}
         </Button>
       )}

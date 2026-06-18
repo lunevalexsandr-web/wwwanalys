@@ -527,12 +527,11 @@ const Dashboard: React.FC = () => {
 
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'new-report')} className="mb-4">
               <Tab eventKey="new-report" title={
-                <span><i className="bi bi-plus-circle-fill me-1"></i>Новый отчет</span>
+                <span>Новый отчет</span>
               }>
                 <Card>
                   <CardHeader>
                     <CardTitle className="h5 mb-0">
-                      <i className="bi bi-file-earmark-text me-2 text-primary"></i>
                       {isEditing ? 'Редактирование отчета' : 'Внесение данных анализа'}
                       {isEditing && editingReportId && (
                         <Badge bg="warning" className="ms-2">Отчет #{editingReportId}</Badge>
@@ -542,7 +541,6 @@ const Dashboard: React.FC = () => {
                   <CardBody>
                     {isEditing && (
                       <Alert variant="info">
-                        <i className="bi bi-info-circle me-2"></i>
                         Вы редактируете существующий отчет. Внесите изменения и нажмите "Сохранить изменения".
                       </Alert>
                     )}
@@ -555,10 +553,9 @@ const Dashboard: React.FC = () => {
 
                     {/* Template Selection */}
                     <Form.Group className="mb-4">
-                      <Form.Label><i className="bi bi-list-ul me-1"></i>Выберите шаблон анализа</Form.Label>
+                      <Form.Label>Выберите шаблон анализа</Form.Label>
                       {templates.length === 0 ? (
                         <Alert variant="warning">
-                          <i className="bi bi-exclamation-triangle-fill me-2"></i>
                           Нет доступных шаблонов. Обратитесь к администратору для создания шаблонов.
                         </Alert>
                       ) : (
@@ -593,7 +590,7 @@ const Dashboard: React.FC = () => {
                       <Form onSubmit={handleSubmit}>
                         {/* Batch Number */}
                         <Form.Group className="mb-4">
-                          <Form.Label><i className="bi bi-barcode me-1"></i>Номер партии</Form.Label>
+                          <Form.Label>Номер партии</Form.Label>
                           <Form.Control
                             type="text"
                             value={batchNumber}
@@ -606,7 +603,6 @@ const Dashboard: React.FC = () => {
                         {/* Indicators */}
                         <div className="mb-4">
                           <h5 className="mb-3">
-                            <i className="bi bi-speedometer2 me-2 text-primary"></i>
                             Показатели для анализа: {selectedTemplate.name}
                           </h5>
                           
@@ -673,7 +669,6 @@ const Dashboard: React.FC = () => {
                                             
                                             {isOutOfRange && (
                                               <div className="invalid-feedback d-block">
-                                                <i className="bi bi-exclamation-circle-fill me-1"></i>
                                                 Значение вне нормы!
                                               </div>
                                             )}
@@ -706,7 +701,6 @@ const Dashboard: React.FC = () => {
                                 }
                               }}
                             >
-                              <i className="bi bi-x-circle me-1"></i>
                               Отменить редактирование
                             </Button>
                           )}
@@ -718,7 +712,6 @@ const Dashboard: React.FC = () => {
                               </>
                             ) : (
                               <>
-                                <i className={`bi ${isEditing ? 'bi-check-circle' : 'bi-send-fill'} me-2`}></i>
                                 {isEditing ? 'Сохранить изменения' : 'Отправить отчет'}
                               </>
                             )}
@@ -731,12 +724,11 @@ const Dashboard: React.FC = () => {
               </Tab>
 
               <Tab eventKey="history" title={
-                <span><i className="bi bi-clock-history me-1"></i>История отчетов</span>
+                <span>История отчетов</span>
               }>
                 <Card>
                   <CardHeader>
                     <CardTitle className="h5 mb-0">
-                      <i className="bi bi-journal-text me-2 text-primary"></i>
                       История отчетов
                     </CardTitle>
                   </CardHeader>
@@ -745,13 +737,13 @@ const Dashboard: React.FC = () => {
                     <Card className="mb-4">
                       <CardHeader className="bg-light">
                         <CardTitle className="h6 mb-0">
-                          <i className="bi bi-funnel me-1"></i>Фильтры
+                          Фильтры
                         </CardTitle>
                       </CardHeader>
                       <CardBody>
                         <div className="row g-3">
                           <div className="col-md-4">
-                            <Form.Label><i className="bi bi-list-ul me-1"></i>Шаблон</Form.Label>
+                            <Form.Label>Шаблон</Form.Label>
                             <Form.Select
                               value={filterTemplateId || ''}
                               onChange={(e) => setFilterTemplateId(e.target.value ? parseInt(e.target.value) : null)}
@@ -763,7 +755,7 @@ const Dashboard: React.FC = () => {
                             </Form.Select>
                           </div>
                           <div className="col-md-3">
-                            <Form.Label><i className="bi bi-calendar-range me-1"></i>Дата с</Form.Label>
+                            <Form.Label>Дата с</Form.Label>
                             <Form.Control
                               type="date"
                               value={filterDateFrom}
@@ -771,7 +763,7 @@ const Dashboard: React.FC = () => {
                             />
                           </div>
                           <div className="col-md-3">
-                            <Form.Label><i className="bi bi-calendar-check me-1"></i>по</Form.Label>
+                            <Form.Label>по</Form.Label>
                             <Form.Control
                               type="date"
                               value={filterDateTo}
@@ -781,10 +773,10 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="mt-3 d-flex gap-2">
                           <Button variant="primary" onClick={handleFilterApply}>
-                            <i className="bi bi-check-circle me-1"></i>Применить
+                            Применить
                           </Button>
                           <Button variant="secondary" onClick={handleFilterReset}>
-                            <i className="bi bi-arrow-counterclockwise me-1"></i>Сбросить
+                            Сбросить
                           </Button>
                         </div>
                       </CardBody>
@@ -798,7 +790,6 @@ const Dashboard: React.FC = () => {
                       </div>
                     ) : reports.length === 0 ? (
                       <div className="text-center py-4">
-                        <i className="bi bi-inbox display-1 text-muted"></i>
                         <p className="text-muted mt-2">Нет отчетов для отображения</p>
                       </div>
                     ) : (
@@ -827,10 +818,10 @@ const Dashboard: React.FC = () => {
                                   </td>
                                   <td className="text-end">
                                     <Button variant="outline-primary" size="sm" onClick={() => handleViewReport(report.id)}>
-                                      <i className="bi bi-eye me-1"></i>Просмотр
+                                      Просмотр
                                     </Button>
                                     <Button variant="outline-warning" size="sm" className="ms-2" onClick={() => handleEditReport(report.id)}>
-                                      <i className="bi bi-pencil me-1"></i>Редактировать
+                                      Редактировать
                                     </Button>
                                   </td>
                                 </tr>
@@ -842,7 +833,6 @@ const Dashboard: React.FC = () => {
                         {reports.length > 0 && (
                           <div className="mt-4 d-flex justify-content-end">
                             <Button variant="danger" onClick={handleClearHistory}>
-                              <i className="bi bi-trash me-1"></i>
                               Очистить всю историю
                             </Button>
                           </div>
@@ -864,7 +854,6 @@ const Dashboard: React.FC = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">
-                  <i className="bi bi-file-earmark-text me-2 text-primary"></i>
                   Отчет #{viewReport.id} — {viewReport.batch_number}
                 </h5>
                 <button type="button" className="btn-close" onClick={() => setShowViewModal(false)}></button>

@@ -86,7 +86,6 @@ const IndicatorInput: React.FC<IndicatorInputProps> = ({
       
       {isOutOfRange && (
         <div className="invalid-feedback">
-          <i className="bi bi-exclamation-circle-fill me-1"></i>
           Значение вне нормы!
         </div>
       )}

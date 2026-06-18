@@ -12,7 +12,6 @@ interface IndicatorSelectorProps {
   norms: Record<number, { min: number | null; max: number | null }>;
   onNormChange: (id: number, field: 'min' | 'max', value: string) => void;
   onConfirm: () => void;
-  // Optional search/filter state
   search?: string;
   filterCategory?: string;
   filterType?: string;
@@ -39,19 +38,15 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
           Выберите показатели для добавления в шаблон и задайте для них нормы (min/max).
         </p>
 
-        {/* Search & filters */}
         {(onSearchChange || onFilterCategoryChange || onFilterTypeChange) && (
           <Row className="g-2 mb-3">
             <Col md={5}>
-              <div className="input-group input-group-sm">
-                <span className="input-group-text"><i className="bi bi-search"></i></span>
-                <Form.Control
-                  type="text"
-                  placeholder="Поиск..."
-                  value={search}
-                  onChange={(e) => onSearchChange?.(e.target.value)}
-                />
-              </div>
+              <Form.Control
+                type="text"
+                placeholder="Поиск..."
+                value={search}
+                onChange={(e) => onSearchChange?.(e.target.value)}
+              />
             </Col>
             <Col md={3}>
               <Form.Select size="sm" value={filterCategory} onChange={(e) => onFilterCategoryChange?.(e.target.value)}>
@@ -81,7 +76,6 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
 
         {libIndicators.length === 0 ? (
           <Alert variant="warning">
-            <i className="bi bi-exclamation-triangle-fill me-2"></i>
             Справочник показателей пуст.
           </Alert>
         ) : (
@@ -146,7 +140,6 @@ const IndicatorSelector: React.FC<IndicatorSelectorProps> = ({
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide}>Отмена</Button>
         <Button variant="primary" onClick={onConfirm} disabled={selectedIds.length === 0}>
-          <i className="bi bi-check-circle me-1"></i>
           Добавить выбранные ({selectedIds.length})
         </Button>
       </Modal.Footer>

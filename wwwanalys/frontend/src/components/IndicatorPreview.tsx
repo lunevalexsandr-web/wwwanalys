@@ -50,19 +50,16 @@ const IndicatorPreview: React.FC<IndicatorPreviewProps> = ({ indicator, minValue
             )}
             {(minValue !== null || maxValue !== null) && (
               <small className="text-muted d-block mt-1">
-                <i className="bi bi-arrows-expand me-1"></i>
                 Норма: {minValue ?? '?'} — {maxValue ?? '?'}
               </small>
             )}
             {indicator.default_value && (
               <small className="text-muted d-block">
-                <i className="bi bi-check-circle me-1"></i>
                 По умолчанию: {indicator.default_value}
               </small>
             )}
             {indicator.data_type === 'select' && indicator.options && indicator.options.length > 0 && (
               <small className="text-muted d-block">
-                <i className="bi bi-list-ul me-1"></i>
                 Варианты: {indicator.options.join(', ')}
               </small>
             )}

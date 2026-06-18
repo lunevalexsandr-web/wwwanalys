@@ -8,34 +8,25 @@ interface TemplateBuilderProps {
   show: boolean;
   onHide: () => void;
   onSubmit: (e: React.FormEvent) => void;
-
-  // Form fields
   name: string;
   description: string;
   isActive: boolean;
   templateType: 'pure' | 'hybrid';
   isEditing: boolean;
-
   onChangeName: (value: string) => void;
   onChangeDescription: (value: string) => void;
   onChangeActive: (value: boolean) => void;
   onChangeType: (value: 'pure' | 'hybrid') => void;
-
-  // Library indicators
   _libIndicators: IndicatorLibrary[];
   templateLibIndicators: LibraryIndicatorRef[];
   onOpenSelectLib: () => void;
   onRemoveLib: (id: number) => void;
   onMoveLib: (id: number, direction: 'up' | 'down') => void;
-
-  // Custom indicators
   templateIndicators: Indicator[];
   onOpenCustom: () => void;
   onEditCustom: (indicator: Indicator) => void;
   onRemoveCustom: (id: number) => void;
   onMoveCustom: (id: number, direction: 'up' | 'down') => void;
-
-  // Helpers
   getLibIndicator: (id: number) => IndicatorLibrary | undefined;
   _getCategoryLabel: (category: string | null) => string;
 }
@@ -59,12 +50,10 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
             <Form.Label>Название шаблона</Form.Label>
             <Form.Control type="text" value={name} onChange={(e) => onChangeName(e.target.value)} required />
           </Form.Group>
-
           <Form.Group className="mb-3">
             <Form.Label>Описание</Form.Label>
             <Form.Control as="textarea" rows={3} value={description} onChange={(e) => onChangeDescription(e.target.value)} />
           </Form.Group>
-
           <Form.Group className="mb-3">
             <Form.Label>Тип шаблона</Form.Label>
             <Form.Select value={templateType} onChange={(e) => onChangeType(e.target.value as 'pure' | 'hybrid')} disabled={isEditing}>
@@ -72,7 +61,6 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
               <option value="pure">Чистый — только справочник</option>
             </Form.Select>
           </Form.Group>
-
           <Form.Group className="mb-3">
             <Form.Check type="switch" label="Активен" checked={isActive} onChange={(e) => onChangeActive(e.target.checked)} />
           </Form.Group>
@@ -80,15 +68,11 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           {/* Library indicators */}
           <div className="mb-3">
             <div className="d-flex justify-content-between align-items-center mb-2">
-              <h5 className="mb-0"><i className="bi bi-book me-1"></i>Из справочника</h5>
-              <Button variant="outline-primary" size="sm" onClick={onOpenSelectLib}>
-                <i className="bi bi-plus-circle me-1"></i>Выбрать
-              </Button>
+              <h5 className="mb-0">Из справочника</h5>
+              <Button variant="outline-primary" size="sm" onClick={onOpenSelectLib}>Выбрать</Button>
             </div>
             {templateLibIndicators.length === 0 ? (
-              <Alert variant="info" className="py-2">
-                <small>Нет показателей из справочника.</small>
-              </Alert>
+              <Alert variant="info" className="py-2"><small>Нет показателей из справочника.</small></Alert>
             ) : (
               templateLibIndicators.map((ref, index) => {
                 const libInd = getLibIndicator(ref.indicator_id);
@@ -98,39 +82,29 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                   <div key={ref.indicator_id} className="d-flex align-items-center gap-2 mb-2">
                     <div className="d-flex flex-column">
                       <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
-                        onClick={() => onMoveLib(ref.indicator_id, 'up')} title="Вверх">
-                        <i className="bi bi-chevron-up"></i>
-                      </button>
+                        onClick={() => onMoveLib(ref.indicator_id, 'up')} title="Вверх">▲</button>
                       <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
-                        onClick={() => onMoveLib(ref.indicator_id, 'down')} title="Вниз">
-                        <i className="bi bi-chevron-down"></i>
-                      </button>
+                        onClick={() => onMoveLib(ref.indicator_id, 'down')} title="Вниз">▼</button>
                     </div>
                     <div className="flex-grow-1">
                       {libInd && <IndicatorPreview indicator={libInd} minValue={ref.min_value} maxValue={ref.max_value} sortOrder={index} />}
                     </div>
-                    <Button variant="outline-danger" size="sm" onClick={() => onRemoveLib(ref.indicator_id)}>
-                      <i className="bi bi-x"></i>
-                    </Button>
+                    <Button variant="outline-danger" size="sm" onClick={() => onRemoveLib(ref.indicator_id)}>✕</Button>
                   </div>
                 );
               })
             )}
           </div>
 
-          {/* Custom indicators — only for hybrid */}
+          {/* Custom indicators */}
           {templateType === 'hybrid' && (
             <div className="mb-3">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <h5 className="mb-0"><i className="bi bi-speedometer2 me-1"></i>Пользовательские</h5>
-                <Button variant="outline-secondary" size="sm" onClick={onOpenCustom}>
-                  <i className="bi bi-plus-circle me-1"></i>Добавить
-                </Button>
+                <h5 className="mb-0">Пользовательские</h5>
+                <Button variant="outline-secondary" size="sm" onClick={onOpenCustom}>Добавить</Button>
               </div>
               {templateIndicators.length === 0 ? (
-                <Alert variant="info" className="py-2">
-                  <small>Нет пользовательских показателей.</small>
-                </Alert>
+                <Alert variant="info" className="py-2"><small>Нет пользовательских показателей.</small></Alert>
               ) : (
                 templateIndicators.map((indicator, index) => {
                   const isFirst = index === 0;
@@ -142,13 +116,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                           <div className="d-flex align-items-center gap-2">
                             <div className="d-flex flex-column">
                               <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
-                                onClick={() => onMoveCustom(indicator.id, 'up')} title="Вверх">
-                                <i className="bi bi-chevron-up"></i>
-                              </button>
+                                onClick={() => onMoveCustom(indicator.id, 'up')} title="Вверх">▲</button>
                               <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
-                                onClick={() => onMoveCustom(indicator.id, 'down')} title="Вниз">
-                                <i className="bi bi-chevron-down"></i>
-                              </button>
+                                onClick={() => onMoveCustom(indicator.id, 'down')} title="Вниз">▼</button>
                             </div>
                             <div>
                               <strong>{indicator.name}</strong>, {indicator.unit}
@@ -159,12 +129,8 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                             </div>
                           </div>
                           <div>
-                            <Button variant="outline-primary" size="sm" className="me-1" onClick={() => onEditCustom(indicator)}>
-                              <i className="bi bi-pencil"></i>
-                            </Button>
-                            <Button variant="outline-danger" size="sm" onClick={() => onRemoveCustom(indicator.id)}>
-                              <i className="bi bi-trash"></i>
-                            </Button>
+                            <Button variant="outline-primary" size="sm" className="me-1" onClick={() => onEditCustom(indicator)}>Ред.</Button>
+                            <Button variant="outline-danger" size="sm" onClick={() => onRemoveCustom(indicator.id)}>Удал.</Button>
                           </div>
                         </div>
                       </Card.Body>
@@ -175,10 +141,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
             </div>
           )}
           {templateType === 'pure' && (
-            <Alert variant="info">
-              <i className="bi bi-info-circle-fill me-2"></i>
-              Чистый шаблон — только показатели из справочника.
-            </Alert>
+            <Alert variant="info">Чистый шаблон — только показатели из справочника.</Alert>
           )}
         </Form>
       </Modal.Body>
