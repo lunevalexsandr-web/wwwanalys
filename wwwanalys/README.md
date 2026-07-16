@@ -1,4 +1,4 @@
-# WWWAnalys v6.7.0
+# WWWAnalys v6.8.0
 
 Система для управления анализами и шаблонами показателей с библиотекой индикаторов, планами анализа и глубокой двусторонней интеграцией с внешними системами (1С Предприятие).
 
@@ -190,7 +190,7 @@ docker compose --profile seed run seed
 - id, username, email, is_admin, is_active, hashed_password
 
 ### Библиотека показателей (IndicatorLibrary)
-- id, name, description, category, created_by, created_at, data_type, options, is_required, default_value, validation_rules
+- id, name, description, category, created_by, created_at, data_type, options, is_required, default_value, validation_rules, **external_id** (ID из 1С)
 
 ### Версия библиотеки (IndicatorLibraryVersion)
 - id, library_id, version, created_at, created_by
@@ -202,10 +202,10 @@ docker compose --profile seed run seed
 - id, indicator_id, value (float|null), text_value (str|null), is_normal, process_log_id
 
 ### Тип анализа / Шаблон (AnalysisType)
-- id, name, description, created_by, is_active, template_indicators[]
+- id, name, description, created_by, is_active, template_indicators[], **external_id** (ID шаблона из 1С)
 
 ### Показатель шаблона (TemplateIndicator)
-- id, template_id, indicator_id, min_value, max_value, sort_order, is_custom, template_notes
+- id, template_id, indicator_id, min_value, max_value, sort_order, is_custom, template_notes, **external_id** (ID связи из 1С)
 
 ### Пресет (Preset)
 - id, name, description, category, created_by
@@ -230,7 +230,18 @@ docker compose --profile seed run seed
 - Шаблоны анализов (`/api/external/1c/import-templates`)
 - Планы анализа (`/api/external/1c/import-plans`)
 
-Для каждого импорта настраивается `connection` (base_url, api_key, username, password, timeout) и `field_mapping` (соответствие полей 1С → локальные).
+Для каждого импорта настраивается `connection` (base_url, api_key, username, password, timeout, endpoint) и `field_mapping` (соответствие полей 1С → локальные).
+
+**Сохранение external_id (ID из 1С).** При импорте показателей, шаблонов и планов в соответствующие таблицы записывается `external_id`:
+- `indicator_library.external_id` — ID показателя из 1С
+- `analysis_types.external_id` — ID шаблона из 1С
+- `template_indicators.external_id` — ID связи показателя в шаблоне из 1С
+
+**Наполнение шаблонов показателями.** Импорт шаблонов (`import-templates`) загружает шаблон «наполненным»: каждый показатель в шаблоне ищется в справочнике `indicator_library` по `external_id == indicators[].indicator_id` (ID показателя из 1С). Если показатель не найден — он создаётся автоматически. Шаблон и показатели привязываются через `template_indicators` с сохранением границ нормы (min/max) и `external_id` связи.
+
+**Порядок загрузки:** сначала показатели (`import-indicators`), затем шаблоны (`import-templates`). Это гарантирует, что `indicator_library.external_id` заполнены и показатели в шаблонах корректно сопоставляются.
+
+Подробная документация по форматам данных 1С: [`docs/1C_INDICATORS_EXPORT.md`](docs/1C_INDICATORS_EXPORT.md).
 
 ### Экспорт в 1С
 - Отправка отчёта: `POST /api/external/1c/push-report`
@@ -299,6 +310,7 @@ docker build -t wwwanalys-frontend ./frontend
 - **v6.5.0** — Modern SaaS redesign всех страниц
 - **v6.6.0** — Полное удаление Bootstrap Icons, переход на чистый CSS
 - **v6.7.0** — Расширенная интеграция с 1С: справочники, шаблоны, планы (двусторонний обмен)
+- **v6.8.0** — Интеграция 1С: сохранение external_id (ID из 1С), наполнение шаблонов показателями, модель IntegrationConfig, документация
 
 ## Лицензия
 
@@ -310,4 +322,4 @@ GitHub Issues: [wwwanalys/issues](https://github.com/lunevalexsandr-web/wwwanaly
 
 ---
 
-**WWWAnalys v6.7.0** — Система управления анализами и шаблонами показателей с двусторонней интеграцией 1С
+**WWWAnalys v6.8.0** — Система управления анализами и шаблонами показателей с двусторонней интеграцией 1С
