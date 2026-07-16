@@ -7,20 +7,38 @@ from app.core.deps import get_db
 from app.core.config import settings
 from app.crud import analysis_type as crud_template
 from app.schemas import AnalysisTypeCreate, AnalysisTypeUpdate
-from fastapi.security import APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+
+from app.auth.auth import get_current_active_user
+from app.models import User
+from app.crud import integration_config as crud_integration
+from app.schemas import IntegrationConfigUpdate, IntegrationConfigResponse
 
 router = APIRouter()
 
-api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=True)
+INTEGRATION_NAME = "1c"
+
+api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_api_key(api_key: str = Depends(api_key_header)):
-    if api_key != settings.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API Key",
-        )
-    return api_key
+async def get_api_key(
+    api_key: Optional[str] = Depends(api_key_header),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    user: Optional[User] = Depends(get_current_active_user),
+):
+    """
+    Защита external-эндпоинтов.
+    Допускается либо статичный X-API-KEY, либо авторизованный пользователь (Bearer JWT).
+    """
+    if api_key and api_key == settings.api_key:
+        return api_key
+    if user is not None:
+        return "bearer"
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Требуется X-API-KEY или авторизация пользователя",
+    )
 
 
 # ==================== Схемы для интеграции с 1С ====================
@@ -32,6 +50,7 @@ class OneCConnectionConfig(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     timeout: int = 30
+    endpoint: str = "/erp_24/hs/labindicators/indicators"
 
 
 # --- Показатели ---
@@ -111,6 +130,31 @@ class OneCTestConnectionResponse(BaseModel):
 
 # ==================== Эндпоинты ====================
 
+# --- Сохранение/загрузка конфигурации интеграции ---
+
+@router.get("/1c/config", response_model=IntegrationConfigResponse)
+async def get_1c_config(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Получить сохранённую конфигурацию 1С (без пароля)."""
+    config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    if config is None:
+        return IntegrationConfigResponse(name=INTEGRATION_NAME)
+    return IntegrationConfigResponse.model_validate(config)
+
+
+@router.put("/1c/config", response_model=IntegrationConfigResponse)
+async def save_1c_config(
+    data: IntegrationConfigUpdate,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Сохранить конфигурацию 1С (URL, логин, пароль)."""
+    config = crud_integration.upsert(db, INTEGRATION_NAME, data)
+    return IntegrationConfigResponse.model_validate(config)
+
+
 # --- Проверка связи ---
 
 @router.post("/1c/test-connection", response_model=OneCTestConnectionResponse)
@@ -140,6 +184,7 @@ async def test_1c_connection(
         username=request.connection.username,
         password=request.connection.password,
         timeout=request.connection.timeout,
+        endpoint=request.connection.endpoint,
     )
     service = OneCIntegrationService(config)
     try:
@@ -170,10 +215,11 @@ async def import_indicators_from_1c(
         username=request.connection.username,
         password=request.connection.password,
         timeout=request.connection.timeout,
+        endpoint=request.connection.endpoint,
     )
     try:
         result = await import_indicators_from_1c(
-            db=db, config=config, endpoint=request.endpoint,
+            db=db, config=config, endpoint=request.connection.endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCImportResponse(status="success" if not result["errors"] else "partial", **result)
@@ -259,7 +305,7 @@ async def import_templates_from_1c(
     )
     try:
         result = await import_templates_from_1c(
-            db=db, config=config, endpoint=request.endpoint,
+            db=db, config=config, endpoint=request.connection.endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCTemplateImportResponse(status="success" if not result["errors"] else "partial", **result)
@@ -345,7 +391,7 @@ async def import_plans_from_1c(
     )
     try:
         result = await import_plans_from_1c(
-            db=db, config=config, endpoint=request.endpoint,
+            db=db, config=config, endpoint=request.connection.endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCPlanImportResponse(status="success" if not result["errors"] else "partial", **result)

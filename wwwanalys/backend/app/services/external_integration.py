@@ -32,12 +32,18 @@ class ExternalSystemConfig:
         username: Optional[str] = None,
         password: Optional[str] = None,
         timeout: int = 30,
+        verify: bool = False,
+        endpoint: str = "/erp_24/hs/labindicators/indicators",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.username = username
         self.password = password
         self.timeout = timeout
+        # 1С часто использует самоподписанные сертификаты — отключаем проверку по умолчанию
+        self.verify = verify
+        # Путь к HTTP-сервису 1С (endpoint показателей)
+        self.endpoint = endpoint
 
 
 class OneCIntegrationService:
@@ -72,6 +78,7 @@ class OneCIntegrationService:
                 base_url=self.config.base_url,
                 headers=headers,
                 timeout=self.config.timeout,
+                verify=self.config.verify,
             )
         return self._client
 
@@ -294,10 +301,11 @@ class OneCIntegrationService:
     async def test_connection(self) -> Dict[str, Any]:
         """
         Проверить подключение к 1С.
+        Использует реальный endpoint показателей (self.config.endpoint).
         """
         client = await self._get_client()
         try:
-            response = await client.get("/api/v1/health", timeout=10)
+            response = await client.get(self.config.endpoint, timeout=10)
             if response.status_code == 200:
                 return {
                     "status": "ok",
@@ -349,7 +357,10 @@ def transform_1c_indicator_to_local(
         if not name:
             logger.warning(f"Indicator without name: {indicator_1c}")
             return None
-        result = {"name": name}
+        result = {
+            "name": name,
+            "external_id": str(indicator_1c.get("id", "")) or None,
+        }
         if "unit" in mapping:
             result["unit"] = indicator_1c.get(mapping["unit"])
         if "data_type" in mapping:
@@ -416,17 +427,25 @@ def transform_1c_template_to_local(
             "name": name,
             "description": template_1c.get(desc_field),
             "is_active": bool(template_1c.get(active_field, True)),
+            "external_id": str(template_1c.get("id", "")) or None,
             "library_indicators": [],
         }
 
         indicators_1c = template_1c.get(indicators_field, [])
         if isinstance(indicators_1c, list):
             for idx, ind_ref in enumerate(indicators_1c):
+                indicator_1c_id = ind_ref.get("indicator_id", ind_ref.get("id"))
                 lib_ref = {
-                    "indicator_id": ind_ref.get("indicator_id", ind_ref.get("id")),
+                    "indicator_id": indicator_1c_id,
+                    "indicator_external_id": str(indicator_1c_id) if indicator_1c_id is not None else None,
                     "min_value": ind_ref.get("min_value"),
                     "max_value": ind_ref.get("max_value"),
                     "sort_order": ind_ref.get("sort_order", idx),
+                    "external_id": str(ind_ref.get("id", "")) or None,
+                    "name": ind_ref.get("name"),
+                    "unit": ind_ref.get("unit"),
+                    "data_type": ind_ref.get("data_type"),
+                    "description": ind_ref.get("description"),
                 }
                 if lib_ref["indicator_id"]:
                     result["library_indicators"].append(lib_ref)
@@ -512,7 +531,7 @@ async def import_indicators_from_1c(
     """
     service = OneCIntegrationService(config)
     result = {
-        "total": 0, "created": 0, "skipped": 0,
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
         "errors": [], "timestamp": datetime.utcnow().isoformat(),
     }
     try:
@@ -520,10 +539,14 @@ async def import_indicators_from_1c(
         result["total"] = len(indicators_1c)
         logger.info(f"Fetched {len(indicators_1c)} indicators from 1C")
 
-        existing_names = set()
+        # Загружаем существующие показатели для быстрого поиска дублей
+        existing_by_external_id: Dict[str, IndicatorLibrary] = {}
+        existing_names: set = set()
         if skip_duplicates:
-            existing = db.query(IndicatorLibrary.name).all()
-            existing_names = {row[0] for row in existing}
+            for ind in db.query(IndicatorLibrary).all():
+                if ind.external_id:
+                    existing_by_external_id[str(ind.external_id)] = ind
+                existing_names.add(ind.name)
 
         for indicator_data in indicators_1c:
             try:
@@ -531,25 +554,58 @@ async def import_indicators_from_1c(
                 if local_item is None:
                     result["errors"].append({"indicator": indicator_data, "error": "Failed to transform"})
                     continue
+
+                ext_id = local_item.external_id
+                # Проверяем дубликат по external_id (ID из 1С)
+                if ext_id and ext_id in existing_by_external_id:
+                    if skip_duplicates:
+                        result["skipped"] += 1
+                        continue
+                    # Обновляем существующий (по external_id)
+                    existing = existing_by_external_id[ext_id]
+                    existing.name = local_item.name
+                    existing.unit = local_item.unit
+                    existing.data_type = local_item.data_type
+                    existing.options = ",".join(local_item.options) if local_item.options else None
+                    existing.description = local_item.description
+                    existing.category = local_item.category
+                    existing.is_required = local_item.is_required
+                    existing.default_value = local_item.default_value
+                    result["updated"] += 1
+                    continue
+
+                # Проверяем дубликат по имени
                 if skip_duplicates and local_item.name in existing_names:
+                    # Если у существующего нет external_id — проставим его
+                    existing_by_name = db.query(IndicatorLibrary).filter(
+                        IndicatorLibrary.name == local_item.name
+                    ).first()
+                    if existing_by_name and ext_id and not existing_by_name.external_id:
+                        existing_by_name.external_id = ext_id
+                        db.flush()
+                        existing_by_external_id[ext_id] = existing_by_name
                     result["skipped"] += 1
                     continue
+
                 db_indicator = IndicatorLibrary(
                     name=local_item.name, unit=local_item.unit,
                     data_type=local_item.data_type,
                     options=",".join(local_item.options) if local_item.options else None,
                     description=local_item.description, category=local_item.category,
                     is_required=local_item.is_required, default_value=local_item.default_value,
+                    external_id=ext_id,
                 )
                 db.add(db_indicator)
                 result["created"] += 1
                 existing_names.add(local_item.name)
+                if ext_id:
+                    existing_by_external_id[ext_id] = db_indicator
             except Exception as e:
                 logger.error(f"Error processing indicator: {e}")
                 result["errors"].append({"indicator": indicator_data, "error": str(e)})
 
         db.commit()
-        logger.info(f"Import completed: {result['created']} created, {result['skipped']} skipped, {len(result['errors'])} errors")
+        logger.info(f"Import completed: {result['created']} created, {result['updated']} updated, {result['skipped']} skipped, {len(result['errors'])} errors")
     except Exception as e:
         db.rollback()
         logger.error(f"Import failed: {str(e)}")
@@ -570,6 +626,7 @@ async def import_templates_from_1c(
 ) -> Dict[str, Any]:
     """
     Импортировать шаблоны анализов из 1С в локальную БД.
+    Шаблон загружается "наполненным" — показатели привязываются по external_id из 1С.
     
     Returns:
         {
@@ -597,10 +654,18 @@ async def import_templates_from_1c(
                     result["errors"].append({"template": template_data, "error": "Failed to transform"})
                     continue
 
-                # Проверяем существование по имени
-                existing = db.query(AnalysisType).filter(
-                    AnalysisType.name == local_data["name"]
-                ).first()
+                template_external_id = local_data.get("external_id")
+
+                # Ищем шаблон по external_id (из 1С) или по имени
+                existing = None
+                if template_external_id:
+                    existing = db.query(AnalysisType).filter(
+                        AnalysisType.external_id == template_external_id
+                    ).first()
+                if existing is None:
+                    existing = db.query(AnalysisType).filter(
+                        AnalysisType.name == local_data["name"]
+                    ).first()
 
                 if existing:
                     if skip_duplicates:
@@ -609,38 +674,55 @@ async def import_templates_from_1c(
                     # Обновляем существующий
                     existing.description = local_data.get("description") or existing.description
                     existing.is_active = local_data.get("is_active", existing.is_active)
+                    existing.external_id = template_external_id
                     # Обновляем показатели
-                    if local_data.get("library_indicators"):
-                        for ti in existing.template_indicators:
-                            db.delete(ti)
-                        db.flush()
-                        for lib_ref in local_data["library_indicators"]:
-                            ti = TemplateIndicator(
-                                template_id=existing.id,
-                                indicator_id=lib_ref["indicator_id"],
-                                min_value=lib_ref.get("min_value"),
-                                max_value=lib_ref.get("max_value"),
-                                sort_order=lib_ref.get("sort_order", 0),
-                            )
-                            db.add(ti)
+                    for ti in existing.template_indicators:
+                        db.delete(ti)
+                    db.flush()
+                    for lib_ref in local_data.get("library_indicators", []):
+                        indicator = _resolve_indicator_by_external_id(db, lib_ref, user_id)
+                        if indicator is None:
+                            result["errors"].append({
+                                "template": local_data["name"],
+                                "error": f"Не удалось найти/создать показатель с external_id={lib_ref.get('external_id')}"
+                            })
+                            continue
+                        ti = TemplateIndicator(
+                            template_id=existing.id,
+                            indicator_id=indicator.id,
+                            min_value=lib_ref.get("min_value"),
+                            max_value=lib_ref.get("max_value"),
+                            sort_order=lib_ref.get("sort_order", 0),
+                            external_id=lib_ref.get("external_id"),
+                        )
+                        db.add(ti)
                     result["updated"] += 1
                 else:
-                    # Создаём новый
+                    # Создаём новый шаблон
                     db_template = AnalysisType(
                         name=local_data["name"],
                         description=local_data.get("description"),
                         created_by=user_id,
                         is_active=local_data.get("is_active", True),
+                        external_id=template_external_id,
                     )
                     db.add(db_template)
                     db.flush()
                     for lib_ref in local_data.get("library_indicators", []):
+                        indicator = _resolve_indicator_by_external_id(db, lib_ref, user_id)
+                        if indicator is None:
+                            result["errors"].append({
+                                "template": local_data["name"],
+                                "error": f"Не удалось найти/создать показатель с external_id={lib_ref.get('external_id')}"
+                            })
+                            continue
                         ti = TemplateIndicator(
                             template_id=db_template.id,
-                            indicator_id=lib_ref["indicator_id"],
+                            indicator_id=indicator.id,
                             min_value=lib_ref.get("min_value"),
                             max_value=lib_ref.get("max_value"),
                             sort_order=lib_ref.get("sort_order", 0),
+                            external_id=lib_ref.get("external_id"),
                         )
                         db.add(ti)
                     result["created"] += 1
@@ -662,6 +744,56 @@ async def import_templates_from_1c(
     finally:
         await service.close()
     return result
+
+
+def _resolve_indicator_by_external_id(db: Session, lib_ref: Dict[str, Any], user_id: int) -> Optional[IndicatorLibrary]:
+    """
+    Найти показатель по external_id (ID показателя из 1С).
+    При импорте шаблона из 1С в lib_ref приходит:
+      - indicator_external_id: это ID показателя в 1С (используется для сопоставления)
+      - external_id: это ID связи показателя в шаблоне (сохраняется в TemplateIndicator)
+    Если показатель не найден — создаём новый с external_id = indicator_external_id.
+    Возвращает IndicatorLibrary или None.
+    """
+    # ID показателя из 1С (для сопоставления со справочником)
+    indicator_external_id = lib_ref.get("indicator_external_id") or lib_ref.get("external_id")
+    # Имя показателя (если 1С передаёт его в связи)
+    name = lib_ref.get("name")
+    if not name:
+        if indicator_external_id:
+            name = f"Показатель {indicator_external_id}"
+        else:
+            name = f"Показатель {lib_ref.get('indicator_id')}"
+
+    # Сначала ищем по external_id показателя
+    if indicator_external_id:
+        indicator = db.query(IndicatorLibrary).filter(
+            IndicatorLibrary.external_id == str(indicator_external_id)
+        ).first()
+        if indicator:
+            return indicator
+
+    # Если не найден по external_id — ищем по имени
+    existing_by_name = db.query(IndicatorLibrary).filter(IndicatorLibrary.name == name).first()
+    if existing_by_name:
+        # Если у существующего нет external_id — проставим его
+        if indicator_external_id and not existing_by_name.external_id:
+            existing_by_name.external_id = str(indicator_external_id)
+            db.flush()
+        return existing_by_name
+
+    # Создаём новый показатель
+    indicator = IndicatorLibrary(
+        name=name,
+        unit=lib_ref.get("unit"),
+        data_type=lib_ref.get("data_type", "number"),
+        description=lib_ref.get("description"),
+        external_id=str(indicator_external_id) if indicator_external_id else None,
+        created_by=user_id,
+    )
+    db.add(indicator)
+    db.flush()
+    return indicator
 
 
 async def import_plans_from_1c(

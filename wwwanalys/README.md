@@ -1,23 +1,24 @@
-# WWWAnalys v3.2.0
+# WWWAnalys v6.7.0
 
-Система для управления анализами и шаблонами показателей с библиотекой индикаторов и интеграцией с внешними системами (1С Предприятие).
+Система для управления анализами и шаблонами показателей с библиотекой индикаторов, планами анализа и глубокой двусторонней интеграцией с внешними системами (1С Предприятие).
 
 ## Описание
 
-Веб-приложение для создания шаблонов анализов, управления библиотекой показателей, заполнения значений и просмотра истории отчётов. Состоит из бэкенда на FastAPI и фронтенда на React с Bootstrap 5.
+Веб-приложение для создания шаблонов анализов, управления библиотекой показателей, заполнения значений, планирования и просмотра истории отчётов. Состоит из бэкенда на FastAPI и фронтенда на React 19 с чистым CSS (SaaS-дизайн, без Bootstrap Icons).
 
 ### Основные возможности
 
 - 📊 Создание и управление шаблонами анализов и пресетами
-- 📚 Библиотека показателей с версионированием и категориями
-- 📝 Заполнение показателей с поддержкой числовых, текстовых и select типов
+- 📚 Библиотека показателей с версионированием, категориями, поиском и рекомендациями
+- 📝 Заполнение показателей с поддержкой числовых, текстовых и select-типов
 - 📈 Просмотр истории отчётов с фильтрацией и статистикой
-- 📋 Планирование анализов и управление планами
-- 👤 Аутентификация пользователей (администратор/пользователь)
-- 🔗 Интеграция с 1С Предприятие для импорта справочника показателей
+- 📋 Планирование анализов и управление планами (с передачей batch_number в отчёты)
+- 👤 Аутентификация пользователей (администратор/пользователь) через JWT
+- 🔗 Двусторонняя интеграция с 1С Предприятие: импорт справочника показателей, шаблонов и планов, а также отправка отчётов и планов обратно в 1С
 - 📥 Импорт/экспорт показателей (CSV, JSON, Excel)
 - 🗄️ PostgreSQL / SQLite база данных
 - 🐳 Docker-контейнеризация
+- 🎨 Современный SaaS-редизайн всех страниц, чистый CSS (без Bootstrap Icons)
 
 ## Структура проекта
 
@@ -25,19 +26,19 @@
 wwwanalys/
 ├── backend/                    # Бэкенд на FastAPI
 │   ├── app/
-│   │   ├── api/               # API эндпоинты (11 модулей)
+│   │   ├── api/               # API эндпоинты (10 модулей)
 │   │   ├── auth/              # Аутентификация (JWT, bcrypt)
 │   │   ├── core/              # Конфигурация и зависимости
-│   │   ├── crud/              # CRUD операции (8 модулей)
-│   │   ├── models/            # SQLAlchemy модели (11 модулей)
-│   │   ├── schemas/           # Pydantic схемы (9 модулей)
+│   │   ├── crud/              # CRUD операции
+│   │   ├── models/            # SQLAlchemy модели (13 сущностей)
+│   │   ├── schemas/           # Pydantic схемы
 │   │   └── services/          # Внешние сервисы (интеграция с 1С)
 │   ├── alembic/               # Миграции Alembic
 │   ├── tests/                 # Тесты
 │   ├── main.py                # Точка входа
 │   ├── requirements.txt       # Зависимости
 │   └── .env.example           # Пример конфигурации
-├── frontend/                  # Фронтенд на React
+├── frontend/                  # Фронтенд на React 19
 │   ├── src/
 │   │   ├── components/        # UI компоненты (AuthModal, Header, ...)
 │   │   ├── pages/             # Страницы (Login, Dashboard, Admin, Plans)
@@ -57,19 +58,21 @@ wwwanalys/
 
 ### Бэкенд
 - **FastAPI** — асинхронный веб-фреймворк
-- **SQLAlchemy** — ORM для работы с базой данных
-- **Pydantic** — валидация данных
+- **SQLAlchemy 2.0** — ORM для работы с базой данных
+- **Pydantic v2** — валидация данных
 - **PostgreSQL / SQLite** — база данных
-- **JWT** — аутентификация
+- **JWT (python-jose)** — аутентификация
+- **Passlib (bcrypt)** — хеширование паролей
 - **Uvicorn** — ASGI сервер
 - **Alembic** — миграции базы данных
 - **httpx** — HTTP клиент для интеграции с 1С
+- **openpyxl** — экспорт в Excel
 
 ### Фронтенд
 - **React 19** — UI библиотека
 - **TypeScript** — статическая типизация
-- **Bootstrap 5 + React-Bootstrap** — CSS фреймворк
-- **React Router DOM** — маршрутизация
+- **Чистый CSS** (CSS-переменные, без Bootstrap Icons) — стилизация в SaaS-стиле
+- **React Router DOM v7** — маршрутизация
 - **Vite** — сборщик проектов
 - **Axios** — HTTP клиент
 
@@ -78,320 +81,233 @@ wwwanalys/
 ### Требования
 - Docker и Docker Compose
 - Node.js 18+ (для разработки фронтенда)
-- Python 3.8+ (для разработки бэкенда)
+- Python 3.11+ (для разработки бэкенда)
 
 ### Запуск через Docker
 
-1. Клонируйте репозиторий:
-```bash
-git clone <repository-url>
-cd wwwanalys
-```
-
-2. Настройте окружение:
+1. Настройте окружение:
 ```bash
 cp backend/.env.example backend/.env
-# Редактируйте .env при необходимости
+# Отредактируйте .env при необходимости (SECRET_KEY, API_KEY, CORS_ORIGINS)
 ```
 
-3. Запустите контейнеры:
+2. Запустите контейнеры:
 ```bash
 docker-compose up -d
 ```
 
-4. Проверьте работу:
+3. Проверьте работу:
 - Бэкенд: http://localhost:8000
-- Фронтенд: http://localhost:5173
+- Фронтенд: http://localhost:80 (или http://localhost:5173 в dev)
 - API документация: http://localhost:8000/docs
 - PostgreSQL: localhost:5433
 
+### Запуск сид-данных
+```bash
+docker compose --profile seed run seed
+```
+
 ## API Эндпоинты
 
-### Аутентификация
+### Аутентификация (`/auth`)
 - `POST /auth/token` — Получение JWT токена
 - `POST /auth/register` — Регистрация пользователя
 - `GET /auth/users/me` — Текущий пользователь
 
-### Шаблоны (Templates)
-- `GET /api/templates/` — Получение всех шаблонов
-- `POST /api/templates/` — Создание шаблона
-- `GET /api/templates/active` — Получение активных шаблонов
-- `GET /api/templates/{id}` — Получение шаблона по ID
-- `PUT /api/templates/{id}` — Обновление шаблона
-- `DELETE /api/templates/{id}` — Удаление шаблона
-- `DELETE /api/templates/clear-all` — Очистка всех шаблонов
-- `POST /api/templates/{id}/copy` — Копирование шаблона
-- `POST /api/templates/from-preset` — Создание шаблона из пресета
+### Шаблоны (Templates) (`/api/templates`)
+- `GET /api/templates/` — Все шаблоны (admin)
+- `POST /api/templates/` — Создание шаблона (admin)
+- `GET /api/templates/active` — Активные шаблоны
+- `GET /api/templates/{id}` — Шаблон по ID (admin)
+- `PUT /api/templates/{id}` — Обновление (admin)
+- `DELETE /api/templates/{id}` — Удаление (admin)
+- `DELETE /api/templates/clear-all` — Очистка всех шаблонов (admin)
+- `POST /api/templates/{id}/copy` — Копирование (admin)
+- `POST /api/templates/from-preset` — Создание из пресета (admin)
 
-### Библиотека показателей (Indicator Library)
-- `GET /api/indicators/library` — Получение всех показателей библиотеки
-- `POST /api/indicators/library` — Создание показателя библиотеки
-- `PUT /api/indicators/library/{indicator_id}` — Обновление показателя библиотеки
-- `DELETE /api/indicators/library/{indicator_id}` — Удаление показателя библиотеки
-
-### Дополнительные эндпоинты библиотеки
-- `GET /api/indicators/library/count` — Получение количества показателей
-- `GET /api/indicators/library/{indicator_id}/versions` — Получение истории версий показателя
-- `GET /api/indicators/library/check-duplicate` — Проверка дубликатов показателей
-- `POST /api/indicators/library/batch/create` — Пакетное создание показателей
-- `PUT /api/indicators/library/batch/update` — Пакетное обновление показателей
-- `POST /api/indicators/library/batch/delete` — Пакетное удаление показателей
+### Библиотека показателей (Indicator Library) (`/api/indicators`)
+- `GET /api/indicators/library` — Список с фильтрами, поиском и пагинацией
+- `GET /api/indicators/library/count` — Количество с учётом фильтров
+- `POST /api/indicators/library` — Создание (admin)
+- `PUT /api/indicators/library/{id}` — Обновление (admin)
+- `DELETE /api/indicators/library/{id}` — Удаление (admin)
+- `POST /api/indicators/library/batch/create` — Пакетное создание (admin)
+- `PUT /api/indicators/library/batch/update` — Пакетное обновление (admin)
+- `POST /api/indicators/library/batch/delete` — Пакетное удаление (admin)
+- `GET /api/indicators/library/{id}/versions` — История версий
+- `GET /api/indicators/library/{id}/related` — Связанные показатели
+- `GET /api/indicators/library/suggestions` — Рекомендации показателей
+- `GET /api/indicators/library/check-duplicate` — Проверка дубликатов
 - `GET /api/indicators/library/export/csv` — Экспорт в CSV
 - `GET /api/indicators/library/export/excel` — Экспорт в Excel
 - `POST /api/indicators/library/import/csv` — Импорт из CSV
 - `POST /api/indicators/library/import/json` — Импорт из JSON
 
-### Интеграция с 1С Предприятие
-- `POST /api/external/1c/test-connection` — Проверка подключения к 1С
-- `POST /api/external/1c/import-indicators` — Импорт показателей из 1С
-- `GET /api/external/1c/indicators` — Получение списка показателей из 1С (без сохранения)
+### Интеграция с 1С Предприятие (`/api/external`)
+- `POST /api/external/1c/test-connection` — Проверка подключения
+- `POST /api/external/1c/import-indicators` — Импорт показателей
+- `GET /api/external/1c/indicators` — Получение показателей (без сохранения)
+- `POST /api/external/1c/import-templates` — Импорт шаблонов
+- `GET /api/external/1c/templates` — Получение шаблонов (без сохранения)
+- `POST /api/external/1c/import-plans` — Импорт планов
+- `GET /api/external/1c/plans` — Получение планов (без сохранения)
+- `POST /api/external/1c/push-report` — Отправка отчёта в 1С
+- `POST /api/external/1c/push-plan` — Отправка плана в 1С
+- `POST /api/external/sync-templates` — Синхронизация шаблонов из ERP (legacy)
 
-### Пресеты (Presets)
-- `GET /api/presets/` — Получение всех пресетов
-- `POST /api/presets/` — Создание пресета
-- `PUT /api/presets/{id}` — Обновление пресета
-- `DELETE /api/presets/{id}` — Удаление пресета
+### Пресеты (Presets) (`/api/presets`)
+- `GET /api/presets/` — Все пресеты
+- `POST /api/presets/` — Создание
+- `PUT /api/presets/{id}` — Обновление
+- `DELETE /api/presets/{id}` — Удаление
 
-### Планы анализа (Plans)
-- `GET /api/plans/` — Получение всех планов
-- `POST /api/plans/` — Создание плана
-- `PUT /api/plans/{id}` — Обновление плана
-- `DELETE /api/plans/{id}` — Удаление плана
+### Планы анализа (Plans) (`/api/plans`)
+- `GET /api/plans/` — Все планы
+- `POST /api/plans/` — Создание
+- `PUT /api/plans/{id}` — Обновление
+- `DELETE /api/plans/{id}` — Удаление
 
-### Отчёты (Reports)
-- `GET /api/reports/` — Получение списка отчётов
+### Отчёты (Reports) (`/api/reports`)
+- `GET /api/reports/` — Список отчётов
 - `POST /api/reports/` — Создание отчёта
-- `GET /api/reports/{id}` — Получение детальной информации об отчёте
+- `GET /api/reports/{id}` — Детали отчёта
 - `GET /api/reports/filtered/list` — Отчёты с фильтрацией
 - `DELETE /api/reports/history/clear` — Очистка истории
 
-### Статистика
-- `GET /api/statistics/` — Получение статистики по отчётам
+### Статистика (`/api/statistics`)
+- `GET /api/statistics/` — Статистика по отчётам
 
-### Логирование процессов
-- `GET /api/process-log/` — Получение логов процессов
-- `POST /api/process-log/` — Создание записи лога
+### Логирование процессов (`/process-logs`)
+- `GET /process-logs/` — Логи процессов
+- `POST /process-logs/` — Создание записи лога
+
+### Типы анализа (`/analysis-types`, legacy-алиас)
+- Дублирует функциональность `/api/templates` (требует унификации)
 
 ## Модели данных
 
 ### Пользователь (User)
-- id: int
-- username: str
-- email: str
-- is_admin: bool
-- is_active: bool
-- hashed_password: str
+- id, username, email, is_admin, is_active, hashed_password
 
 ### Библиотека показателей (IndicatorLibrary)
-- id: int
-- name: str
-- description: str
-- category: str
-- created_by: int
-- created_at: datetime
+- id, name, description, category, created_by, created_at, data_type, options, is_required, default_value, validation_rules
 
 ### Версия библиотеки (IndicatorLibraryVersion)
-- id: int
-- library_id: int
-- version: int
-- created_at: datetime
-- created_by: int
+- id, library_id, version, created_at, created_by
 
 ### Показатель (Indicator)
-- id: int
-- library_id: int
-- name: str
-- unit: str
-- data_type: str ('number', 'text', 'select')
-- options: str (JSON для select)
-- description: str
-- category: str
-- is_required: bool
-- default_value: str
-- validation_rules: str (JSON)
-- created_by: int
-- created_at: datetime
+- id, library_id, name, unit, data_type, options, description, category, is_required, default_value, validation_rules, created_by, created_at
 
 ### Значение показателя (IndicatorValue)
-- id: int
-- indicator_id: int
-- value: float | null
-- text_value: str | null
-- is_normal: bool
-- process_log_id: int
+- id, indicator_id, value (float|null), text_value (str|null), is_normal, process_log_id
 
-### Тип анализа (AnalysisType)
-- id: int
-- name: str
-- description: str
-- created_by: int
-- is_active: bool
-- template_indicators: List[TemplateIndicator]
+### Тип анализа / Шаблон (AnalysisType)
+- id, name, description, created_by, is_active, template_indicators[]
 
 ### Показатель шаблона (TemplateIndicator)
-- id: int
-- template_id: int
-- indicator_id: int (ссылка на Indicator)
-- min_value: float | null
-- max_value: float | null
-- sort_order: int
-- is_custom: bool
-- template_notes: str
+- id, template_id, indicator_id, min_value, max_value, sort_order, is_custom, template_notes
 
 ### Пресет (Preset)
-- id: int
-- name: str
-- description: str
-- category: str
-- created_by: int
+- id, name, description, category, created_by
+- PresetIndicator — связи показателей пресета
 
 ### План анализа (AnalysisPlan)
-- id: int
-- name: str
-- description: str
-- analysis_type_id: int
-- created_by: int
-- status: str
+- id, name, description, analysis_type_id, created_by, status, plan_date
+- PlanItem — элементы плана (template_id, batch_number, sort_order)
 
 ### Процесс лог (ProcessLog)
-- id: int
-- batch_number: str
-- analysis_type_id: int
-- created_by: int
-- status: str ('pending', 'completed', 'failed')
-- started_at: datetime
-- notes: str | null
+- id, batch_number, analysis_type_id, created_by, status, started_at, completed_at, notes
+
+### Отчёт (Report)
+- Связан с ProcessLog, содержит значения показателей и batch_number
 
 ## Интеграция с 1С Предприятие
 
-Система поддерживает импорт справочника показателей из 1С Предприятие через REST API.
+Система поддерживает двусторонний обмен данными со 1С Предприятие через REST API (на стороне 1С публикуется HTTP-сервис).
 
-### Настройка подключения
+### Импорт из 1С
+- Справочник показателей (`/api/external/1c/import-indicators`)
+- Шаблоны анализов (`/api/external/1c/import-templates`)
+- Планы анализа (`/api/external/1c/import-plans`)
 
-1. Убедитесь, что 1С Предприятие настроено на публикацию REST API (через HTTP-сервисы)
-2. В админ-панели перейдите на вкладку "Справочник показателей"
-3. Нажмите кнопку "Загрузить из 1С"
-4. Укажите параметры подключения:
-   - URL сервера 1С
-   - API-ключ (если используется)
-   - Логин и пароль (если используется Basic Auth)
+Для каждого импорта настраивается `connection` (base_url, api_key, username, password, timeout) и `field_mapping` (соответствие полей 1С → локальные).
 
-### Маппинг полей
+### Экспорт в 1С
+- Отправка отчёта: `POST /api/external/1c/push-report`
+- Отправка плана: `POST /api/external/1c/push-plan`
 
-При импорте можно настроить соответствие полей между 1С и локальной системой:
-```json
-{
-  "name": "Наименование",
-  "unit": "ЕдиницаИзмерения",
-  "data_type": "ТипДанных",
-  "description": "Описание",
-  "category": "Категория"
-}
-```
-
-### API для интеграции
-
-```bash
-# Проверка подключения
-curl -X POST http://localhost:8000/api/external/1c/test-connection \
-  -H "X-API-KEY: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"connection": {"base_url": "http://1c-server:8080", "api_key": "your-key"}}'
-
-# Импорт показателей
-curl -X POST http://localhost:8000/api/external/1c/import-indicators \
-  -H "X-API-KEY: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "connection": {"base_url": "http://1c-server:8080"},
-    "field_mapping": {
-      "name": "Наименование",
-      "unit": "ЕдиницаИзмерения"
-    }
-  }'
-```
+### Защита
+Все эндпоинты интеграции требуют заголовок `X-API-KEY`, значение сверяется с `settings.api_key`.
 
 ## Роли пользователей
 
 ### Администратор
-- Доступ ко всем шаблонам
-- Управление пользователями
-- Управление справочником показателей
-- Импорт/экспорт показателей
-- Интеграция с внешними системами
-- Полный доступ к отчётам
+- Доступ ко всем шаблонам и пресетам
+- Управление библиотекой показателей (CRUD, импорт/экспорт, версионирование)
+- Интеграция с внешними системами (1С)
+- Полный доступ к отчётам и планам
 
 ### Пользователь
 - Доступ к активным шаблонам
 - Создание отчётов
 - Просмотр истории своих отчётов
+- Работа с планами анализа
 
 ## Разработка
 
-### Добавление нового API эндпоинта
-1. Создайте схему в `app/schemas/`
-2. Реализуйте CRUD операции в `app/crud/`
-3. Добавьте эндпоинт в `app/api/`
-4. Обновите фронтенд в `frontend/src/`
+### Структура слоёв
+1. **API** (`app/api/`) — роутеры FastAPI
+2. **CRUD** (`app/crud/`) — операции с БД
+3. **Models** (`app/models/`) — SQLAlchemy модели
+4. **Schemas** (`app/schemas/`) — Pydantic схемы
+5. **Services** (`app/services/`) — внешние интеграции
+6. **Core** (`app/core/`) — config, database, deps
+7. **Auth** (`app/auth/`) — JWT + bcrypt
 
-### Изменение моделей
-1. Измените SQLAlchemy модель в `app/models/`
-2. Обновите Pydantic схему в `app/schemas/`
-3. Примените миграции (если используется Alembic)
-
-### Фронтенд разработка
-- Компоненты находятся в `frontend/src/components/`
-- Страницы в `frontend/src/pages/`
-- Типы в `frontend/src/types/`
-- API запросы в `frontend/src/api/`
-
-## Тестирование
-
-### API тесты
+### Тестирование
 ```bash
 cd backend
 pytest
-```
-
-### Интеграционные тесты
-```bash
-docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 ```
 
 ## Деплой
 
 ### Docker
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose up -d
 ```
 
-### Ручной деплой
-1. Соберите образы:
+### Сборка образов
 ```bash
 docker build -t wwwanalys-backend ./backend
 docker build -t wwwanalys-frontend ./frontend
 ```
 
-2. Запустите контейнеры с продакшн конфигурацией
-
 ## Версии
 
-- **v1.0.0** — Initial release with admin panel and analysis constructor
-- **v2.0.0** — Save current version
-- **v3.0.0** — Full fix for reports and templates with UI improvements
-- **v3.0.0-bootstrap** — feat: migrate frontend from Tailwind CSS to Bootstrap 5
-- **v3.1.0** — feat: add indicator library with versioning and presets support
-- **v3.2.0** — feat: remove template_type, remove custom indicators, add 1C integration
+- **v1.0.0** — Initial release (admin panel, конструктор анализов)
+- **v2.0.0** — Сохранение состояния
+- **v3.0.0** — Исправления отчётов и шаблонов, UI
+- **v3.0.0-bootstrap** — Миграция на Bootstrap 5
+- **v3.1.0** — Библиотека показателей с версионированием и пресетами
+- **v3.2.0** — Удаление template_type/custom indicators, интеграция 1С
+- **v4.0.0** — Крупное обновление архитектуры
+- **v5.0.0** — Расширение функциональности
+- **v6.0.0** — Переработка планов и отчётов
+- **v6.1.0 – v6.3.0** — Улучшения интеграции и UI
+- **v6.4.0** — AuthModal в SaaS-стиле
+- **v6.5.0** — Modern SaaS redesign всех страниц
+- **v6.6.0** — Полное удаление Bootstrap Icons, переход на чистый CSS
+- **v6.7.0** — Расширенная интеграция с 1С: справочники, шаблоны, планы (двусторонний обмен)
 
 ## Лицензия
 
-[MIT License](LICENSE)
+MIT License
 
 ## Контакты
 
-Для вопросов и предложений:
-- GitHub Issues: [wwwanalys/issues](https://github.com/lunevalexsandr-web/wwwanalys/issues)
+GitHub Issues: [wwwanalys/issues](https://github.com/lunevalexsandr-web/wwwanalys/issues)
 
 ---
 
-**WWWAnalys v3.2.0** — Система для управления анализами и шаблонами показателей с интеграцией 1С
+**WWWAnalys v6.7.0** — Система управления анализами и шаблонами показателей с двусторонней интеграцией 1С

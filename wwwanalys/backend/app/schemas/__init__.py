@@ -28,6 +28,10 @@ from .analysis_plan import (
     PlanItemResponse,
     PlanItemUpdate,
 )
+from .integration_config import (
+    IntegrationConfigUpdate,
+    IntegrationConfigResponse,
+)
 
 __all__ = [
     "User",
@@ -69,4 +73,6 @@ __all__ = [
     "PlanItemDetail",
     "PlanItemTemplateInfo",
     "PlanItemResponse",
+    "IntegrationConfigUpdate",
+    "IntegrationConfigResponse",
 ]

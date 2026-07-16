@@ -17,6 +17,7 @@ class TemplateIndicator(Base):
     # Новые поля
     is_custom = Column(Boolean, default=False)              # Пользовательский показатель (не из справочника)
     template_notes = Column(Text, nullable=True)             # Примечания к показателю в шаблоне
+    external_id = Column(String(255), nullable=True, index=True)  # ID связи показателя в шаблоне из внешней системы (1С)
 
     # Связи
     template = relationship("AnalysisType", back_populates="template_indicators")

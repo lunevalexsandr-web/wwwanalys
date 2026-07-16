@@ -1,18 +1,18 @@
 # Аудит проекта WWWAnalys
 
-**Дата:** 17.06.2026 (обновлено)
-**Версия проекта:** 3.2.0
+**Дата:** 14.07.2026 (обновлено)
+**Версия проекта:** 6.7.0
 
 ---
 
 ## 1. Общая информация
 
-**WWWAnalys** — веб-приложение для сбора, анализа и хранения данных различных показателей с библиотекой индикаторов, шаблонами анализа и интеграцией с внешними системами (1С Предприятие).
+**WWWAnalys** — веб-приложение для сбора, анализа и хранения данных различных показателей с библиотекой индикаторов, шаблонами анализа, планами и двусторонней интеграцией с внешними системами (1С Предприятие).
 
 | Компонент | Технологии |
 |-----------|------------|
-| **Backend** | FastAPI, SQLAlchemy 2.0, Python-JOSE, Passlib (bcrypt), Pydantic |
-| **Frontend** | React 19, TypeScript, Bootstrap 5, React-Bootstrap, Vite |
+| **Backend** | FastAPI, SQLAlchemy 2.0, Pydantic v2, python-jose (JWT), Passlib (bcrypt) |
+| **Frontend** | React 19, TypeScript, чистый CSS (SaaS-стиль, без Bootstrap Icons), React Router v7, Vite |
 | **База данных** | SQLite (dev) / PostgreSQL (prod) |
 | **Аутентификация** | JWT-токены, Bearer-схема |
 | **Деплой** | Docker Compose |
@@ -25,95 +25,54 @@
 wwwanalys/
 ├── docker-compose.yml           # Оркестрация контейнеров
 ├── AUDIT.md                     # Настоящий отчет
-├── PROJECT_STRUCTURE.md         # Детальное описание структуры
+├── PROJECT_STRUCTURE.md         # Описание структуры
+├── README.md                    # Основная документация
 ├── backend/
-│   ├── .dockerignore            # Исключения для Docker-образа
 │   ├── .env.example             # Пример переменных окружения
-│   ├── .env                     # Файл окружения (не в Git)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── main.py                  # Точка входа FastAPI
-│   ├── seed.py                  # Сид-данные (ручной запуск)
-│   ├── test_api.py              # Скрипт тестирования API
+│   ├── seed.py                  # Сид-данные
 │   ├── alembic/                 # Миграции Alembic
-│   │   └── versions/            # Файлы версий миграций
 │   ├── tests/                   # Тесты
-│   │   └── test_indicators.py   # Тесты показателей
 │   └── app/
-│       ├── core/
-│       │   ├── config.py        # Конфигурация (env vars)
-│       │   ├── database.py      # Подключение к БД
-│       │   └── deps.py          # Зависимости (get_db, get_current_user)
-│       ├── models/              # 11 моделей данных
-│       │   ├── user.py
-│       │   ├── indicator_library.py
-│       │   ├── indicator_library_version.py
-│       │   ├── indicator.py
-│       │   ├── indicator_value.py
-│       │   ├── analysis_type.py
-│       │   ├── template_indicator.py
-│       │   ├── report.py
-│       │   ├── preset.py
-│       │   ├── process_log.py
-│       │   └── analysis_plan.py
-│       ├── schemas/             # 9 схем Pydantic
-│       ├── crud/                # 8 CRUD модулей
-│       ├── api/                 # 11 API эндпоинтов
-│       │   ├── auth.py
-│       │   ├── indicators.py
-│       │   ├── templates.py
-│       │   ├── reports.py
-│       │   ├── analysis_type.py
-│       │   ├── presets.py
-│       │   ├── plans.py
-│       │   ├── statistics.py
-│       │   ├── process_log.py
-│       │   └── external.py
-│       ├── auth/
-│       │   └── auth.py          # JWT + bcrypt
-│       └── services/
-│           └── external_integration.py  # Интеграция с 1С
+│       ├── core/                # config.py, database.py, deps.py
+│       ├── models/              # 13 моделей (вкл. PresetIndicator, PlanItem)
+│       ├── schemas/             # Pydantic схемы
+│       ├── crud/                # CRUD операции
+│       ├── api/                 # 10 роутеров
+│       ├── auth/                # auth.py (JWT + bcrypt)
+│       └── services/            # external_integration.py (1С)
 ├── frontend/
 │   ├── Dockerfile
 │   ├── package.json
 │   ├── vite.config.ts
-│   ├── eslint.config.js
-│   ├── tailwind.config.js
-│   ├── index.html
 │   └── src/
-│       ├── main.tsx             # Точка входа
-│       ├── App.tsx              # Маршрутизация
-│       ├── App.css
-│       ├── index.css            # Глобальные стили + Bootstrap
-│       ├── components/          # 11 компонентов
-│       │   ├── AuthModal.tsx    # Модальное окно авторизации (SaaS)
-│       │   ├── AuthModal.css    # Стили с CSS-переменными
-│       │   ├── AppHeader.tsx
-│       │   ├── AppToast.tsx
-│       │   ├── AlertToast.tsx
-│       │   ├── PageHeader.tsx
-│       │   ├── ActionButtons.tsx
-│       │   ├── IndicatorInput.tsx
-│       │   ├── IndicatorPreview.tsx
-│       │   ├── IndicatorSelector.tsx
-│       │   └── TemplateBuilder.tsx
-│       ├── pages/               # 4 страницы
-│       │   ├── Login.tsx
-│       │   ├── Dashboard.tsx
-│       │   ├── Admin.tsx
-│       │   └── Plans.tsx
-│       ├── context/
-│       │   └── AuthContext.tsx  # Контекст аутентификации
-│       ├── hooks/
-│       │   └── useToast.ts      # Хук уведомлений
-│       ├── types/
-│       │   └── index.ts         # TypeScript типы
-│       └── api/
-│           └── axios.ts         # HTTP клиент
+│       ├── main.tsx, App.tsx, App.css, index.css
+│       ├── components/          # 10+ компонентов
+│       ├── pages/               # Login, Dashboard, Admin, Plans
+│       ├── context/             # AuthContext.tsx
+│       ├── hooks/               # useToast.ts
+│       ├── types/               # index.ts
+│       └── api/                 # axios.ts
 ├── docs/
-│   └── API.md                   # Документация API
-└── README.md                    # Основная документация
+│   └── API.md
+└── README.md
 ```
+
+### API роутеры (`backend/app/api/`)
+| Файл | Префикс | Назначение |
+|------|---------|------------|
+| `auth.py` | `/auth` | Аутентификация (JWT, регистрация, me) |
+| `indicators.py` | `/api/indicators` | Библиотека показателей + импорт/экспорт |
+| `templates.py` | `/api/templates` | Шаблоны анализа (admin) |
+| `reports.py` | `/api/reports` | Отчёты |
+| `analysis_type.py` | `/analysis-types` | Legacy-алиас шаблонов |
+| `presets.py` | `/api/presets` | Пресеты |
+| `plans.py` | `/api/plans` | Планы анализа |
+| `statistics.py` | `/api/statistics` | Статистика |
+| `process_log.py` | `/process-logs` | Логирование процессов |
+| `external.py` | `/api/external` | Интеграция с 1С (импорт/экспорт/синхронизация) |
 
 ---
 
@@ -124,22 +83,18 @@ wwwanalys/
 | № | Файл | Проблема | Статус | Исправление |
 |---|------|----------|--------|-------------|
 | 1 | `config.py` | Хардкодный `SECRET_KEY` | ✅ Исправлено | Читается из env |
-| 2 | `external.py` | Хардкодный `API_KEY` | ✅ Исправлено | Читается из `settings.api_key` |
-| 3 | `main.py` | CORS открыт всем `["*"]` | ✅ Исправлено | Читается из `settings.cors_origins_list` |
+| 2 | `external.py` | Хардкодный `API_KEY` | ✅ Исправлено | Читается из `settings.api_key`, заголовок `X-API-KEY` |
+| 3 | `main.py` | CORS открыт всем | ✅ Исправлено | `settings.cors_origins_list` |
 | 4 | `auth.py` | `sha256_crypt` вместо `bcrypt` | ✅ Исправлено | `schemes=["bcrypt"]` |
 
-### 3.2 Дублирование `get_db()` ✅
-
-Все API-модули используют единый `get_db()` из `app.core.deps`.
-
-### 3.3 Дублирование API-роутов ⚠️
+### 3.2 Дублирование API-роутов ⚠️
 
 | Префикс | Файл | Статус |
 |---------|------|--------|
-| `/api/templates/` | `templates.py` | Admin |
-| `/analysis-types/` | `analysis_type.py` | Authenticated + Admin |
+| `/api/templates/` | `templates.py` | Admin (основной) |
+| `/analysis-types/` | `analysis_type.py` | Legacy-алиас, дублирует функциональность |
 
-Рекомендуется удалить `/analysis-types/` или сделать его редиректом.
+Рекомендуется объединить `/analysis-types/` с `/api/templates/` или сделать редирект.
 
 ---
 
@@ -147,9 +102,10 @@ wwwanalys/
 
 | № | Проблема | Статус |
 |---|----------|--------|
-| 1 | Alembic не настроен | ⚠️ Требует инициализации |
-| 2 | Нет версионирования API | ⚠️ Не реализовано |
+| 1 | Alembic не настроен (таблицы создаются через `Base.metadata.create_all`) | ⚠️ Требует инициализации |
+| 2 | Нет версионирования API (`/v1/`) | ⚠️ Не реализовано |
 | 3 | Порядок маршрутов в reports.py | ✅ Исправлено |
+| 4 | Двусторонняя интеграция с 1С расширена, но не покрыта тестами | ⚠️ |
 
 ---
 
@@ -157,30 +113,33 @@ wwwanalys/
 
 | Аспект | Оценка |
 |--------|--------|
-| **Архитектура** | ✅ Отлично — разделение на слои (API, CRUD, Models, Schemas) |
-| **Модели данных** | ✅ Отлично — 11 моделей с правильными связями |
-| **Frontend UI** | ✅ Отлично — Bootstrap 5, компонентный подход |
-| **Аутентификация** | ✅ Отлично — JWT + bcrypt |
-| **Типизация** | ✅ Хорошо — TypeScript на фронтенде, Pydantic на бэкенде |
-| **Локализация** | ✅ Отлично — весь интерфейс на русском |
-| **CRUD-операции** | ✅ Хорошо — полный CRUD для всех сущностей |
+| **Архитектура** | ✅ Отлично — слоистая (API, CRUD, Models, Schemas, Services) |
+| **Модели данных** | ✅ Отлично — 13 сущностей с корректными связями (вкл. PresetIndicator, PlanItem) |
+| **Frontend UI** | ✅ Отлично — SaaS-редизайн, чистый CSS, без Bootstrap Icons (с v6.6.0) |
+| **Аутентификация** | ✅ Отлично — JWT + bcrypt, интерцепторы axios |
+| **Типизация** | ✅ Хорошо — TypeScript (frontend), Pydantic v2 (backend) |
+| **Локализация** | ✅ Отлично — интерфейс на русском |
+| **CRUD-операции** | ✅ Хорошо — полный CRUD + batch операции |
 | **Docker** | ✅ Хорошо — docker-compose с профилями |
-| **AuthModal** | ✅ Новое — SaaS-стиль, CSS-переменные, адаптивность |
+| **AuthModal** | ✅ Новое — SaaS-стиль, CSS-переменные, адаптивность, dark mode |
+| **Интеграция 1С** | ✅ Расширена — импорт показателей/шаблонов/планов + экспорт отчётов/планов |
 
 ---
 
-## 6. 📋 РЕКОМЕНДАЦИИ
+## 6. 📋 РЕКОМЕНDAЦИИ
 
 ### Приоритет 2 (среднесрочно)
 - [ ] Удалить или задепрекейтить дублирующийся роут `/analysis-types/`
 - [ ] Настроить Alembic для автоматических миграций
 - [ ] Добавить версионирование API (`/v1/`)
+- [ ] Покрыть интеграцию с 1С тестами
 
 ### Приоритет 3 (долгосрочно)
 - [ ] Ограничить CORS конкретными доменами в production
-- [ ] Добавить rate limiting
-- [ ] Добавить логирование действий пользователей
+- [ ] Добавить rate limiting на эндпоинты auth и external
+- [ ] Добавить логирование действий пользователей (audit trail)
 - [ ] Покрыть тестами все API-эндпоинты
+- [ ] Добавить CI/CD (GitHub Actions) для проверки линтеров и тестов
 
 ---
 
@@ -191,7 +150,7 @@ wwwanalys/
 DATABASE_URL=sqlite:///./test.db
 SECRET_KEY=<сгенерировать: python -c "import secrets; print(secrets.token_urlsafe(32))">
 API_KEY=<сгенерировать: python -c "import secrets; print(secrets.token_urlsafe(16))">
-CORS_ORIGINS=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://localhost:80
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
@@ -212,54 +171,66 @@ docker compose --profile seed run seed
 │ username     │  │    │ name               │  │    │ id                 │
 │ email        │  │    │ description        │  │    │ library_id         │──┘
 │ hashed_pwd   │  │    │ category           │  │    │ version            │
-│ is_active    │  │    │ created_by         │──┤    │ created_at         │
-│ is_admin     │  └──┐ │ created_at         │  │    │ created_by         │
+│ is_active    │  │    │ data_type          │  │    │ created_at         │
+│ is_admin     │  └──┐ │ options            │  │    │ created_by         │
 └──────────────┘     │ └────────────────────┘  │    └────────────────────┘
-                     │                         │
+                      │                         │
 ┌──────────────┐     │ ┌────────────────────┐  │    ┌────────────────────┐
 │  Indicator   │     │ │      Indicator     │  │    │   AnalysisType     │
 ├──────────────┤     │ ├────────────────────┤  │    ├────────────────────┤
 │ id           │     │ │ id                 │  │    │ id                 │
 │ library_id   │─────┘ │ library_id         │──┘    │ name               │
 │ name         │       │ name               │       │ description        │
-│ unit         │       │ unit               │       │ created_by         │──┐
-│ data_type    │       │ data_type          │       │ is_active          │  │
-│ options      │       │ options            │       │ created_at         │  │
-│ description  │       │ description        │       └────────────────────┘  │
-│ category     │       │ category           │                               │
-│ is_required  │       │ is_required        │       ┌────────────────────┐  │
-│ default_value│       │ default_value      │       │  TemplateIndicator │  │
-│ validation   │       │ validation_rules   │       ├────────────────────┤  │
-│ created_by   │       │ created_by         │       │ id                 │  │
-│ created_at   │       │ created_at         │       │ template_id        │──┘
-└──────────────┘       └────────────────────┘       │ indicator_id       │──┐
-        │                        │                  │ min_value          │  │
-        │                        │                  │ max_value          │  │
-        │                        │                  │ sort_order         │  │
-        │                        │                  └────────────────────┘  │
-        │                        │                                          │
-        │  ┌────────────────────┐│  ┌────────────────────┐  ┌──────────────┐
-        │  │  IndicatorValue    ││  │    ProcessLog      │  │ AnalysisPlan │
-        │  ├────────────────────┤│  ├────────────────────┤  ├──────────────┤
-        │  │ id                 ││  │ id                 │  │ id           │
-        │  │ indicator_id       │┘  │ batch_number       │  │ name         │
-        │  │ process_log_id     │───┤ analysis_type_id   │──┤ description  │
-        │  │ value (float)      │   │ created_by         │──┤ analysis_type│
-        │  │ text_value         │   │ status             │  │ created_by   │
-        │  │ is_normal          │   │ started_at         │  │ status       │
-        │  └────────────────────┘   │ completed_at       │  └──────────────┘
-        │                           │ notes              │
-        │                           └────────────────────┘
-        │
-        │   ┌────────────────────┐
-        └──►│      Preset        │
-            ├────────────────────┤
-            │ id                 │
-            │ name               │
-            │ description        │
-            │ category           │
-            │ created_by         │
-            └────────────────────┘
+│ unit         │       │ data_type          │       │ created_by         │──┐
+│ data_type    │       │ options            │       │ is_active          │  │
+│ options      │       │ description        │       │ created_at         │  │
+│ description  │       │ category           │       └────────────────────┘  │
+│ category     │       │ is_required        │       ┌────────────────────┐  │
+│ is_required  │       │ default_value      │       │  TemplateIndicator │  │
+│ default_value│       │ validation_rules   │       ├────────────────────┤  │
+│ validation   │       │ created_by         │       │ id                 │  │
+│ created_by   │       │ created_at         │       │ template_id        │──┘
+│ created_at   │       └────────────────────┘       │ indicator_id       │──┐
+└──────────────┘                                     │ min_value          │  │
+         │                        │                  │ max_value          │  │
+         │                        │                  │ sort_order         │  │
+         │                        │                  │ is_custom          │  │
+         │                        │                  │ template_notes     │  │
+         │                        │                  └────────────────────┘  │
+         │                        │                                          │
+         │  ┌────────────────────┐│  ┌────────────────────┐  ┌──────────────┐
+         │  │  IndicatorValue    ││  │    ProcessLog      │  │ AnalysisPlan │
+         │  ├────────────────────┤│  ├────────────────────┤  ├──────────────┤
+         │  │ id                 ││  │ id                 │  │ id           │
+         │  │ indicator_id       │┘  │ batch_number       │  │ name         │
+         │  │ process_log_id     │───┤ analysis_type_id   │──┤ description  │
+         │  │ value (float)      │   │ created_by         │──┤ analysis_type│
+         │  │ text_value         │   │ status             │  │ created_by   │
+         │  │ is_normal          │   │ started_at         │  │ status       │
+         │  └────────────────────┘   │ completed_at       │  │ plan_date    │
+         │                           │ notes              │  └──────────────┘
+         │                           └────────────────────┘         │
+         │                                                     ┌─────┴─────────┐
+         │                                                     │   PlanItem    │
+         │                                                     ├───────────────┤
+         │                                                     │ id            │
+         │                                                     │ plan_id       │
+         │                                                     │ template_id   │
+         │                                                     │ batch_number  │
+         │                                                     │ sort_order    │
+         │                                                     └───────────────┘
+         │
+         │   ┌────────────────────┐
+         └──►│      Preset        │       ┌────────────────────┐
+             ├────────────────────┤       │   PresetIndicator  │
+             │ id                 │──┐    ├────────────────────┤
+             │ name               │  │    │ id                 │
+             │ description        │  │    │ preset_id          │
+             │ category           │  │    │ indicator_id       │
+             │ created_by         │  │    │ min_value          │
+             └────────────────────┘  │    │ max_value          │
+                                     └───►│ sort_order         │
+                                          └────────────────────┘
 ```
 
 ---
@@ -269,13 +240,19 @@ docker compose --profile seed run seed
 | Версия | Дата | Что сделано |
 |--------|------|-------------|
 | v1.0.0 | — | Initial release with admin panel and analysis constructor |
-| v2.0.0 | — | Save current version |
 | v3.0.0 | — | Full fix for reports and templates with UI improvements |
 | v3.0.0-bootstrap | — | Migrate frontend from Tailwind CSS to Bootstrap 5 |
 | v3.1.0 | — | Add indicator library with versioning and presets support |
-| v3.2.0 | 02.06.2026 | Remove template_type, remove custom indicators, add 1C integration |
-| v3.2.0 | 17.06.2026 | Add AuthModal component (SaaS-style), add Plans page, update documentation |
+| v3.2.0 | 02.06.2026 | Remove template_type, custom indicators, add 1C integration |
+| v3.2.0 | 17.06.2026 | Add AuthModal component (SaaS-style), add Plans page |
+| v4.0.0 | — | Крупное обновление архитектуры |
+| v5.0.0 | — | Расширение функциональности |
+| v6.0.0 | — | Переработка планов и отчётов (передача batch_number) |
+| v6.4.0 | — | Add AuthModal SaaS-style component |
+| v6.5.0 | — | Modern SaaS redesign of all frontend pages |
+| v6.6.0 | — | Полное удаление Bootstrap Icons, переход на чистый CSS |
+| v6.7.0 | 14.07.2026 | Расширенная интеграция с 1С: справочники, шаблоны, планы (двусторонний обмен) |
 
 ---
 
-*Отчёт создан: 02.06.2026, последнее обновление: 17.06.2026*
+*Отчёт создан: 02.06.2026, последнее обновление: 14.07.2026 (v6.7.0)*

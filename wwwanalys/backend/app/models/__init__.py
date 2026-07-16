@@ -8,6 +8,7 @@ from .process_log import ProcessLog, Status
 from .indicator_value import IndicatorValue
 from .preset import Preset, PresetIndicator
 from .analysis_plan import AnalysisPlan, PlanItem
+from .integration_config import IntegrationConfig
 
 __all__ = [
     "User",
@@ -22,5 +23,6 @@ __all__ = [
     "Preset",
     "PresetIndicator",
     "AnalysisPlan",
-    "PlanItem"
+    "PlanItem",
+    "IntegrationConfig"
 ]

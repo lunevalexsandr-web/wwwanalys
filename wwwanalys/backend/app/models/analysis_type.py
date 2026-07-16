@@ -13,7 +13,8 @@ class AnalysisType(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, ForeignKey("users.id"))
     is_active = Column(Boolean, default=True)
-    
+    external_id = Column(String(255), nullable=True, unique=True, index=True)  # ID шаблона из внешней системы (1С)
+
     # Связь с моделью User
     creator = relationship("User", back_populates="created_analysis_types")
     

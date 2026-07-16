@@ -22,6 +22,7 @@ class IndicatorLibrary(Base):
     validation_rules = Column(Text, nullable=True)       # Правила валидации в JSON
     created_by = Column(Integer, nullable=True)          # ID пользователя, создавшего показатель
     created_at = Column(DateTime, default=datetime.utcnow)
+    external_id = Column(String(255), nullable=True, unique=True, index=True)  # ID показателя из внешней системы (1С)
 
     # Связь с TemplateIndicator
     template_indicators = relationship("TemplateIndicator", back_populates="indicator_ref")

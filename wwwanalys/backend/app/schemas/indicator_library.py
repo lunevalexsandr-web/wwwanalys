@@ -72,6 +72,7 @@ class BatchCreateItem(BaseModel):
     is_required: bool = False
     default_value: Optional[str] = None
     validation_rules: Optional[str] = None
+    external_id: Optional[str] = None
 
 
 class BatchCreateRequest(BaseModel):

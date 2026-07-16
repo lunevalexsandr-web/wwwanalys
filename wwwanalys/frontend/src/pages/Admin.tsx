@@ -63,6 +63,7 @@ const Admin: React.FC = () => {
   const [show1CModal, setShow1CModal] = useState(false);
   const [is1CConnecting, setIs1CConnecting] = useState(false);
   const [is1CImporting, setIs1CImporting] = useState(false);
+  const [is1CSaving, setIs1CSaving] = useState(false);
   const [connection1CStatus, setConnection1CStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [connection1CMessage, setConnection1CMessage] = useState('');
   const [import1CResult, setImport1CResult] = useState<any>(null);
@@ -70,6 +71,7 @@ const Admin: React.FC = () => {
   const [c1CApiKey, setC1CApiKey] = useState('');
   const [c1CUsername, setC1CUsername] = useState('');
   const [c1CPassword, setC1CPassword] = useState('');
+  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/hs/labindicators/indicators');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -490,7 +492,7 @@ const Admin: React.FC = () => {
     setConnection1CMessage('');
     try {
       const response = await api.post('/api/external/1c/test-connection', {
-        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined }
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CEndpoint }
       });
       if (response.data.status === 'ok') {
         setConnection1CStatus('success');
@@ -516,7 +518,7 @@ const Admin: React.FC = () => {
     setImport1CResult(null);
     try {
       const response = await api.post('/api/external/1c/import-indicators', {
-        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CEndpoint },
         skip_duplicates: true,
       });
       setImport1CResult(response.data);
@@ -534,9 +536,48 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleLoad1CConfig = async () => {
+    try {
+      const response = await api.get('/api/external/1c/config');
+      const cfg = response.data || {};
+      setC1CBaseUrl(cfg.base_url || '');
+      setC1CApiKey(cfg.api_key || '');
+      setC1CUsername(cfg.username || '');
+      setC1CEndpoint(cfg.endpoint || '/erp_24/hs/labindicators/indicators');
+      // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
+      setC1CPassword('');
+    } catch (error) {
+      console.error('Error loading 1C config:', error);
+    }
+  };
+
+  const handleSave1CConfig = async () => {
+    setIs1CSaving(true);
+    try {
+      await api.put('/api/external/1c/config', {
+        base_url: c1CBaseUrl || null,
+        api_key: c1CApiKey || null,
+        username: c1CUsername || null,
+        password: c1CPassword || null,
+        timeout: 30,
+        endpoint: c1CEndpoint || null,
+      });
+      showToast('Настройки подключения к 1С сохранены', 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка сохранения настроек', 'danger');
+    } finally {
+      setIs1CSaving(false);
+    }
+  };
+
   const reset1CForm = () => {
-    setC1CBaseUrl(''); setC1CApiKey(''); setC1CUsername(''); setC1CPassword('');
     setConnection1CStatus('idle'); setConnection1CMessage(''); setImport1CResult(null);
+  };
+
+  const open1CModal = () => {
+    reset1CForm();
+    setShow1CModal(true);
+    handleLoad1CConfig();
   };
 
   const validateUserForm = (): boolean => {
@@ -890,7 +931,7 @@ const Admin: React.FC = () => {
                           </Badge>
                         </div>
                         <p className="text-sm text-text-secondary mb-4">Подключите 1С для автоматического импорта справочника показателей.</p>
-                        <Button variant="primary" size="sm" onClick={() => { reset1CForm(); setShow1CModal(true); }}>Настроить</Button>
+                        <Button variant="primary" size="sm" onClick={open1CModal}>Настроить</Button>
                       </div>
 
                       <div className="p-5 border border-border rounded-xl hover:shadow-md transition-shadow">
@@ -1211,6 +1252,11 @@ const Admin: React.FC = () => {
                 </Form.Group>
               </Col>
             </Row>
+            <Form.Group className="mb-3">
+              <Form.Label>Путь к API 1С (endpoint)</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/indicators" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Путь HTTP-сервиса 1С, например: /erp_24/hs/labindicators/indicators</Form.Text>
+            </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
             )}
@@ -1229,6 +1275,9 @@ const Admin: React.FC = () => {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShow1CModal(false)}>Закрыть</Button>
+          <Button variant="outline-success" onClick={handleSave1CConfig} disabled={is1CSaving}>
+            {is1CSaving ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Сохранение...</>) : 'Сохранить настройки'}
+          </Button>
           <Button variant="outline-primary" onClick={handleTest1CConnection} disabled={is1CConnecting}>
             {is1CConnecting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Проверка...</>) : 'Проверить подключение'}
           </Button>
