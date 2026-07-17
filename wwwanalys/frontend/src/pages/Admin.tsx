@@ -538,6 +538,52 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleImportTemplatesFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-templates', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CTemplatesEndpoint },
+        skip_duplicates: true,
+      });
+      setImport1CResult(response.data);
+      if (response.data.status === 'success') {
+        showToast(`Импорт шаблонов завершён: создано ${response.data.created}, обновлено ${response.data.updated}, пропущено ${response.data.skipped}`, 'success');
+        fetchTemplates();
+      } else {
+        showToast(`Импорт шаблонов завершён с ошибками: создано ${response.data.created}, ошибок ${response.data.errors.length}`, 'warning');
+        fetchTemplates();
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка импорта шаблонов из 1С', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
+  const handleImportPlansFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-plans', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CPlansEndpoint },
+        skip_duplicates: true,
+      });
+      setImport1CResult(response.data);
+      if (response.data.status === 'success') {
+        showToast(`Импорт планов завершён: создано ${response.data.created}, пропущено ${response.data.skipped}`, 'success');
+      } else {
+        showToast(`Импорт планов завершён с ошибками: создано ${response.data.created}, ошибок ${response.data.errors.length}`, 'warning');
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка импорта планов из 1С', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
   const handleLoad1CConfig = async () => {
     try {
       const response = await api.get('/api/external/1c/config');
@@ -1300,6 +1346,12 @@ const Admin: React.FC = () => {
           </Button>
           <Button variant="primary" onClick={handleImportFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить показатели'}
+          </Button>
+          <Button variant="info" onClick={handleImportTemplatesFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить шаблоны'}
+          </Button>
+          <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}
           </Button>
         </Modal.Footer>
       </Modal>
