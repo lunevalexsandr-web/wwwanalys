@@ -217,9 +217,14 @@ async def import_indicators_from_1c(
         timeout=request.connection.timeout,
         endpoint=request.connection.endpoint,
     )
+    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (indicators_endpoint)
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    endpoint = request.connection.endpoint or (
+        saved_config.indicators_endpoint if saved_config else None
+    ) or "/erp_24/hs/labindicators/indicators"
     try:
         result = await import_indicators_from_1c(
-            db=db, config=config, endpoint=request.connection.endpoint,
+            db=db, config=config, endpoint=endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCImportResponse(status="success" if not result["errors"] else "partial", **result)
@@ -303,9 +308,14 @@ async def import_templates_from_1c(
         password=request.connection.password,
         timeout=request.connection.timeout,
     )
+    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (templates_endpoint)
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    endpoint = request.connection.endpoint or (
+        saved_config.templates_endpoint if saved_config else None
+    ) or "/erp_24/hs/labindicators/templates"
     try:
         result = await import_templates_from_1c(
-            db=db, config=config, endpoint=request.connection.endpoint,
+            db=db, config=config, endpoint=endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCTemplateImportResponse(status="success" if not result["errors"] else "partial", **result)
@@ -389,9 +399,14 @@ async def import_plans_from_1c(
         password=request.connection.password,
         timeout=request.connection.timeout,
     )
+    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (plans_endpoint)
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    endpoint = request.connection.endpoint or (
+        saved_config.plans_endpoint if saved_config else None
+    ) or "/erp_24/hs/labindicators/plans"
     try:
         result = await import_plans_from_1c(
-            db=db, config=config, endpoint=request.connection.endpoint,
+            db=db, config=config, endpoint=endpoint,
             field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
         )
         return OneCPlanImportResponse(status="success" if not result["errors"] else "partial", **result)

@@ -12,6 +12,9 @@ class IntegrationConfigBase(BaseModel):
     verify_ssl: bool = False
     is_active: bool = True
     endpoint: Optional[str] = None
+    indicators_endpoint: Optional[str] = None
+    templates_endpoint: Optional[str] = None
+    plans_endpoint: Optional[str] = None
 
 
 class IntegrationConfigUpdate(IntegrationConfigBase):
@@ -29,6 +32,9 @@ class IntegrationConfigResponse(BaseModel):
     username: Optional[str] = None
     timeout: int = 30
     endpoint: Optional[str] = None
+    indicators_endpoint: Optional[str] = None
+    templates_endpoint: Optional[str] = None
+    plans_endpoint: Optional[str] = None
     verify_ssl: bool = False
     is_active: bool = True
     updated_at: Optional[Any] = None

@@ -72,6 +72,8 @@ const Admin: React.FC = () => {
   const [c1CUsername, setC1CUsername] = useState('');
   const [c1CPassword, setC1CPassword] = useState('');
   const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/hs/labindicators/indicators');
+  const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_24/hs/labindicators/templates');
+  const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_24/hs/labindicators/plans');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -544,6 +546,8 @@ const Admin: React.FC = () => {
       setC1CApiKey(cfg.api_key || '');
       setC1CUsername(cfg.username || '');
       setC1CEndpoint(cfg.endpoint || '/erp_24/hs/labindicators/indicators');
+      setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_24/hs/labindicators/templates');
+      setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_24/hs/labindicators/plans');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
     } catch (error) {
@@ -561,6 +565,9 @@ const Admin: React.FC = () => {
         password: c1CPassword || null,
         timeout: 30,
         endpoint: c1CEndpoint || null,
+        indicators_endpoint: c1CEndpoint || null,
+        templates_endpoint: c1CTemplatesEndpoint || null,
+        plans_endpoint: c1CPlansEndpoint || null,
       });
       showToast('Настройки подключения к 1С сохранены', 'success');
     } catch (error: any) {
@@ -1253,9 +1260,19 @@ const Admin: React.FC = () => {
               </Col>
             </Row>
             <Form.Group className="mb-3">
-              <Form.Label>Путь к API 1С (endpoint)</Form.Label>
+              <Form.Label>Путь к API 1С (endpoint показателей)</Form.Label>
               <Form.Control type="text" placeholder="/erp_24/hs/labindicators/indicators" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Путь HTTP-сервиса 1С, например: /erp_24/hs/labindicators/indicators</Form.Text>
+              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки показателей, например: /erp_24/hs/labindicators/indicators</Form.Text>
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Путь к API 1С (endpoint шаблонов анализа)</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/templates" value={c1CTemplatesEndpoint} onChange={(e) => setC1CTemplatesEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки шаблонов анализа, например: /erp_24/hs/labindicators/templates</Form.Text>
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Путь к API 1С (endpoint планов анализа)</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/plans" value={c1CPlansEndpoint} onChange={(e) => setC1CPlansEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки планов анализа, например: /erp_24/hs/labindicators/plans</Form.Text>
             </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
