@@ -150,9 +150,9 @@ def get_active_templates(
 def get_template(
     template_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Get a specific template (admin only)."""
+    """Get a specific template (available to all authenticated users)."""
     db_template = crud_template.get_analysis_type(db, analysis_type_id=template_id)
     if not db_template:
         raise HTTPException(status_code=404, detail="Template not found")
