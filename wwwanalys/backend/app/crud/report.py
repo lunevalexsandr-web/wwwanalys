@@ -12,9 +12,16 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         return None
     
     try:
+        # Если передан plan_item_id, берём batch_number из PlanItem (приоритетнее frontend)
+        batch_number = report.batch_number
+        if report.plan_item_id:
+            plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
+            if plan_item and plan_item.batch_number:
+                batch_number = plan_item.batch_number
+
         # Создаем отчет
         db_report = ProcessLog(
-            batch_number=report.batch_number,
+            batch_number=batch_number,
             analysis_type_id=report.template_id,
             created_by=user_id
         )
@@ -90,6 +97,14 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
             )
             db.add(db_indicator_value)
         
+        # Если отчет создан из элемента плана - обновляем связь
+        if report.plan_item_id:
+            plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
+            if plan_item:
+                plan_item.completed_report_id = db_report.id
+                plan_item.is_completed = True
+                plan_item.batch_number = batch_number
+        
         # Коммитим все за один раз
         db.commit()
         db.refresh(db_report)
@@ -142,7 +157,14 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
         return None
     
     try:
-        db_report.batch_number = report.batch_number
+        # Если передан plan_item_id, берём batch_number из PlanItem (приоритетнее frontend)
+        batch_number = report.batch_number
+        if report.plan_item_id:
+            plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
+            if plan_item and plan_item.batch_number:
+                batch_number = plan_item.batch_number
+
+        db_report.batch_number = batch_number
         
         # Удаляем старые значения показателей
         db.query(IndicatorValue).filter(IndicatorValue.process_log_id == report_id).delete()
@@ -210,11 +232,11 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
         
         # Обновляем связь с планом, если передан plan_item_id
         if report.plan_item_id:
-            from app.models import PlanItem
             plan_item = db.query(PlanItem).filter(PlanItem.id == report.plan_item_id).first()
             if plan_item:
                 plan_item.completed_report_id = db_report.id
                 plan_item.is_completed = True
+                plan_item.batch_number = batch_number
         
         db.commit()
         db.refresh(db_report)

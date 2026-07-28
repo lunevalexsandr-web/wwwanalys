@@ -69,8 +69,9 @@ const Plans: React.FC = () => {
     fetchPlansForDate(date);
   };
 
-  // Обновление номера партии в состоянии plans (иммутабельно)
+  // Обновление номера партии в состоянии plans (иммутабельно) И сохранение на сервере
   const updatePlanItemBatchNumber = (planId: number, itemId: number, batchNumber: string) => {
+    // Сначала обновляем локально для мгновенного отклика UI
     setPlans(prevPlans => prevPlans.map(p => {
       if (p.id !== planId) return p;
       return {
@@ -80,11 +81,25 @@ const Plans: React.FC = () => {
         ),
       };
     }));
+
+    // Затем сохраняем на сервере
+    api.patch(`/api/plans/items/${itemId}`, { batch_number: batchNumber })
+      .catch((error) => {
+        console.error('Error updating plan item batch_number:', error);
+        showToast('Ошибка при сохранении номера партии', 'danger');
+        // Можно добавить rollback локального состояния при ошибке
+      });
   };
 
   // Переход к созданию отчета из элемента плана
   const handleCreateReportFromPlanItem = (item: PlanItem) => {
-    const batchNumber = item.batch_number || '';
+    // Читаем актуальный batch_number из состояния plans, а не из замыкания
+    // Это гарантирует, что мы получим последнее введенное значение
+    const latestPlan = plans.find(p => p.plan_items?.some(pi => pi.id === item.id));
+    const latestItem = latestPlan?.plan_items?.find(pi => pi.id === item.id);
+    const batchNumber = latestItem?.batch_number || item.batch_number || '';
+    
+    console.log('Creating report from plan item:', { itemId: item.id, batchNumber, latestItem });
     
     if (item?.template) {
       // Передаём данные напрямую через navigate state
@@ -112,9 +127,14 @@ const Plans: React.FC = () => {
       const templateResponse = await api.get(`/api/templates/${item.template_id}`);
       const template = templateResponse.data;
       
+      // Также читаем актуальный batch_number из состояния
+      const latestPlan = plans.find(p => p.plan_items?.some(pi => pi.id === item.id));
+      const latestItem = latestPlan?.plan_items?.find(pi => pi.id === item.id);
+      const batchNumber = latestItem?.batch_number || item.batch_number || '';
+      
       localStorage.setItem('planItemToReport', JSON.stringify({
         template_id: item.template_id,
-        batch_number: item.batch_number || '',
+        batch_number: batchNumber,
         template: template,
         plan_item_id: item.id,
       }));
