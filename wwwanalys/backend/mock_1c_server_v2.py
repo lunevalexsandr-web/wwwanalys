@@ -1,5 +1,5 @@
 """Mock 1C server (v2) для проверки импорта шаблонов с наполнением.
-Пути: /erp_24/hs/labindicators/indicators, /erp_24/hs/labindicators/templates
+Пути: /erp_24/hs/labindicators/indicators, /erp_24/hs/labindicators/templates, /erp_24/hs/labindicators/plans
 Run: python mock_1c_server_v2.py
 """
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -25,6 +25,10 @@ TEMPLATES = [{"id": "1", "name": "Варка сусла", "description": "Шаб
                   {"id": "10", "indicator_id": 1, "min_value": 11.0, "max_value": 12.0, "sort_order": 0},
                   {"id": "11", "indicator_id": 2, "min_value": 5.2, "max_value": 5.8, "sort_order": 1}]}]
 
+PLANS = [{"id": "1", "name": "План на 18.06.2026", "description": "План на день",
+          "plan_date": "2026-06-18", "items": [
+              {"template_id": 1, "batch_number": "П-001", "sort_order": 0}]}]
+
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, data):
@@ -41,6 +45,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, INDICATORS)
         elif path.endswith("/labindicators/templates"):
             self._send(200, TEMPLATES)
+        elif path.endswith("/labindicators/plans"):
+            self._send(200, PLANS)
         else:
             self._send(404, {"error": "not found", "path": path})
 

@@ -181,13 +181,10 @@ def update_library_indicator(db: Session, indicator_id: int, indicator: Indicato
 def delete_library_indicator(db: Session, indicator_id: int, user_id: int = None):
     db_indicator = get_library_indicator(db, indicator_id)
     if db_indicator:
-        # Создаём версию удаления
-        create_version_from_indicator(
-            db, db_indicator,
-            change_type="delete",
-            changed_by=user_id,
-            change_notes=f"Удаление показателя: {db_indicator.name}"
-        )
+        # Удаляем все версии, связанные с показателем
+        delete_versions_for_indicator(db, indicator_id)
+        
+        # Удаляем сам показатель (каскадное удаление версий уже не нужно)
         db.delete(db_indicator)
         db.commit()
     return db_indicator

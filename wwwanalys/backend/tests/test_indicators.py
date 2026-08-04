@@ -35,10 +35,17 @@ app_test.dependency_overrides[get_db] = override_get_db
 client = TestClient(app_test)
 
 
+@pytest.fixture(autouse=True)
+def setup_db():
+    """Создаёт таблицы перед тестами и удаляет после."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
 @pytest.fixture
 def db_session():
-    # Создаем таблицы
-    Base.metadata.create_all(bind=engine)
+    """Создаёт сессию с предустановленным админом."""
     db = TestingSessionLocal()
     
     # Создаём админа
@@ -57,7 +64,6 @@ def db_session():
     yield db
     
     db.close()
-    Base.metadata.drop_all(bind=engine)
 
 
 def get_admin_token():
@@ -71,7 +77,7 @@ def get_admin_token():
 class TestIndicatorLibrary:
     """Тесты CRUD для справочника показателей."""
 
-    def test_create_indicator(self):
+    def test_create_indicator(self, db_session):
         """Создание нового показателя."""
         token = get_admin_token()
         response = client.post(
@@ -91,7 +97,7 @@ class TestIndicatorLibrary:
         assert data["unit"] == "%"
         assert data["category"] == "quality"
 
-    def test_create_duplicate(self):
+    def test_create_duplicate(self, db_session):
         """Проверка на дубликат названия."""
         token = get_admin_token()
         client.post(
@@ -107,7 +113,7 @@ class TestIndicatorLibrary:
         assert response.status_code == 400
         assert "уже существует" in response.text
 
-    def test_get_indicators(self):
+    def test_get_indicators(self, db_session):
         """Получение списка показателей."""
         token = get_admin_token()
         # Создаём несколько
@@ -125,29 +131,34 @@ class TestIndicatorLibrary:
         data = response.json()
         assert len(data) == 3
 
-def test_search_indicators(self, db_session):
-    """Поиск показателей."""
-    db = db_session
-    
-    # Создаём показатели вручную
-    db.add(IndicatorLibrary(name="Кислотность", unit="pH", category="quality"))
-    db.add(IndicatorLibrary(name="Температура", unit="°C", category="performance"))
-    db.commit()
-    
-    # Получаем токен
-    token = get_admin_token()
-    
-    # Поиск по названию
-    response = client.get(
-        "/api/indicators/library?search=кислот",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "Кислотность"
+    def test_search_indicators(self, db_session):
+        """Поиск показателей."""
+        token = get_admin_token()
+        
+        # Создаём показатели через API
+        client.post(
+            "/api/indicators/library",
+            json={"name": "Кислотность", "unit": "pH", "category": "quality"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        client.post(
+            "/api/indicators/library",
+            json={"name": "Температура", "unit": "°C", "category": "performance"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        # Поиск по названию (используем params для правильной кодировки URL)
+        response = client.get(
+            "/api/indicators/library",
+            params={"search": "кислот"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "Кислотность"
 
-    def test_filter_by_category(self):
+    def test_filter_by_category(self, db_session):
         """Фильтрация по категории."""
         token = get_admin_token()
         client.post(
@@ -161,7 +172,8 @@ def test_search_indicators(self, db_session):
             headers={"Authorization": f"Bearer {token}"},
         )
         response = client.get(
-            "/api/indicators/library?category=quality",
+            "/api/indicators/library",
+            params={"category": "quality"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
@@ -169,7 +181,7 @@ def test_search_indicators(self, db_session):
         assert len(data) == 1
         assert data[0]["category"] == "quality"
 
-    def test_update_indicator(self):
+    def test_update_indicator(self, db_session):
         """Обновление показателя."""
         token = get_admin_token()
         created = client.post(
@@ -187,50 +199,51 @@ def test_search_indicators(self, db_session):
         assert response.json()["name"] == "Новое имя"
         assert response.json()["unit"] == "кг"
 
-def test_delete_indicator(self, db_session):
-    """Удаление показателя."""
-    db = db_session
-    
-    # Создаём показатель вручную
-    indicator = IndicatorLibrary(name="Удаляемый", unit="шт", created_by=1)
-    db.add(indicator)
-    db.commit()
-    
-    token = get_admin_token()
-    
-    # Удаляем
-    response = client.delete(
-        f"/api/indicators/library/{indicator.id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    
-    # Проверяем, что удалён
-    get_response = client.get(
-        "/api/indicators/library",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert len(get_response.json()) == 0
+    def test_delete_indicator(self, db_session):
+        """Удаление показателя."""
+        token = get_admin_token()
+        
+        # Создаём показатель через API
+        created = client.post(
+            "/api/indicators/library",
+            json={"name": "Удаляемый", "unit": "шт"},
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()
+        
+        # Удаляем
+        response = client.delete(
+            f"/api/indicators/library/{created['id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        
+        # Проверяем, что удалён
+        get_response = client.get(
+            "/api/indicators/library",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert len(get_response.json()) == 0
 
-def test_export_csv(self, db_session):
-    """Экспорт в CSV."""
-    db = db_session
-    
-    # Создаём показатель вручную
-    indicator = IndicatorLibrary(name="Экспортный", unit="%", created_by=1)
-    db.add(indicator)
-    db.commit()
-    
-    token = get_admin_token()
-    response = client.get(
-        "/api/indicators/library/export/csv",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "text/csv"
-    assert "Экспортный" in response.text
+    def test_export_csv(self, db_session):
+        """Экспорт в CSV."""
+        token = get_admin_token()
+        
+        # Создаём показатель через API
+        client.post(
+            "/api/indicators/library",
+            json={"name": "Экспортный", "unit": "%"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        response = client.get(
+            "/api/indicators/library/export/csv",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+        assert "Экспортный" in response.text
 
-    def test_check_duplicate(self):
+    def test_check_duplicate(self, db_session):
         """Проверка дубликатов."""
         token = get_admin_token()
         client.post(
@@ -239,7 +252,8 @@ def test_export_csv(self, db_session):
             headers={"Authorization": f"Bearer {token}"},
         )
         response = client.get(
-            "/api/indicators/library/check-duplicate?name=Уникальный",
+            "/api/indicators/library/check-duplicate",
+            params={"name": "Уникальный"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
@@ -249,7 +263,7 @@ def test_export_csv(self, db_session):
 class TestTemplates:
     """Тесты для шаблонов."""
 
-    def test_create_template(self):
+    def test_create_template(self, db_session):
         """Создание шаблона."""
         token = get_admin_token()
         
@@ -280,7 +294,7 @@ class TestTemplates:
         assert data["name"] == "Тестовый шаблон"
         assert len(data["template_indicators"]) == 1
 
-    def test_copy_template(self):
+    def test_copy_template(self, db_session):
         """Копирование шаблона."""
         token = get_admin_token()
         
@@ -295,11 +309,11 @@ class TestTemplates:
         )
         
         # Копируем
-        templates = client.get(
+        templates_list = client.get(
             "/api/templates/",
             headers={"Authorization": f"Bearer {token}"},
         ).json()
-        template_id = templates[0]["id"]
+        template_id = templates_list[0]["id"]
         
         response = client.post(
             f"/api/templates/{template_id}/copy",
@@ -309,10 +323,11 @@ class TestTemplates:
         assert response.status_code == 200
         assert response.json()["name"] == "Копия"
 
+
 class TestStatistics:
     """Тесты статистики."""
 
-    def test_statistics_endpoint(self):
+    def test_statistics_endpoint(self, db_session):
         """Получение статистики."""
         token = get_admin_token()
         response = client.get(
