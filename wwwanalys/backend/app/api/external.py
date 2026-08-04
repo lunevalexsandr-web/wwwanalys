@@ -348,6 +348,80 @@ async def fetch_templates_from_1c(
         await service.close()
 
 
+# --- Шаблоны через стандартный OData 1С ---
+
+class OneCODataTemplateImportRequest(BaseModel):
+    """Запрос на импорт шаблонов из стандартного OData 1С (ТиповыеАнализыСерий)."""
+    connection: OneCConnectionConfig
+    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий
+    indicators_field: str = "ПоказателиАнализа"
+    norms_field: str = "Нормативы"
+    indicator_key_field: str = "Показатель_Key"
+    name_field: str = "Description"
+    skip_duplicates: bool = True
+    create_missing_indicators: bool = False
+
+
+@router.post("/1c/import-templates-odata")
+async def import_templates_from_1c_odata(
+    request: OneCODataTemplateImportRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """
+    Импортировать шаблоны анализов из СТАНДАРТНОГО OData 1С
+    (справочник ТиповыеАнализыСерий с табличными частями ПоказателиАнализа/Нормативы).
+
+    Показатели сопоставляются со справочником по GUID (external_id). Перед импортом
+    шаблонов рекомендуется импортировать справочник показателей.
+
+    Пример тела:
+    {
+        "connection": {
+            "base_url": "https://mp.rugen.ru:8443",
+            "username": "odata_user",
+            "password": "***"
+        },
+        "endpoint": "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
+        "skip_duplicates": true
+    }
+    """
+    from app.services.external_integration import (
+        import_odata_templates_from_1c,
+        ExternalSystemConfig,
+    )
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    config = ExternalSystemConfig(
+        base_url=request.connection.base_url,
+        api_key=request.connection.api_key,
+        username=request.connection.username,
+        password=request.connection.password,
+        timeout=request.connection.timeout,
+        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
+    )
+    endpoint = request.endpoint or (
+        saved_config.templates_endpoint if saved_config else None
+    ) or "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий"
+    try:
+        result = await import_odata_templates_from_1c(
+            db=db,
+            config=config,
+            endpoint=endpoint,
+            skip_duplicates=request.skip_duplicates,
+            indicators_field=request.indicators_field,
+            norms_field=request.norms_field,
+            indicator_key_field=request.indicator_key_field,
+            name_field=request.name_field,
+            create_missing_indicators=request.create_missing_indicators,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OData import failed: {str(e)}"
+        )
+
+
 # ==================== Планы анализов ====================
 
 @router.post("/1c/import-plans")

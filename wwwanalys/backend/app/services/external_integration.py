@@ -796,6 +796,224 @@ def _resolve_indicator_by_external_id(db: Session, lib_ref: Dict[str, Any], user
     return indicator
 
 
+# ==================== OData 1С: шаблоны (Catalog__ТиповыеАнализыСерий) ====================
+
+ZERO_GUID = "00000000-0000-0000-0000-000000000000"
+
+
+def _odata_num(value: Any) -> Optional[float]:
+    """Число из OData 1С в float или None (пусто/Undefined -> None)."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def transform_1c_odata_template_to_local(
+    template_1c: Dict[str, Any],
+    indicators_field: str = "ПоказателиАнализа",
+    norms_field: str = "Нормативы",
+    indicator_key_field: str = "Показатель_Key",
+    name_field: str = "Description",
+) -> Optional[Dict[str, Any]]:
+    """
+    Преобразовать шаблон из стандартного OData 1С (справочник ТиповыеАнализыСерий)
+    в локальный формат.
+
+    - name          <- Description
+    - external_id   <- Ref_Key (GUID шаблона)
+    - показатели    <- табличная часть `ПоказателиАнализа` (ссылка Показатель_Key = GUID)
+    - мин/макс      <- табличная часть `Нормативы` (Минимум/Максимум по Показатель_Key),
+                       фолбэк на ЭталонОт/ЭталонДо из строки показателя
+    Группы (IsFolder) и помеченные на удаление (DeletionMark) должны отсекаться ДО вызова.
+    """
+    name = template_1c.get(name_field)
+    if not name:
+        return None
+
+    ref_key = template_1c.get("Ref_Key")
+
+    # Нормы: Показатель_Key -> (min, max)
+    norms_map: Dict[str, tuple] = {}
+    for norm in (template_1c.get(norms_field) or []):
+        key = norm.get(indicator_key_field)
+        if key and key != ZERO_GUID:
+            norms_map[str(key)] = (
+                _odata_num(norm.get("Минимум")),
+                _odata_num(norm.get("Максимум")),
+            )
+
+    library_indicators: List[Dict[str, Any]] = []
+    seen: set = set()
+    for row in (template_1c.get(indicators_field) or []):
+        key = row.get(indicator_key_field)
+        if not key or key == ZERO_GUID or str(key) in seen:
+            continue
+        seen.add(str(key))
+        nmin, nmax = norms_map.get(str(key), (None, None))
+        if nmin is None:
+            nmin = _odata_num(row.get("ЭталонОт"))
+        if nmax is None:
+            nmax = _odata_num(row.get("ЭталонДо"))
+        library_indicators.append({
+            "indicator_external_id": str(key),
+            "external_id": str(key),
+            "min_value": nmin,
+            "max_value": nmax,
+            "sort_order": row.get("LineNumber") or (len(library_indicators) + 1),
+        })
+
+    return {
+        "name": name,
+        "description": template_1c.get("НаименованиеENG") or None,
+        "is_active": not bool(template_1c.get("DeletionMark", False)),
+        "external_id": str(ref_key) if ref_key else None,
+        "library_indicators": library_indicators,
+    }
+
+
+async def import_odata_templates_from_1c(
+    db: Session,
+    config: ExternalSystemConfig,
+    endpoint: str = "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
+    skip_duplicates: bool = True,
+    user_id: int = 1,
+    indicators_field: str = "ПоказателиАнализа",
+    norms_field: str = "Нормативы",
+    indicator_key_field: str = "Показатель_Key",
+    name_field: str = "Description",
+    create_missing_indicators: bool = False,
+) -> Dict[str, Any]:
+    """
+    Импортировать шаблоны анализов из стандартного OData 1С.
+
+    Показатели шаблона сопоставляются со справочником (IndicatorLibrary) по GUID
+    (external_id). Если показатель не найден:
+      - create_missing_indicators=False (по умолчанию) — показатель пропускается и
+        его GUID добавляется в result["missing_indicators"] (сначала импортируйте
+        справочник показателей);
+      - create_missing_indicators=True — создаётся заглушка показателя.
+    """
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "missing_indicators": [], "errors": [],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        # 1С OData отдаёт XML по умолчанию — запрашиваем JSON и берём массив из "value"
+        raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        # Отсекаем группы и помеченные на удаление
+        templates = [
+            t for t in raw
+            if not t.get("IsFolder") and not t.get("DeletionMark")
+        ]
+        result["total"] = len(templates)
+        logger.info(f"OData: получено {len(raw)} записей, шаблонов к импорту {len(templates)}")
+
+        # Индекс справочника по GUID (external_id)
+        lib_by_guid: Dict[str, IndicatorLibrary] = {}
+        for ind in db.query(IndicatorLibrary).all():
+            if ind.external_id:
+                lib_by_guid[str(ind.external_id).lower()] = ind
+
+        missing: set = set()
+
+        for tpl in templates:
+            try:
+                local = transform_1c_odata_template_to_local(
+                    tpl, indicators_field, norms_field, indicator_key_field, name_field
+                )
+                if not local:
+                    result["skipped"] += 1
+                    continue
+
+                ext_id = local.get("external_id")
+                existing = None
+                if ext_id:
+                    existing = db.query(AnalysisType).filter(
+                        AnalysisType.external_id == ext_id
+                    ).first()
+                if existing is None:
+                    existing = db.query(AnalysisType).filter(
+                        AnalysisType.name == local["name"]
+                    ).first()
+
+                if existing and skip_duplicates:
+                    result["skipped"] += 1
+                    continue
+
+                if existing:
+                    tmpl_obj = existing
+                    tmpl_obj.description = local.get("description") or tmpl_obj.description
+                    tmpl_obj.is_active = local.get("is_active", True)
+                    tmpl_obj.external_id = ext_id
+                    for ti in list(tmpl_obj.template_indicators):
+                        db.delete(ti)
+                    db.flush()
+                    result["updated"] += 1
+                else:
+                    tmpl_obj = AnalysisType(
+                        name=local["name"],
+                        description=local.get("description"),
+                        created_by=user_id,
+                        is_active=local.get("is_active", True),
+                        external_id=ext_id,
+                    )
+                    db.add(tmpl_obj)
+                    db.flush()
+                    result["created"] += 1
+
+                for li in local["library_indicators"]:
+                    guid = str(li["indicator_external_id"]).lower()
+                    ind = lib_by_guid.get(guid)
+                    if ind is None:
+                        if create_missing_indicators:
+                            ind = IndicatorLibrary(
+                                name=f"Показатель {li['indicator_external_id']}",
+                                data_type="number",
+                                external_id=li["indicator_external_id"],
+                                created_by=user_id,
+                            )
+                            db.add(ind)
+                            db.flush()
+                            lib_by_guid[guid] = ind
+                        else:
+                            missing.add(li["indicator_external_id"])
+                            continue
+                    ti = TemplateIndicator(
+                        template_id=tmpl_obj.id,
+                        indicator_id=ind.id,
+                        min_value=li.get("min_value"),
+                        max_value=li.get("max_value"),
+                        sort_order=li.get("sort_order", 0),
+                        external_id=li.get("external_id"),
+                    )
+                    db.add(ti)
+
+            except Exception as e:
+                logger.error(f"OData template error: {e}")
+                result["errors"].append({"template": tpl.get(name_field), "error": str(e)})
+
+        result["missing_indicators"] = sorted(missing)
+        db.commit()
+        logger.info(
+            f"OData templates import: {result['created']} created, {result['updated']} updated, "
+            f"{result['skipped']} skipped, {len(result['missing_indicators'])} missing indicators, "
+            f"{len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"OData templates import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result
+
+
 async def import_plans_from_1c(
     db: Session,
     config: ExternalSystemConfig,
