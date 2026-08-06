@@ -655,10 +655,9 @@ const Dashboard: React.FC = () => {
                                   value={selectedTemplate?.id || ''}
                                   onChange={(e) => {
                                     const template = templates.find(t => t.id === parseInt(e.target.value));
-                                    if (template) handleTemplateSelect(template);
+                                    if (template) { handleTemplateSelect(template); setTemplateSearch(''); }
                                   }}
                                   disabled={isEditing}
-                                  htmlSize={q && list.length > 1 ? Math.min(list.length + 1, 10) : undefined}
                                 >
                                   <option value="" disabled>-- Выберите шаблон --</option>
                                   {list.map((template) => (
