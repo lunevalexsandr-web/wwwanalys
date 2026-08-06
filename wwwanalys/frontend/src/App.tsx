@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Admin from './pages/Admin';
 import Plans from './pages/Plans';
 import TechCards from './pages/TechCards';
+import ReferenceData from './pages/ReferenceData';
 import './App.css';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
@@ -110,6 +111,14 @@ function App() {
             element={
               <ProtectedRoute adminOnly={true}>
                 <TechCards />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reference"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <ReferenceData />
               </ProtectedRoute>
             }
           />

@@ -1669,3 +1669,76 @@ async def import_odata_template_norms_from_1c(
     finally:
         await service.close()
     return result
+
+
+# ============ Объекты анализа/отбора (справочник) через OData ============
+
+async def import_odata_objects_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    name_field: str = "Description",
+    code_field: str = "Code",
+) -> Dict[str, Any]:
+    """Импортировать справочник объектов анализа/отбора (Catalog__ОбъектыАнализа).
+    Дедуп по GUID, различение дублей имён. Помеченные на удаление/группы отсекаются."""
+    from app.models import AnalysisObject
+
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        items = [o for o in raw if not o.get("IsFolder") and not o.get("DeletionMark")]
+        result["total"] = len(items)
+
+        existing = db.query(AnalysisObject).all()
+        by_guid = {str(o.external_id).lower(): o for o in existing if o.external_id}
+        used_names = {o.name for o in existing}
+
+        def _uniq(name, guid):
+            if name not in used_names:
+                return name
+            base = f"{name} [{(guid or '')[:8] or 'dup'}]"
+            c, i = base, 2
+            while c in used_names:
+                c = f"{base}-{i}"; i += 1
+            return c
+
+        for row in items:
+            try:
+                name = (row.get(name_field) or "").strip()
+                if not name:
+                    result["skipped"] += 1
+                    continue
+                rk = row.get("Ref_Key")
+                guid = rk if (rk and rk != ZERO_GUID) else None
+                gkey = str(guid).lower() if guid else None
+                obj = by_guid.get(gkey) if gkey else None
+                if obj:
+                    if name != obj.name:
+                        nm = _uniq(name, guid); used_names.discard(obj.name); used_names.add(nm)
+                        obj.name = nm
+                    obj.is_active = not bool(row.get("DeletionMark"))
+                    result["updated"] += 1
+                else:
+                    nm = _uniq(name, guid)
+                    o = AnalysisObject(name=nm, external_id=guid, is_active=True)
+                    db.add(o); used_names.add(nm)
+                    if gkey:
+                        by_guid[gkey] = o
+                    result["created"] += 1
+            except Exception as e:
+                result["errors"].append({"object": row.get(name_field), "error": str(e)})
+        db.commit()
+        logger.info(f"Objects import: created={result['created']} updated={result['updated']}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Objects import failed: {e}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result

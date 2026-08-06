@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, analysis_type, process_log, templates, reports, external, indicators, presets, statistics, plans, varieties
+from app.api import auth, analysis_type, process_log, templates, reports, external, indicators, presets, statistics, plans, varieties, analysis_objects
 from app.core.database import engine, Base
 from app.core.config import settings
 from app.models import User, AnalysisType, Indicator, ProcessLog, IndicatorValue, Preset, PresetIndicator, AnalysisPlan, PlanItem
@@ -96,6 +96,7 @@ app.include_router(presets.router, prefix="/api/presets", tags=["Presets"])
 app.include_router(statistics.router, prefix="/api", tags=["Statistics"])
 app.include_router(plans.router, prefix="/api/plans", tags=["Plans"])
 app.include_router(varieties.router, prefix="/api/varieties", tags=["Varieties"])
+app.include_router(analysis_objects.router, prefix="/api/analysis-objects", tags=["Analysis Objects"])
 
 # Дополнительный (необязательный) модуль AI-ассистента. Подключается изолированно:
 # любая проблема с ним (импорт, зависимость anthropic и т.п.) не должна мешать

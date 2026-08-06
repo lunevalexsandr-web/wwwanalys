@@ -11,6 +11,7 @@ from .analysis_plan import AnalysisPlan, PlanItem
 from .integration_config import IntegrationConfig
 from .variety import Variety
 from .template_norm import TemplateNorm
+from .analysis_object import AnalysisObject
 
 __all__ = [
     "User",
@@ -28,5 +29,6 @@ __all__ = [
     "PlanItem",
     "IntegrationConfig",
     "Variety",
-    "TemplateNorm"
+    "TemplateNorm",
+    "AnalysisObject"
 ]
