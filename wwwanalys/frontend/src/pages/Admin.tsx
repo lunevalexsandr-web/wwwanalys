@@ -71,7 +71,7 @@ const Admin: React.FC = () => {
   const [c1CApiKey, setC1CApiKey] = useState('');
   const [c1CUsername, setC1CUsername] = useState('');
   const [c1CPassword, setC1CPassword] = useState('');
-  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Показатели');
+  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
   const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
   const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_tek/odata/standard.odata/Document_ПланАнализов');
   const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Сорта');
@@ -620,7 +620,7 @@ const Admin: React.FC = () => {
       setC1CBaseUrl(cfg.base_url || '');
       setC1CApiKey(cfg.api_key || '');
       setC1CUsername(cfg.username || '');
-      setC1CEndpoint(cfg.indicators_endpoint || cfg.endpoint || '/erp_tek/odata/standard.odata/Catalog_Показатели');
+      setC1CEndpoint(cfg.indicators_endpoint || cfg.endpoint || '/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
       setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
       setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_tek/odata/standard.odata/Document_ПланАнализов');
       setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_tek/odata/standard.odata/Catalog_Сорта');
@@ -1338,8 +1338,8 @@ const Admin: React.FC = () => {
             </Row>
             <Form.Group className="mb-3">
               <Form.Label>OData 1С — справочник показателей</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Показатели" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Стандартный OData-справочник показателей, например: /erp_tek/odata/standard.odata/Catalog_Показатели</Form.Text>
+              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Показатели анализов (план видов характеристик 1С): ChartOfCharacteristicTypes__ПоказателиАнализов</Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>OData 1С — шаблоны анализа</Form.Label>
