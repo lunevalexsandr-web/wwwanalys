@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # Ключи/адреса провайдеров (заполняются, когда выбрана конкретная модель)
     anthropic_api_key: str = ""
 
+    # RAG / база знаний техкарт (загрузка из файлов, вектор-готовое хранилище).
+    #   rag_embedding_provider: "none" пока модель не выбрана (поиск идёт по FTS);
+    #   далее добавляются ollama/gigachat/voyage и т.п.
+    rag_embedding_provider: str = "none"
+    embedding_dim: int = 1024          # размерность вектора (bge-m3=1024, nomic=768, …)
+    rag_chunk_size: int = 1000         # символов во фрагменте
+    rag_chunk_overlap: int = 150       # перекрытие фрагментов
+    rag_max_upload_mb: int = 25        # лимит размера файла
+
     class Config:
         env_file = ".env"
         extra = "ignore"

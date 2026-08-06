@@ -70,6 +70,17 @@ if settings.ai_enabled:
         print("AI assistant module enabled")
     except Exception as e:
         print(f"AI assistant module disabled (load error): {e}")
+
+    # База знаний техкарт (RAG). Отдельный try/except: если pgvector недоступен,
+    # это не должно мешать ни ядру, ни остальному AI-модулю.
+    try:
+        from app.services import rag
+        from app.api import tech_cards
+        rag.init_storage()
+        app.include_router(tech_cards.router, prefix="/api/ai/tech-cards", tags=["Tech Cards (RAG)"])
+        print("RAG knowledge base enabled")
+    except Exception as e:
+        print(f"RAG knowledge base disabled (load error): {e}")
 else:
     print("AI assistant module disabled by AI_ENABLED=false")
 

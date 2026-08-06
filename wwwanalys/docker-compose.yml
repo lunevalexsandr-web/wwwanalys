@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:15
+    # pgvector/pgvector:pg15 = тот же PostgreSQL 15 + расширение vector.
+    # Формат данных идентичен postgres:15, том сохраняется — совместимая замена.
+    image: pgvector/pgvector:pg15
     environment:
       POSTGRES_DB: wwwanalys
       POSTGRES_USER: wwwanalys_user
@@ -32,6 +34,8 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_MODEL: ${AI_MODEL:-claude-opus-4-8}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-none}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
     depends_on:
       db:
         condition: service_healthy
