@@ -1845,3 +1845,150 @@ async def import_odata_storage_options_from_1c(
         result["errors"].append({"error": str(e)})
         raise
     return result
+
+
+# ============ Импорт РЕЗУЛЬТАТОВ анализов из 1С (документ УстановкаАнализовСерии) ============
+
+async def import_odata_results_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    date_from: str,
+    date_to: str,
+    endpoint: str = "/erp_tek/odata/standard.odata/Document__УстановкаАнализовСерии",
+    user_id: int = 1,
+    only_posted: bool = True,
+) -> Dict[str, Any]:
+    """Импортировать результаты анализов за период из 1С в отчёты приложения.
+
+    Документ УстановкаАнализовСерии → ProcessLog; строки ТЧ ПоказателиАнализа →
+    IndicatorValue. Значение-ссылка (Склады/ДопАналитика) резолвится в текст.
+    Идемпотентно по external_id (Ref_Key документа).
+    date_from/date_to — 'YYYY-MM-DD'.
+    """
+    from datetime import datetime
+    from app.models import (ProcessLog, IndicatorValue, IndicatorLibrary,
+                            AnalysisType, Variety)
+    from app.models.process_log import Status
+
+    service = OneCIntegrationService(config)
+    r: Dict[str, Any] = {
+        "documents": 0, "reports_created": 0, "reports_updated": 0, "values": 0,
+        "skipped_no_template": 0, "skipped_no_indicator": 0, "errors": [],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        base = "/erp_tek/odata/standard.odata/"
+        ind_by_guid = {str(i.external_id).lower(): i for i in db.query(IndicatorLibrary).all() if i.external_id}
+        tpl_by_guid = {str(t.external_id).lower(): t for t in db.query(AnalysisType).all() if t.external_id}
+        var_by_guid = {str(v.external_id).lower(): v.name for v in db.query(Variety).all() if v.external_id}
+
+        # карты значений-ссылок (Склады, ДопАналитика)
+        sklady = {}
+        for row in await service._fetch_list(base + "Catalog_Склады", params={"$format": "json"}, key="value"):
+            rk = row.get("Ref_Key"); d = (row.get("Description") or "").strip()
+            if rk and d:
+                sklady[str(rk).lower()] = d
+        dop = {}
+        for row in await service._fetch_list(base + "Catalog__ДопАналитикаПоказателейАнализов", params={"$format": "json"}, key="value"):
+            rk = row.get("Ref_Key"); d = (row.get("Description") or "").strip()
+            if rk and d:
+                dop[str(rk).lower()] = d
+
+        flt = f"Date ge datetime'{date_from}T00:00:00' and Date le datetime'{date_to}T23:59:59'"
+        if only_posted:
+            flt += " and Posted eq true"
+        docs = await service._fetch_list(endpoint, params={"$format": "json", "$filter": flt}, key="value")
+        await service.close()
+        r["documents"] = len(docs)
+
+        def _val(raw, vtype):
+            """(numeric, text) из значения показателя по типу."""
+            if raw in (None, "") or str(vtype).endswith("Undefined"):
+                return None, None
+            t = str(vtype or "")
+            if t == "Edm.Double":
+                try:
+                    return float(raw), None
+                except (TypeError, ValueError):
+                    return None, str(raw)
+            if "Склады" in t:
+                return None, sklady.get(str(raw).lower(), str(raw))
+            if "ДопАналитика" in t:
+                return None, dop.get(str(raw).lower(), str(raw))
+            return None, str(raw)
+
+        for i, doc in enumerate(docs):
+            try:
+                if doc.get("DeletionMark"):
+                    continue
+                tpl = tpl_by_guid.get(str(doc.get("ТиповойАнализ_Key")).lower())
+                if not tpl:
+                    r["skipped_no_template"] += 1
+                    continue
+                ext = doc.get("Ref_Key")
+                try:
+                    started = datetime.fromisoformat(str(doc.get("Date"))[:19])
+                except Exception:
+                    started = datetime.utcnow()
+                skey = doc.get("СерияНоменклатуры")
+                skey = skey if (skey and skey != ZERO_GUID) else None
+                variety = var_by_guid.get(str(doc.get("Характеристика_Key")).lower())
+                container = (str(doc.get("ТараДляПива")).strip() or None) if doc.get("ТараДляПива") else None
+
+                pl = db.query(ProcessLog).filter(ProcessLog.external_id == ext).first() if ext else None
+                if pl:
+                    db.query(IndicatorValue).filter(IndicatorValue.process_log_id == pl.id).delete()
+                    r["reports_updated"] += 1
+                else:
+                    pl = ProcessLog(created_by=user_id)
+                    db.add(pl)
+                    r["reports_created"] += 1
+                pl.batch_number = doc.get("СерияНоменклатуры2") or ""
+                pl.series_key = skey
+                pl.variety = variety
+                pl.container = container
+                pl.analysis_type_id = tpl.id
+                pl.started_at = started
+                pl.status = Status.COMPLETED
+                pl.external_id = ext
+                db.flush()
+
+                for row in (doc.get("ПоказателиАнализа") or []):
+                    ind = ind_by_guid.get(str(row.get("Показатель_Key")).lower())
+                    if not ind:
+                        r["skipped_no_indicator"] += 1
+                        continue
+                    numeric, textv = _val(row.get("ЗначениеПоказателя"), row.get("ЗначениеПоказателя_Type"))
+                    if numeric is None and not textv:
+                        continue  # значение не внесено
+                    try:
+                        code = int(row.get("ЕстьОтклонение") or 0)
+                    except (TypeError, ValueError):
+                        code = 0
+                    try:
+                        day = int(row.get("День") or 0)
+                    except (TypeError, ValueError):
+                        day = 0
+                    db.add(IndicatorValue(
+                        process_log_id=pl.id, indicator_id=ind.id,
+                        value=numeric, text_value=textv, day=day,
+                        is_normal=(code != 2), deviation_code=code,
+                        external_id=row.get("Ref_Key"),
+                    ))
+                    r["values"] += 1
+
+                if i % 100 == 0:
+                    db.commit()
+            except Exception as e:
+                r["errors"].append({"doc": doc.get("Number"), "error": str(e)[:200]})
+
+        db.commit()
+        logger.info(f"Results import: {r['reports_created']} created, {r['reports_updated']} updated, {r['values']} values")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Results import failed: {e}")
+        r["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return r
