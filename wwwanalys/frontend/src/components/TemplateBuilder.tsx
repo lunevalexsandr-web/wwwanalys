@@ -81,9 +81,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                 return (
                   <div key={ref.indicator_id} className="d-flex align-items-center gap-2 mb-2">
                     <div className="d-flex flex-column">
-                      <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
+                      <button type="button" className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
                         onClick={() => onMoveLib(ref.indicator_id, 'up')} title="Вверх">▲</button>
-                      <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
+                      <button type="button" className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
                         onClick={() => onMoveLib(ref.indicator_id, 'down')} title="Вниз">▼</button>
                     </div>
                     <div className="flex-grow-1">
@@ -115,9 +115,9 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                         <div className="d-flex justify-content-between align-items-center">
                           <div className="d-flex align-items-center gap-2">
                             <div className="d-flex flex-column">
-                              <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
+                              <button type="button" className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isFirst}
                                 onClick={() => onMoveCustom(indicator.id, 'up')} title="Вверх">▲</button>
-                              <button className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
+                              <button type="button" className="btn btn-sm py-0 px-1 border-0 text-muted" disabled={isLast}
                                 onClick={() => onMoveCustom(indicator.id, 'down')} title="Вниз">▼</button>
                             </div>
                             <div>

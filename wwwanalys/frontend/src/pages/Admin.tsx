@@ -866,8 +866,8 @@ const Admin: React.FC = () => {
                       <div className="btn-group">
                         <button className="btn btn-outline-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Экспорт</button>
                         <ul className="dropdown-menu dropdown-menu-end">
-                          <li><button className="dropdown-item" onClick={() => handleExport('csv')}>CSV</button></li>
-                          <li><button className="dropdown-item" onClick={() => handleExport('excel')}>Excel</button></li>
+                          <li><button type="button" className="dropdown-item" onClick={() => handleExport('csv')}>CSV</button></li>
+                          <li><button type="button" className="dropdown-item" onClick={() => handleExport('excel')}>Excel</button></li>
                         </ul>
                       </div>
                       <div className="btn-group">
@@ -895,7 +895,7 @@ const Admin: React.FC = () => {
                       <div className="md:col-span-2">
                         <div className="input-group input-group-sm">
                           <Form.Control type="text" placeholder="Поиск по названию, описанию..." value={libSearch} onChange={(e) => handleLibSearchChange(e.target.value)} />
-                          {libSearch && (<button className="btn btn-outline-secondary" onClick={() => handleLibSearchChange('')}>✕</button>)}
+                          {libSearch && (<button type="button" className="btn btn-outline-secondary" onClick={() => handleLibSearchChange('')}>✕</button>)}
                         </div>
                       </div>
                       <Form.Select size="sm" value={libFilterCategory} onChange={(e) => handleLibFilterChange('category', e.target.value)}>
@@ -1083,8 +1083,8 @@ const Admin: React.FC = () => {
                         <div className="flex justify-between items-start">
                           <div className="flex items-start gap-3">
                             <div className="flex flex-col gap-0.5 mt-1">
-                              <button className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isFirst} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'up')} title="Вверх">▲</button>
-                              <button className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isLast} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'down')} title="Вниз">▼</button>
+                              <button type="button" className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isFirst} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'up')} title="Вверх">▲</button>
+                              <button type="button" className="p-0.5 rounded hover:bg-white text-text-muted disabled:opacity-30" disabled={isLast} onClick={() => handleMoveLibIndicator(ref.indicator_id, 'down')} title="Вниз">▼</button>
                             </div>
                             <div>
                               <div className="flex items-center gap-2 flex-wrap">
