@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     cors_origins: str = "*"
     api_key: str = "change-me-api-key"
+    # AI-ассистент (эксперт-пивовар) для разбора отклонений
+    anthropic_api_key: str = ""
+    ai_model: str = "claude-opus-4-8"
+    ai_max_tokens: int = 2000
 
     class Config:
         env_file = ".env"

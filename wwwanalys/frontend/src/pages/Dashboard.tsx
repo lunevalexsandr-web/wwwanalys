@@ -33,7 +33,12 @@ const Dashboard: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewReport, setViewReport] = useState<Report | null>(null);
   const [viewReportIndicators, setViewReportIndicators] = useState<any[]>([]);
-  
+
+  // AI-разбор отклонений (эксперт-пивовар)
+  const [aiResult, setAiResult] = useState<any | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const { toast, showToast, hideToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -418,12 +423,37 @@ const Dashboard: React.FC = () => {
       
       // Просто используем значения, которые вернул API
       setViewReportIndicators(reportData.values || []);
+      // сброс предыдущего AI-разбора
+      setAiResult(null);
+      setAiError(null);
+      setAiLoading(false);
       setShowViewModal(true);
     } catch (error) {
       console.error('Error fetching report:', error);
       showToast('Ошибка при загрузке отчета', 'danger');
     }
   };
+
+  const handleAiAnalyze = async () => {
+    if (!viewReport) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiResult(null);
+    try {
+      const response = await api.post(`/api/ai/reports/${viewReport.id}/analyze`);
+      setAiResult(response.data);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || 'Не удалось выполнить AI-разбор';
+      setAiError(detail);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const severityColor = (s: string) =>
+    s === 'high' ? 'danger' : s === 'medium' ? 'warning' : 'secondary';
+  const severityText = (s: string) =>
+    s === 'high' ? 'Высокая' : s === 'medium' ? 'Средняя' : 'Низкая';
 
   const handleEditReport = async (reportId: number) => {
     try {
@@ -905,6 +935,70 @@ const Dashboard: React.FC = () => {
                       ))}
                     </tbody>
                   </Table>
+                )}
+
+                <hr />
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <h6 className="mb-0">🍺 Разбор ИИ-эксперта</h6>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAiAnalyze}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? (
+                      <><Spinner animation="border" size="sm" className="me-2" />Анализирую…</>
+                    ) : (
+                      'Разобрать отклонения'
+                    )}
+                  </Button>
+                </div>
+
+                {aiError && <Alert variant="danger">{aiError}</Alert>}
+
+                {aiResult && (
+                  <div>
+                    <Alert variant={aiResult.deviations_count === 0 ? 'success' : 'info'}>
+                      {aiResult.summary}
+                    </Alert>
+                    {(aiResult.deviations || []).map((d: any, i: number) => (
+                      <Card key={i} className="mb-2">
+                        <CardBody>
+                          <div className="d-flex align-items-center justify-content-between mb-1">
+                            <strong>{d.indicator}</strong>
+                            <Badge bg={severityColor(d.severity)}>
+                              {severityText(d.severity)}
+                            </Badge>
+                          </div>
+                          {(d.value !== undefined) && (
+                            <div className="text-muted small mb-2">
+                              Значение: {d.value}{d.unit ? ` ${d.unit}` : ''}
+                              {d.norm ? ` · норма: ${d.norm}` : ''}
+                              {d.direction ? ` · ${d.direction === 'below' ? 'ниже нормы' : 'выше нормы'}` : ''}
+                              {d.deviation_pct != null ? ` (${d.deviation_pct}%)` : ''}
+                            </div>
+                          )}
+                          <div className="mb-2">{d.interpretation}</div>
+                          {d.likely_causes?.length > 0 && (
+                            <div className="mb-2">
+                              <div className="fw-semibold small text-muted">Вероятные причины:</div>
+                              <ul className="mb-0">
+                                {d.likely_causes.map((c: string, j: number) => <li key={j}>{c}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {d.actions?.length > 0 && (
+                            <div>
+                              <div className="fw-semibold small text-muted">Что сделать:</div>
+                              <ul className="mb-0">
+                                {d.actions.map((a: string, j: number) => <li key={j}>{a}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </CardBody>
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="modal-footer">
