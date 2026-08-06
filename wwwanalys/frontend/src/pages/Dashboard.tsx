@@ -312,14 +312,23 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTemplateSelect = (template: AnalysisType) => {
-    setSelectedTemplate(template);
+  const handleTemplateSelect = async (template: AnalysisType) => {
     setBatchNumber('');
     setVariety('');
     setContainer('');
     setIsEditing(false);
     setEditingReportId(null);
-    const allIndicators = getAllIndicators(template);
+    // подгружаем свежую версию шаблона (актуальные варианты/нормы/расписание),
+    // чтобы не работать по устаревшему кэшу списка
+    let fresh = template;
+    try {
+      const resp = await api.get(`/api/templates/${template.id}`);
+      if (resp.data) fresh = resp.data;
+    } catch {
+      /* если не удалось — используем то, что есть */
+    }
+    setSelectedTemplate(fresh);
+    const allIndicators = getAllIndicators(fresh);
     const values = allIndicators.map(indicator => ({
       indicator_id: indicator.id,
       value: '',
