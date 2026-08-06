@@ -271,6 +271,8 @@ const Dashboard: React.FC = () => {
 
   // Флаг для предотвращения двойной обработки
   const processedPlanDataRef = useRef<string | null>(null);
+  // Флаг: есть незавершённая обработка данных плана из localStorage (ждём загрузки шаблонов)
+  const pendingPlanRef = useRef(false);
 
   // Обработка перехода из Plans с данными для создания отчета
   useEffect(() => {
@@ -293,8 +295,10 @@ const Dashboard: React.FC = () => {
       if (state.planData) {
         processPlanData(state.planData);
       } else {
-        // Fallback на localStorage
-        processPlanItemToReport();
+        // Fallback на localStorage; если шаблоны ещё не загружены — доработаем позже
+        if (!processPlanItemToReport()) {
+          pendingPlanRef.current = true;
+        }
       }
       // Очищаем состояние навигации, чтобы обновление страницы (F5) не
       // повторяло авто-выбор шаблона из старого перехода «Планирование».
@@ -302,9 +306,11 @@ const Dashboard: React.FC = () => {
     }
   }, [location.state]);
 
-  // Обработка localStorage после загрузки шаблонов
+  // Обработка localStorage после загрузки шаблонов — ТОЛЬКО если был реальный
+  // переход из «Планирования» (иначе не авто-выбираем шаблон при простой навигации)
   useEffect(() => {
-    if (templates.length > 0) {
+    if (templates.length > 0 && pendingPlanRef.current) {
+      pendingPlanRef.current = false;
       processPlanItemToReport();
     }
   }, [templates]);
