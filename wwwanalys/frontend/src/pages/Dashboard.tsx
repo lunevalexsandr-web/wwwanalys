@@ -632,42 +632,43 @@ const Dashboard: React.FC = () => {
                         </Alert>
                       ) : (
                         <div>
-                          <Form.Control
-                            type="text"
-                            className="mb-2"
-                            placeholder="🔍 Поиск шаблона по названию…"
-                            value={templateSearch}
-                            onChange={(e) => setTemplateSearch(e.target.value)}
-                            disabled={isEditing}
-                          />
                           {(() => {
                             const q = templateSearch.trim().toLowerCase();
                             const filtered = q
                               ? templates.filter(t => t.name.toLowerCase().includes(q))
                               : templates;
-                            // гарантируем, что выбранный шаблон присутствует в списке
-                            const list = selectedTemplate && !filtered.some(t => t.id === selectedTemplate.id)
-                              ? [selectedTemplate, ...filtered]
-                              : filtered;
                             return (
                               <>
-                                <Form.Select
-                                  value={selectedTemplate?.id || ''}
+                                <Form.Control
+                                  type="text"
+                                  list="template-options"
+                                  placeholder="🔍 Начните вводить название шаблона…"
+                                  value={selectedTemplate ? selectedTemplate.name : templateSearch}
                                   onChange={(e) => {
-                                    const template = templates.find(t => t.id === parseInt(e.target.value));
-                                    if (template) { handleTemplateSelect(template); setTemplateSearch(''); }
+                                    const val = e.target.value;
+                                    setTemplateSearch(val);
+                                    // если ввод точно совпал с названием шаблона — выбираем его
+                                    const match = templates.find(t => t.name === val);
+                                    if (match) {
+                                      handleTemplateSelect(match);
+                                    } else if (selectedTemplate) {
+                                      // пользователь начал менять — сбрасываем выбор
+                                      setSelectedTemplate(null);
+                                      setIndicatorValues([]);
+                                    }
                                   }}
                                   disabled={isEditing}
-                                >
-                                  <option value="" disabled>-- Выберите шаблон --</option>
-                                  {list.map((template) => (
-                                    <option key={template.id} value={template.id}>
-                                      {template.name} ({getTotalIndicators(template)} показателей)
+                                  autoComplete="off"
+                                />
+                                <datalist id="template-options">
+                                  {filtered.slice(0, 50).map((template) => (
+                                    <option key={template.id} value={template.name}>
+                                      {getTotalIndicators(template)} показателей
                                     </option>
                                   ))}
-                                </Form.Select>
-                                {q && (
-                                  <small className="text-muted d-block mt-1">Найдено: {filtered.length}</small>
+                                </datalist>
+                                {!selectedTemplate && q && (
+                                  <small className="text-muted d-block mt-1">Найдено: {filtered.length} — выберите из подсказок</small>
                                 )}
                               </>
                             );
