@@ -50,7 +50,7 @@ class OneCConnectionConfig(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     timeout: int = 30
-    endpoint: str = "/erp_24/hs/labindicators/indicators"
+    endpoint: str = "/erp_tek/hs/labindicators/indicators"
 
 
 # --- Проверка связи ---
@@ -138,7 +138,7 @@ async def test_1c_connection(
 class OneCODataIndicatorImportRequest(BaseModel):
     """Запрос на импорт справочника показателей из стандартного OData 1С."""
     connection: OneCConnectionConfig
-    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog_Показатели
+    endpoint: Optional[str] = None  # напр. /erp_tek/odata/standard.odata/Catalog_Показатели
     name_field: str = "Description"
     unit_field: str = "ЕдиницаИзмерения"
     code_field: str = "Code"
@@ -196,7 +196,7 @@ async def import_indicators_from_1c_odata(
 class OneCODataTemplateImportRequest(BaseModel):
     """Запрос на импорт шаблонов из стандартного OData 1С (ТиповыеАнализыСерий)."""
     connection: OneCConnectionConfig
-    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий
+    endpoint: Optional[str] = None  # напр. /erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий
     indicators_field: str = "ПоказателиАнализа"
     norms_field: str = "Нормативы"
     indicator_key_field: str = "Показатель_Key"
@@ -225,7 +225,7 @@ async def import_templates_from_1c_odata(
             "username": "odata_user",
             "password": "***"
         },
-        "endpoint": "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
+        "endpoint": "/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
         "skip_duplicates": true
     }
     """
@@ -244,7 +244,7 @@ async def import_templates_from_1c_odata(
     )
     endpoint = request.endpoint or (
         saved_config.templates_endpoint if saved_config else None
-    ) or "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий"
+    ) or "/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий"
     try:
         result = await import_odata_templates_from_1c(
             db=db,
@@ -270,7 +270,7 @@ async def import_templates_from_1c_odata(
 class OneCODataVarietyImportRequest(BaseModel):
     """Запрос на импорт справочника сортов из стандартного OData 1С."""
     connection: OneCConnectionConfig
-    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog_Сорта
+    endpoint: Optional[str] = None  # напр. /erp_tek/odata/standard.odata/Catalog_Сорта
     name_field: str = "Description"
     code_field: str = "Code"
     skip_duplicates: bool = False
@@ -330,7 +330,7 @@ async def import_varieties_from_1c_odata(
 class OneCODataPlanImportRequest(BaseModel):
     """Запрос на импорт планов анализов из стандартного OData 1С (документ)."""
     connection: OneCConnectionConfig
-    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Document_ПланАнализов
+    endpoint: Optional[str] = None  # напр. /erp_tek/odata/standard.odata/Document_ПланАнализов
     name_field: str = "Number"
     date_field: str = "Date"
     items_field: str = "СоставАнализов"

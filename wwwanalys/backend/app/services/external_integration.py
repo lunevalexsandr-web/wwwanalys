@@ -33,7 +33,7 @@ class ExternalSystemConfig:
         password: Optional[str] = None,
         timeout: int = 30,
         verify: bool = False,
-        endpoint: str = "/erp_24/hs/labindicators/indicators",
+        endpoint: str = "/erp_tek/hs/labindicators/indicators",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -877,7 +877,7 @@ def transform_1c_odata_template_to_local(
 async def import_odata_templates_from_1c(
     db: Session,
     config: ExternalSystemConfig,
-    endpoint: str = "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
+    endpoint: str = "/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
     skip_duplicates: bool = True,
     user_id: int = 1,
     indicators_field: str = "ПоказателиАнализа",
