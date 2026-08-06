@@ -40,12 +40,13 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
             if not lib_indicator:
                 continue
             
-            # Нормы: сначала из матрицы (день+тара), фолбэк на TemplateIndicator
-            from app.services.norms import resolve_norm
+            # Нормы: сначала из матрицы (день+сорт+тара), фолбэк на TemplateIndicator
+            from app.services.norms import resolve_norm, variety_key_by_name
             vday = getattr(value_data, "day", None)
             norm = resolve_norm(
                 db, report.template_id, value_data.indicator_id,
                 day=vday, container=report.container,
+                variety_key=variety_key_by_name(db, report.variety),
             )
             if norm is not None and (norm.min_value is not None or norm.max_value is not None):
                 min_value, max_value = norm.min_value, norm.max_value
@@ -191,11 +192,12 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
             if not lib_indicator:
                 continue
             
-            from app.services.norms import resolve_norm
+            from app.services.norms import resolve_norm, variety_key_by_name
             vday = getattr(value_data, "day", None)
             norm = resolve_norm(
                 db, report.template_id, value_data.indicator_id,
                 day=vday, container=report.container,
+                variety_key=variety_key_by_name(db, report.variety),
             )
             if norm is not None and (norm.min_value is not None or norm.max_value is not None):
                 min_value, max_value = norm.min_value, norm.max_value

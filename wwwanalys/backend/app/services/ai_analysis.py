@@ -31,16 +31,18 @@ logger = logging.getLogger(__name__)
 
 def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
     """Собрать значения показателей отчёта с нормами (min/max) из шаблона."""
-    from app.services.norms import resolve_norm
+    from app.services.norms import resolve_norm, variety_key_by_name
     template = db.query(AnalysisType).filter(AnalysisType.id == report.analysis_type_id).first()
+    vkey = variety_key_by_name(db, getattr(report, "variety", None))
     values: List[Dict[str, Any]] = []
     for v in (report.indicator_values or []):
         lib = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
-        # норма: из матрицы (день+тара), фолбэк на TemplateIndicator
+        # норма: из матрицы (день+сорт+тара), фолбэк на TemplateIndicator
         mn = mx = None
         norm = resolve_norm(
             db, report.analysis_type_id, v.indicator_id,
             day=getattr(v, "day", None), container=getattr(report, "container", None),
+            variety_key=vkey,
         )
         if norm is not None:
             mn, mx = norm.min_value, norm.max_value

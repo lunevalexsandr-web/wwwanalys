@@ -71,6 +71,15 @@ def req_c_match(cand: str, req: Optional[str]) -> bool:
     return req is not None and str(cand).strip().lower() == str(req).strip().lower()
 
 
+def variety_key_by_name(db: Session, name: Optional[str]) -> Optional[str]:
+    """GUID сорта по его имени (из справочника Variety). None, если не найден."""
+    if not name:
+        return None
+    from app.models import Variety
+    v = db.query(Variety).filter(Variety.name == str(name).strip()).first()
+    return v.external_id if (v and v.external_id) else None
+
+
 def get_schedule_days(db: Session, template_id: int, indicator_id: int) -> List[int]:
     """Список дней измерения показателя в шаблоне (по возрастанию). Пусто = одноразовый."""
     rows = (

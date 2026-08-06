@@ -1209,38 +1209,56 @@ async def import_odata_varieties_from_1c(
         result["total"] = len(items)
         logger.info(f"OData сорта: получено {len(raw)}, к импорту {len(items)}")
 
+        # индексы в памяти (autoflush выключен — не полагаемся на query по имени)
+        all_existing = db.query(Variety).all()
+        by_guid = {str(v.external_id).lower(): v for v in all_existing if v.external_id}
+        used_names = {v.name for v in all_existing}
+
+        def _uniq_name(name: str, guid: Optional[str]) -> str:
+            """Уникализировать имя при коллизии (в 1С бывают одинаковые имена)."""
+            if name not in used_names:
+                return name
+            suffix = (guid or "")[:8] or "dup"
+            cand = f"{name} [{suffix}]"
+            i = 2
+            while cand in used_names:
+                cand = f"{name} [{suffix}-{i}]"; i += 1
+            return cand
+
         for row in items:
             try:
                 local = transform_1c_odata_variety_to_local(row, name_field, code_field)
                 if not local:
                     result["skipped"] += 1
                     continue
-
-                existing = None
-                if local.get("external_id"):
-                    existing = db.query(Variety).filter(
-                        Variety.external_id == local["external_id"]
-                    ).first()
-                if existing is None:
-                    existing = db.query(Variety).filter(Variety.name == local["name"]).first()
+                guid = local.get("external_id")
+                gkey = str(guid).lower() if guid else None
+                existing = by_guid.get(gkey) if gkey else None
 
                 if existing and skip_duplicates:
                     result["skipped"] += 1
                     continue
 
                 if existing:
-                    existing.name = local["name"]
+                    new_name = local["name"]
+                    if new_name != existing.name:
+                        new_name = _uniq_name(new_name, guid)
+                        used_names.discard(existing.name)
+                        used_names.add(new_name)
+                    existing.name = new_name
                     existing.code = local.get("code")
-                    existing.external_id = local.get("external_id") or existing.external_id
                     existing.is_active = local.get("is_active", True)
                     result["updated"] += 1
                 else:
-                    db.add(Variety(
-                        name=local["name"],
-                        code=local.get("code"),
-                        external_id=local.get("external_id"),
-                        is_active=local.get("is_active", True),
-                    ))
+                    nm = _uniq_name(local["name"], guid)
+                    v = Variety(
+                        name=nm, code=local.get("code"),
+                        external_id=guid, is_active=local.get("is_active", True),
+                    )
+                    db.add(v)
+                    used_names.add(nm)
+                    if gkey:
+                        by_guid[gkey] = v
                     result["created"] += 1
             except Exception as e:
                 logger.error(f"Error processing variety: {e}")

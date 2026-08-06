@@ -168,12 +168,13 @@ def get_report(
             name = lib_indicator.name if lib_indicator else f"Показатель #{v.indicator_id}"
             unit = lib_indicator.unit if lib_indicator else ""
             
-            # Норма: сначала из матрицы (день+тара), фолбэк на TemplateIndicator
-            from app.services.norms import resolve_norm
+            # Норма: сначала из матрицы (день+сорт+тара), фолбэк на TemplateIndicator
+            from app.services.norms import resolve_norm, variety_key_by_name
             min_value = max_value = norm_text = None
             norm = resolve_norm(
                 db, db_report.analysis_type_id, v.indicator_id,
                 day=getattr(v, "day", None), container=getattr(db_report, "container", None),
+                variety_key=variety_key_by_name(db, getattr(db_report, "variety", None)),
             )
             if norm is not None:
                 min_value, max_value, norm_text = norm.min_value, norm.max_value, norm.norm_text
