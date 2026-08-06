@@ -23,6 +23,12 @@ def ensure_indicator_columns(engine):
             ADD COLUMN IF NOT EXISTS text_value VARCHAR
             """
         ))
+        conn.execute(text(
+            """
+            ALTER TABLE process_logs
+            ADD COLUMN IF NOT EXISTS variety VARCHAR
+            """
+        ))
         conn.commit()
 
 try:

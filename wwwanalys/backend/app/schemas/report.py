@@ -12,6 +12,7 @@ class IndicatorValue(BaseModel):
 class ReportCreate(BaseModel):
     template_id: int
     batch_number: str
+    variety: Optional[str] = None
     values: List[IndicatorValue]
     plan_item_id: Optional[int] = None
 
@@ -30,6 +31,7 @@ class IndicatorValueReport(BaseModel):
 class Report(BaseModel):
     id: int
     batch_number: str
+    variety: Optional[str] = None
     analysis_type_id: int
     started_at: datetime
     status: str
@@ -47,6 +49,7 @@ class Report(BaseModel):
         data = {
             'id': obj.id,
             'batch_number': obj.batch_number,
+            'variety': getattr(obj, 'variety', None),
             'analysis_type_id': obj.analysis_type_id,
             'started_at': obj.started_at,
             'status': obj.status.value if hasattr(obj.status, 'value') else obj.status,

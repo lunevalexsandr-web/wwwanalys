@@ -16,6 +16,7 @@ const Dashboard: React.FC = () => {
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<AnalysisType | null>(null);
   const [batchNumber, setBatchNumber] = useState('');
+  const [variety, setVariety] = useState('');
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -94,6 +95,7 @@ const Dashboard: React.FC = () => {
         
         setSelectedTemplate(template);
         setBatchNumber(report.batch_number || planData.batch_number || '');
+        setVariety(report.variety || planData.variety || '');
         setIsEditing(true);
         setEditingReportId(planData.report_id);
         
@@ -171,6 +173,7 @@ const Dashboard: React.FC = () => {
         
         setSelectedTemplate(template);
         setBatchNumber(report.batch_number || planData.batch_number || '');
+        setVariety(report.variety || planData.variety || '');
         setIsEditing(true);
         setEditingReportId(planData.report_id);
         
@@ -303,6 +306,7 @@ const Dashboard: React.FC = () => {
   const handleTemplateSelect = (template: AnalysisType) => {
     setSelectedTemplate(template);
     setBatchNumber('');
+    setVariety('');
     setIsEditing(false);
     setEditingReportId(null);
     const allIndicators = getAllIndicators(template);
@@ -355,6 +359,7 @@ const Dashboard: React.FC = () => {
       const reportData: any = {
         template_id: selectedTemplate.id,
         batch_number: batchNumber,
+        variety: variety || null,
         values: indicatorValues.map(v => ({
           indicator_id: v.indicator_id,
           value: typeof v.value === 'string' && !isNaN(parseFloat(v.value)) 
@@ -401,6 +406,7 @@ const Dashboard: React.FC = () => {
       }
       
       setBatchNumber('');
+    setVariety('');
       setPlanItemId(null);
       if (selectedTemplate) {
         const allIndicators = getAllIndicators(selectedTemplate);
@@ -474,6 +480,7 @@ const Dashboard: React.FC = () => {
       
       setSelectedTemplate(template);
       setBatchNumber(report.batch_number || '');
+      setVariety(report.variety || '');
       setIsEditing(true);
       setEditingReportId(reportId);
       
@@ -639,6 +646,20 @@ const Dashboard: React.FC = () => {
                           />
                         </Form.Group>
 
+                        {/* Сорт (для подбора техкарты AI-экспертом) */}
+                        <Form.Group className="mb-4">
+                          <Form.Label>Сорт</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={variety}
+                            onChange={(e) => setVariety(e.target.value)}
+                            placeholder="Например: Жигулёвское (необязательно)"
+                          />
+                          <Form.Text className="text-muted">
+                            Используется для подбора технологической карты при разборе отклонений.
+                          </Form.Text>
+                        </Form.Group>
+
                         {/* Indicators */}
                         <div className="mb-4">
                           <h5 className="mb-3">
@@ -730,6 +751,7 @@ const Dashboard: React.FC = () => {
                                 setIsEditing(false);
                                 setEditingReportId(null);
                                 setBatchNumber('');
+    setVariety('');
                                 if (selectedTemplate) {
                                   const allIndicators = getAllIndicators(selectedTemplate);
                                   setIndicatorValues(allIndicators.map(indicator => ({
@@ -901,6 +923,11 @@ const Dashboard: React.FC = () => {
                 <div className="mb-3">
                   <strong>Шаблон:</strong> {getTemplateName(viewReport.analysis_type_id)}
                 </div>
+                {(viewReport as any).variety && (
+                  <div className="mb-3">
+                    <strong>Сорт:</strong> {(viewReport as any).variety}
+                  </div>
+                )}
                 <div className="mb-3">
                   <strong>Дата:</strong> {new Date(viewReport.started_at).toLocaleString('ru-RU')}
                 </div>
@@ -971,6 +998,11 @@ const Dashboard: React.FC = () => {
                   <div>
                     <Alert variant={aiResult.deviations_count === 0 ? 'success' : 'info'}>
                       {aiResult.summary}
+                      {aiResult.knowledge_used > 0 && (
+                        <div className="small text-muted mt-1">
+                          📄 Учтена техкарта: фрагментов — {aiResult.knowledge_used}
+                        </div>
+                      )}
                     </Alert>
                     {(aiResult.deviations || []).map((d: any, i: number) => (
                       <Card key={i} className="mb-2">

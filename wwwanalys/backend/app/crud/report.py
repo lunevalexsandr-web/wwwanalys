@@ -22,6 +22,7 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         # Создаем отчет
         db_report = ProcessLog(
             batch_number=batch_number,
+            variety=report.variety,
             analysis_type_id=report.template_id,
             created_by=user_id
         )
@@ -165,7 +166,8 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
                 batch_number = plan_item.batch_number
 
         db_report.batch_number = batch_number
-        
+        db_report.variety = report.variety
+
         # Удаляем старые значения показателей
         db.query(IndicatorValue).filter(IndicatorValue.process_log_id == report_id).delete()
         

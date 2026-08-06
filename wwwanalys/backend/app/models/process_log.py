@@ -15,6 +15,7 @@ class ProcessLog(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     batch_number = Column(String, index=True)
+    variety = Column(String, nullable=True, index=True)  # сорт — ключ к техкарте (RAG)
     analysis_type_id = Column(Integer, ForeignKey("analysis_types.id"))
     created_by = Column(Integer, ForeignKey("users.id"))
     status = Column(Enum(Status), default=Status.PENDING)

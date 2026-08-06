@@ -44,11 +44,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 Планирование
               </Link>
               {showAdminLink && user?.is_admin && (
-                <Link 
-                  to="/admin" 
+                <Link
+                  to="/admin"
                   className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
                 >
                   Админ-панель
+                </Link>
+              )}
+              {user?.is_admin && (
+                <Link
+                  to="/tech-cards"
+                  className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  База знаний
                 </Link>
               )}
             </nav>

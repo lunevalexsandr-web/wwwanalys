@@ -36,6 +36,7 @@ def create_report(
     return {
         "id": db_report.id,
         "batch_number": db_report.batch_number,
+        "variety": db_report.variety,
         "analysis_type_id": db_report.analysis_type_id,
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
@@ -68,6 +69,7 @@ def update_report(
     return {
         "id": updated_report.id,
         "batch_number": updated_report.batch_number,
+        "variety": updated_report.variety,
         "analysis_type_id": updated_report.analysis_type_id,
         "started_at": updated_report.started_at,
         "status": updated_report.status.value if hasattr(updated_report.status, 'value') else updated_report.status,
@@ -187,6 +189,7 @@ def get_report(
     return {
         "id": db_report.id,
         "batch_number": db_report.batch_number,
+        "variety": getattr(db_report, "variety", None),
         "analysis_type_id": db_report.analysis_type_id,
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,

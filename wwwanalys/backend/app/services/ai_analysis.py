@@ -50,6 +50,7 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
         })
     return {
         "batch_number": report.batch_number,
+        "variety": getattr(report, "variety", None),
         "template_name": template.name if template else None,
         "values": values,
     }
@@ -142,6 +143,17 @@ def _build_user_payload(report_ctx: Dict[str, Any], deviations: List[Dict[str, A
     }
 
 
+def _format_knowledge(knowledge: Optional[List[Dict[str, Any]]]) -> str:
+    """Собрать выдержки из техкарты в текстовый блок для промпта."""
+    if not knowledge:
+        return ""
+    parts = []
+    for k in knowledge:
+        src = k.get("title") or "техкарта"
+        parts.append(f"[{src}] {k.get('content', '').strip()}")
+    return "\n---\n".join(parts)
+
+
 class ExpertProvider:
     """Интерфейс экспертного слоя. Реализация переводит факты в текстовый разбор."""
 
@@ -150,9 +162,18 @@ class ExpertProvider:
     def is_configured(self) -> bool:
         raise NotImplementedError
 
-    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze(
+        self,
+        report_ctx: Dict[str, Any],
+        deviations: List[Dict[str, Any]],
+        knowledge: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """Вернуть {summary: str, deviations: [{indicator, severity, interpretation,
-        likely_causes[], actions[]}]}."""
+        likely_causes[], actions[]}]}.
+
+        knowledge — релевантные фрагменты техкарты сорта из базы знаний (RAG),
+        используются как заземление; провайдер может их игнорировать.
+        """
         raise NotImplementedError
 
 
@@ -164,7 +185,7 @@ class NoneProvider(ExpertProvider):
     def is_configured(self) -> bool:
         return True  # всегда доступна — деградация к «только факты»
 
-    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze(self, report_ctx, deviations, knowledge=None) -> Dict[str, Any]:
         return {
             "summary": (
                 f"Найдено отклонений: {len(deviations)}. "
@@ -236,13 +257,20 @@ class AnthropicProvider(ExpertProvider):
     def is_configured(self) -> bool:
         return bool(settings.anthropic_api_key)
 
-    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze(self, report_ctx, deviations, knowledge=None) -> Dict[str, Any]:
         from anthropic import Anthropic
 
         client = Anthropic(api_key=settings.anthropic_api_key)
         payload = _build_user_payload(report_ctx, deviations)
         user_msg = "Разбери отклонения показателей этой партии. Данные (JSON):\n" + \
             json.dumps(payload, ensure_ascii=False, indent=2)
+        kb = _format_knowledge(knowledge)
+        if kb:
+            user_msg += (
+                "\n\nВыдержки из технологической карты сорта (опирайся на них "
+                "как на приоритетный источник; если они противоречат общим "
+                "представлениям — верь карте):\n" + kb
+            )
         resp = client.messages.create(
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,

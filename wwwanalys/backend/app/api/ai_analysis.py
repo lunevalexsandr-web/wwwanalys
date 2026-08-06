@@ -63,9 +63,13 @@ def analyze_report(
             "deviations": [],
         }
 
+    # Заземление на техкарту сорта из базы знаний (RAG). Необязательно:
+    # если модуль RAG недоступен или ничего не нашлось — разбор идёт без него.
+    knowledge = _retrieve_knowledge(db, ctx, deviations)
+
     provider = ai_analysis.get_provider()
     try:
-        result = provider.analyze(ctx, deviations)
+        result = provider.analyze(ctx, deviations, knowledge=knowledge)
     except Exception as e:
         logger.exception("AI-разбор отчёта %s (провайдер %s) не удался", report_id, provider.name)
         raise HTTPException(status_code=502, detail=f"Ошибка экспертного слоя: {e}")
@@ -84,6 +88,26 @@ def analyze_report(
     return {
         "deviations_count": len(deviations),
         "model": provider.name,
+        "knowledge_used": len(knowledge),
         "summary": result.get("summary", ""),
         "deviations": result.get("deviations", []),
     }
+
+
+def _retrieve_knowledge(db: Session, ctx: dict, deviations: list) -> list:
+    """Найти релевантные фрагменты техкарты сорта под текущие отклонения."""
+    try:
+        from app.services import rag
+    except Exception:
+        return []
+    # запрос: сорт + названия отклонившихся показателей
+    terms = [d["indicator"] for d in deviations]
+    variety = ctx.get("variety")
+    query = " ".join(([variety] if variety else []) + terms).strip()
+    if not query:
+        return []
+    try:
+        return rag.search_chunks(db, query, variety=variety, limit=5)
+    except Exception:
+        logger.warning("RAG-поиск недоступен, разбор без техкарты", exc_info=True)
+        return []
