@@ -1,5 +1,5 @@
 """Templates API endpoints."""
-from typing import List
+from typing import List, Optional
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
