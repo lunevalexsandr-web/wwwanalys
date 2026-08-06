@@ -15,6 +15,7 @@ const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('new-report');
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<AnalysisType | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [variety, setVariety] = useState('');
   const [varietyOptions, setVarietyOptions] = useState<string[]>([]);
@@ -631,22 +632,48 @@ const Dashboard: React.FC = () => {
                         </Alert>
                       ) : (
                         <div>
-                          <Form.Select
-                            value={selectedTemplate?.id || ''}
-                            onChange={(e) => {
-                              const template = templates.find(t => t.id === parseInt(e.target.value));
-                              if (template) handleTemplateSelect(template);
-                            }}
+                          <Form.Control
+                            type="text"
+                            className="mb-2"
+                            placeholder="🔍 Поиск шаблона по названию…"
+                            value={templateSearch}
+                            onChange={(e) => setTemplateSearch(e.target.value)}
                             disabled={isEditing}
-                          >
-                            <option value="" disabled>-- Выберите шаблон --</option>
-                            {templates.map((template) => (
-                              <option key={template.id} value={template.id}>
-                                {template.name} ({getTotalIndicators(template)} показателей)
-                              </option>
-                            ))}
-                          </Form.Select>
-                          
+                          />
+                          {(() => {
+                            const q = templateSearch.trim().toLowerCase();
+                            const filtered = q
+                              ? templates.filter(t => t.name.toLowerCase().includes(q))
+                              : templates;
+                            // гарантируем, что выбранный шаблон присутствует в списке
+                            const list = selectedTemplate && !filtered.some(t => t.id === selectedTemplate.id)
+                              ? [selectedTemplate, ...filtered]
+                              : filtered;
+                            return (
+                              <>
+                                <Form.Select
+                                  value={selectedTemplate?.id || ''}
+                                  onChange={(e) => {
+                                    const template = templates.find(t => t.id === parseInt(e.target.value));
+                                    if (template) handleTemplateSelect(template);
+                                  }}
+                                  disabled={isEditing}
+                                  htmlSize={q && list.length > 1 ? Math.min(list.length + 1, 10) : undefined}
+                                >
+                                  <option value="" disabled>-- Выберите шаблон --</option>
+                                  {list.map((template) => (
+                                    <option key={template.id} value={template.id}>
+                                      {template.name} ({getTotalIndicators(template)} показателей)
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                                {q && (
+                                  <small className="text-muted d-block mt-1">Найдено: {filtered.length}</small>
+                                )}
+                              </>
+                            );
+                          })()}
+
                           {selectedTemplate?.description && (
                             <Alert variant="info" className="mt-3">
                               <Alert.Heading>{selectedTemplate.name}</Alert.Heading>
