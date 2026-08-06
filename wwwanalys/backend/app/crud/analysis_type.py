@@ -14,6 +14,7 @@ def get_analysis_type(db: Session, analysis_type_id: int):
 def get_templates(db: Session, skip: int = 0, limit: int = 100):
     return db.query(AnalysisType)\
         .options(joinedload(AnalysisType.template_indicators).joinedload(TemplateIndicator.indicator_ref))\
+        .order_by(AnalysisType.name)\
         .offset(skip).limit(limit).all()
 
 
@@ -21,7 +22,8 @@ def get_active_templates(db: Session):
     """Получить только активные шаблоны"""
     return db.query(AnalysisType)\
         .options(joinedload(AnalysisType.template_indicators).joinedload(TemplateIndicator.indicator_ref))\
-        .filter(AnalysisType.is_active == True).all()
+        .filter(AnalysisType.is_active == True)\
+        .order_by(AnalysisType.name).all()
 
 
 def create_template(db: Session, template: AnalysisTypeCreate, user_id: int):

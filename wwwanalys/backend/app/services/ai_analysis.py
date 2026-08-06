@@ -333,3 +333,120 @@ def get_provider() -> ExpertProvider:
         logger.warning("AI_PROVIDER=%r не настроен, использую 'none'", choice)
         return NoneProvider()
     return provider
+
+
+# ==================== Сводная аналитика по отчётам за период ====================
+
+def build_period_analytics(db, date_from=None, date_to=None, template_id=None, top_n: int = 15):
+    """Агрегированная статистика отклонений по отчётам за период."""
+    import collections
+    from datetime import datetime, time
+    from app.models import ProcessLog, IndicatorLibrary, AnalysisType
+    from app.services.norms import resolve_norm, variety_key_by_name
+
+    q = db.query(ProcessLog)
+    if template_id:
+        q = q.filter(ProcessLog.analysis_type_id == template_id)
+    if date_from:
+        q = q.filter(ProcessLog.started_at >= datetime.combine(date_from, time.min))
+    if date_to:
+        q = q.filter(ProcessLog.started_at <= datetime.combine(date_to, time.max))
+    reports = q.all()
+
+    tpl = {a.id: a.name for a in db.query(AnalysisType).all()}
+    inds = {i.id: (i.name, i.unit or "") for i in db.query(IndicatorLibrary).all()}
+
+    total_values = 0
+    normal = 0
+    by_day = collections.Counter()
+    by_day_dev = collections.Counter()
+    by_template_dev = collections.Counter()
+    by_indicator_dev = collections.Counter()
+    deviations = []
+
+    for r in reports:
+        day = r.started_at.date().isoformat() if r.started_at else "—"
+        vkey = variety_key_by_name(db, r.variety)
+        for v in (r.indicator_values or []):
+            total_values += 1
+            by_day[day] += 1
+            if v.is_normal:
+                normal += 1
+                continue
+            by_day_dev[day] += 1
+            tname = tpl.get(r.analysis_type_id, "?")
+            iname, unit = inds.get(v.indicator_id, (f"#{v.indicator_id}", ""))
+            by_template_dev[tname] += 1
+            by_indicator_dev[iname] += 1
+            norm = resolve_norm(
+                db, r.analysis_type_id, v.indicator_id,
+                day=getattr(v, "day", None), container=r.container,
+                variety_key=vkey, object_key=r.object_key,
+            )
+            deviations.append({
+                "batch_number": r.batch_number,
+                "template": tname,
+                "variety": r.variety,
+                "container": r.container,
+                "day": getattr(v, "day", None),
+                "indicator": iname,
+                "unit": unit,
+                "value": v.value if v.value is not None else v.text_value,
+                "min_value": norm.min_value if norm else None,
+                "max_value": norm.max_value if norm else None,
+                "norm_text": norm.norm_text if norm else None,
+            })
+
+    dev_count = len(deviations)
+    return {
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "reports_count": len(reports),
+        "values_count": total_values,
+        "normal": normal,
+        "deviations_count": dev_count,
+        "deviation_rate": round(dev_count / total_values * 100, 2) if total_values else 0,
+        "by_day": [{"day": d, "values": by_day[d], "deviations": by_day_dev.get(d, 0)}
+                   for d in sorted(by_day)],
+        "by_template": [{"template": t, "deviations": c}
+                        for t, c in by_template_dev.most_common(top_n)],
+        "top_indicators": [{"indicator": i, "deviations": c}
+                           for i, c in by_indicator_dev.most_common(top_n)],
+        "deviations": deviations,
+    }
+
+
+_PERIOD_SYSTEM_PROMPT = (
+    "Ты — технолог-пивовар, заведующий лабораторией. По сводным данным об "
+    "отклонениях показателей за период составь аналитический отчёт для руководства. "
+    "Структура: (1) короткое резюме (сколько отклонений, доля брака, пик по дням); "
+    "(2) сводка по дням; (3) 4–7 ключевых проблемных направлений — сгруппируй "
+    "отклонения по смыслу (напр. диацетил в брожении, стойкость, мутность на розливе, "
+    "вода, входной контроль сырья), с конкретными партиями и числами; (4) вероятные "
+    "причины и рекомендации; (5) отметь возможные ошибки в нормативах. Пиши по-русски, "
+    "по делу, с цифрами из данных. Не выдумывай значения."
+)
+
+
+def analyze_period(analytics: dict) -> dict:
+    """Нарратив-отчёт по периоду через модель (если подключена)."""
+    provider = get_provider()
+    if provider.name == "none":
+        return {"model": "none", "report_text": None}
+    if provider.name == "anthropic":
+        from anthropic import Anthropic
+        client = Anthropic(api_key=settings.anthropic_api_key)
+        payload = {k: analytics[k] for k in
+                   ("date_from", "date_to", "reports_count", "values_count", "normal",
+                    "deviations_count", "deviation_rate", "by_day", "by_template", "top_indicators")}
+        payload["deviations_sample"] = analytics["deviations"][:200]
+        msg = ("Данные об отклонениях за период (JSON):\n" +
+               json.dumps(payload, ensure_ascii=False, indent=2))
+        resp = client.messages.create(
+            model=settings.ai_model, max_tokens=settings.ai_max_tokens * 2,
+            system=_PERIOD_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": msg}],
+        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        return {"model": "anthropic", "report_text": text}
+    return {"model": provider.name, "report_text": None}

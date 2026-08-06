@@ -37,11 +37,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                   Панель управления
                 </Link>
               )}
-              <Link 
-                to="/plans" 
+              <Link
+                to="/plans"
                 className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
               >
                 Планирование
+              </Link>
+              <Link
+                to="/analytics"
+                className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Аналитика
               </Link>
               {showAdminLink && user?.is_admin && (
                 <Link

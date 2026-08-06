@@ -45,8 +45,8 @@ def get_library_indicators(
     if is_required is not None:
         query = query.filter(IndicatorLibrary.is_required == is_required)
 
-    # Сортировка по id (самые новые в конце)
-    query = query.order_by(IndicatorLibrary.id.asc())
+    # Сортировка по наименованию
+    query = query.order_by(IndicatorLibrary.name.asc())
 
     return query.offset(skip).limit(limit).all()
 

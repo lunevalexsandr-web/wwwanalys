@@ -1,7 +1,9 @@
 """AI-ассистент «эксперт-пивовар»: разбор отклонений в отчёте."""
 import logging
+from typing import Optional
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -14,6 +16,39 @@ from app.services import ai_analysis
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/analytics/summary")
+def analytics_summary(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    template_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Сводная аналитика отклонений по отчётам за период (в норме/отклонения, по дням,
+    по шаблонам, топ показателей, список отклонений)."""
+    return ai_analysis.build_period_analytics(db, date_from=date_from, date_to=date_to, template_id=template_id)
+
+
+@router.post("/analytics/analyze")
+def analytics_analyze(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    template_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Нарратив-отчёт эксперта по отклонениям за период (нужна подключённая модель)."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    analytics = ai_analysis.build_period_analytics(db, date_from=date_from, date_to=date_to, template_id=template_id)
+    try:
+        result = ai_analysis.analyze_period(analytics)
+    except Exception as e:
+        logger.exception("AI period analysis failed")
+        raise HTTPException(status_code=502, detail=f"Ошибка AI-ассистента: {e}")
+    return {**analytics, **result}
 
 
 @router.get("/status")
