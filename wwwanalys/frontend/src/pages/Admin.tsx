@@ -76,6 +76,7 @@ const Admin: React.FC = () => {
   const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_tek/odata/standard.odata/Document_ПланАнализов');
   const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Сорта');
   const [c1COptionsEndpoint, setC1COptionsEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
+  const [c1CStorageEndpoint, setC1CStorageEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Склады');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -641,6 +642,26 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleImportStorageFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-storage-options-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1CStorageEndpoint || undefined,
+      });
+      const r = response.data;
+      const summary = (r.rules || []).map((x: any) => `${x.indicator}: ${x.status}${x.values != null ? ` (${x.values})` : ''}`).join('; ');
+      showToast(`Ёмкости/танки: ${summary || 'готово'}`, r.status === 'success' ? 'success' : 'warning');
+      fetchLibraryIndicators();
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка загрузки ёмкостей/танков', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
   const handleLoad1CConfig = async () => {
     try {
       const response = await api.get('/api/external/1c/config');
@@ -653,6 +674,7 @@ const Admin: React.FC = () => {
       setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_tek/odata/standard.odata/Document_ПланАнализов');
       setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_tek/odata/standard.odata/Catalog_Сорта');
       setC1COptionsEndpoint(cfg.options_endpoint || '/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
+      setC1CStorageEndpoint(cfg.storage_endpoint || '/erp_tek/odata/standard.odata/Catalog_Склады');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
     } catch (error) {
@@ -675,6 +697,7 @@ const Admin: React.FC = () => {
         plans_endpoint: c1CPlansEndpoint || null,
         varieties_endpoint: c1CVarietiesEndpoint || null,
         options_endpoint: c1COptionsEndpoint || null,
+        storage_endpoint: c1CStorageEndpoint || null,
       });
       showToast('Настройки подключения к 1С сохранены', 'success');
     } catch (error: any) {
@@ -1393,6 +1416,11 @@ const Admin: React.FC = () => {
               <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов" value={c1COptionsEndpoint} onChange={(e) => setC1COptionsEndpoint(e.target.value)} />
               <Form.Text className="text-muted">Подчинённый справочник «ДопАналитикаПоказателейАнализов»: списки значений для показателей типа «выбор»</Form.Text>
             </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>OData 1С — справочник Склады (ёмкости/танки)</Form.Label>
+              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Склады" value={c1CStorageEndpoint} onChange={(e) => setC1CStorageEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Из папки «Емкости» наполняются «Номер ёмкости» и «Номер танка» (подпапка «Танки»)</Form.Text>
+            </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
             )}
@@ -1426,6 +1454,9 @@ const Admin: React.FC = () => {
           </Button>
           <Button variant="outline-primary" onClick={handleImportOptionsFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить варианты значений'}
+          </Button>
+          <Button variant="outline-dark" onClick={handleImportStorageFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить ёмкости/танки'}
           </Button>
           <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}
