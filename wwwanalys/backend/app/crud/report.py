@@ -24,6 +24,7 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
             batch_number=batch_number,
             variety=report.variety,
             container=report.container,
+            object_key=report.object_key,
             analysis_type_id=report.template_id,
             created_by=user_id
         )
@@ -47,6 +48,7 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 db, report.template_id, value_data.indicator_id,
                 day=vday, container=report.container,
                 variety_key=variety_key_by_name(db, report.variety),
+                object_key=report.object_key,
             )
             if norm is not None and (norm.min_value is not None or norm.max_value is not None):
                 min_value, max_value = norm.min_value, norm.max_value
@@ -179,6 +181,7 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
         db_report.batch_number = batch_number
         db_report.variety = report.variety
         db_report.container = report.container
+        db_report.object_key = report.object_key
 
         # Удаляем старые значения показателей
         db.query(IndicatorValue).filter(IndicatorValue.process_log_id == report_id).delete()
@@ -198,6 +201,7 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
                 db, report.template_id, value_data.indicator_id,
                 day=vday, container=report.container,
                 variety_key=variety_key_by_name(db, report.variety),
+                object_key=report.object_key,
             )
             if norm is not None and (norm.min_value is not None or norm.max_value is not None):
                 min_value, max_value = norm.min_value, norm.max_value

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from enum import Enum
 import json
@@ -147,7 +147,9 @@ class AnalysisType(AnalysisTypeBase):
     is_active: bool
     # Показатели из библиотеки (детальная информация)
     template_indicators: List[TemplateIndicatorDetail] = []
-    
+    # Объекты отбора, встречающиеся в нормах шаблона (для выбора в отчёте)
+    objects: List[Any] = []
+
     class Config:
         from_attributes = True
 

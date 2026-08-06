@@ -42,7 +42,7 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
         norm = resolve_norm(
             db, report.analysis_type_id, v.indicator_id,
             day=getattr(v, "day", None), container=getattr(report, "container", None),
-            variety_key=vkey,
+            variety_key=vkey, object_key=getattr(report, "object_key", None),
         )
         if norm is not None:
             mn, mx = norm.min_value, norm.max_value

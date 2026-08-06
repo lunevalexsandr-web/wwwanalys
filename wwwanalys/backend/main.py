@@ -49,6 +49,12 @@ def ensure_indicator_columns(engine):
         ))
         conn.execute(text(
             """
+            ALTER TABLE process_logs
+            ADD COLUMN IF NOT EXISTS object_key VARCHAR
+            """
+        ))
+        conn.execute(text(
+            """
             ALTER TABLE integration_configs
             ADD COLUMN IF NOT EXISTS varieties_endpoint VARCHAR(512)
             """

@@ -20,6 +20,8 @@ const Dashboard: React.FC = () => {
   const [variety, setVariety] = useState('');
   const [varietyOptions, setVarietyOptions] = useState<string[]>([]);
   const [container, setContainer] = useState('');
+  const [objectKey, setObjectKey] = useState('');
+  const [objectOptions, setObjectOptions] = useState<{ key: string; name: string }[]>([]);
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -316,6 +318,7 @@ const Dashboard: React.FC = () => {
     setBatchNumber('');
     setVariety('');
     setContainer('');
+    setObjectKey('');
     setIsEditing(false);
     setEditingReportId(null);
     // подгружаем свежую версию шаблона (актуальные варианты/нормы/расписание),
@@ -328,6 +331,8 @@ const Dashboard: React.FC = () => {
       /* если не удалось — используем то, что есть */
     }
     setSelectedTemplate(fresh);
+    setObjectKey('');
+    setObjectOptions(((fresh as any).objects || []) as { key: string; name: string }[]);
     const allIndicators = getAllIndicators(fresh);
     const values = allIndicators.map(indicator => ({
       indicator_id: indicator.id,
@@ -396,6 +401,7 @@ const Dashboard: React.FC = () => {
         batch_number: batchNumber,
         variety: variety || null,
         container: container || null,
+        object_key: objectKey || null,
         values: filledValues.map((v: any) => ({
           indicator_id: v.indicator_id,
           value: typeof v.value === 'string' && !isNaN(parseFloat(v.value))
@@ -445,6 +451,7 @@ const Dashboard: React.FC = () => {
       setBatchNumber('');
     setVariety('');
     setContainer('');
+    setObjectKey('');
       setPlanItemId(null);
       if (selectedTemplate) {
         const allIndicators = getAllIndicators(selectedTemplate);
@@ -517,9 +524,11 @@ const Dashboard: React.FC = () => {
       const template = templateResponse.data;
       
       setSelectedTemplate(template);
+      setObjectOptions(((template as any).objects || []) as { key: string; name: string }[]);
       setBatchNumber(report.batch_number || '');
       setVariety(report.variety || '');
       setContainer(report.container || '');
+      setObjectKey(report.object_key || '');
       setIsEditing(true);
       setEditingReportId(reportId);
       
@@ -743,6 +752,22 @@ const Dashboard: React.FC = () => {
                           </Form.Text>
                         </Form.Group>
 
+                        {/* Объект отбора — только если у шаблона нормы зависят от него */}
+                        {objectOptions.length > 0 && (
+                          <Form.Group className="mb-4">
+                            <Form.Label>Объект отбора</Form.Label>
+                            <Form.Select value={objectKey} onChange={(e) => setObjectKey(e.target.value)}>
+                              <option value="">— не задано —</option>
+                              {objectOptions.map((o) => (
+                                <option key={o.key} value={o.key}>{o.name}</option>
+                              ))}
+                            </Form.Select>
+                            <Form.Text className="text-muted">
+                              Для этого шаблона эталоны зависят от объекта отбора — выберите точку отбора.
+                            </Form.Text>
+                          </Form.Group>
+                        )}
+
                         {/* Indicators */}
                         <div className="mb-4">
                           <h5 className="mb-3">
@@ -885,6 +910,7 @@ const Dashboard: React.FC = () => {
                                 setBatchNumber('');
     setVariety('');
     setContainer('');
+    setObjectKey('');
                                 if (selectedTemplate) {
                                   const allIndicators = getAllIndicators(selectedTemplate);
                                   setIndicatorValues(allIndicators.map(indicator => ({
@@ -1064,6 +1090,11 @@ const Dashboard: React.FC = () => {
                 {(viewReport as any).container && (
                   <div className="mb-3">
                     <strong>Тара/линия:</strong> {(viewReport as any).container}
+                  </div>
+                )}
+                {(viewReport as any).object_name && (
+                  <div className="mb-3">
+                    <strong>Объект отбора:</strong> {(viewReport as any).object_name}
                   </div>
                 )}
                 <div className="mb-3">

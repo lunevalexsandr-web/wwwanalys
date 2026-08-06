@@ -93,6 +93,19 @@ def _make_template_response(template, db: Session):
     """Сформировать ответ шаблона через Pydantic модели."""
     from app.schemas.analysis_type import AnalysisType as AnalysisTypeSchema
     
+    # объекты отбора, встречающиеся в нормах шаблона (для выбора в отчёте)
+    from app.models import TemplateNorm
+    obj_rows = (
+        db.query(TemplateNorm.object_key, TemplateNorm.object_name)
+        .filter(TemplateNorm.template_id == template.id, TemplateNorm.object_key.isnot(None))
+        .distinct()
+        .all()
+    )
+    objects = [
+        {"key": k, "name": n or k}
+        for k, n in sorted(obj_rows, key=lambda x: (x[1] or ""))
+    ]
+
     template_dict = {
         "id": template.id,
         "name": template.name,
@@ -102,6 +115,7 @@ def _make_template_response(template, db: Session):
         "is_active": template.is_active,
         "indicators": template.indicators,
         "template_indicators": _format_template(template, db),
+        "objects": objects,
     }
     
     # Используем model_validate для корректной сериализации в Pydantic v2

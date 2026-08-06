@@ -15,6 +15,7 @@ class ReportCreate(BaseModel):
     batch_number: str
     variety: Optional[str] = None
     container: Optional[str] = None
+    object_key: Optional[str] = None
     values: List[IndicatorValue]
     plan_item_id: Optional[int] = None
 
@@ -36,6 +37,8 @@ class Report(BaseModel):
     batch_number: str
     variety: Optional[str] = None
     container: Optional[str] = None
+    object_key: Optional[str] = None
+    object_name: Optional[str] = None
     analysis_type_id: int
     started_at: datetime
     status: str
@@ -55,6 +58,7 @@ class Report(BaseModel):
             'batch_number': obj.batch_number,
             'variety': getattr(obj, 'variety', None),
             'container': getattr(obj, 'container', None),
+            'object_key': getattr(obj, 'object_key', None),
             'analysis_type_id': obj.analysis_type_id,
             'started_at': obj.started_at,
             'status': obj.status.value if hasattr(obj.status, 'value') else obj.status,

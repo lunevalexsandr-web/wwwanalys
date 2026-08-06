@@ -14,6 +14,15 @@ from app.auth.auth import get_current_active_user
 router = APIRouter()
 
 
+def _object_name(db, object_key):
+    """Имя объекта отбора по GUID (для отображения)."""
+    if not object_key:
+        return None
+    from app.models import AnalysisObject
+    o = db.query(AnalysisObject).filter(AnalysisObject.external_id == object_key).first()
+    return o.name if o else None
+
+
 @router.post("/")
 def create_report(
     report: ReportCreate,
@@ -175,6 +184,7 @@ def get_report(
                 db, db_report.analysis_type_id, v.indicator_id,
                 day=getattr(v, "day", None), container=getattr(db_report, "container", None),
                 variety_key=variety_key_by_name(db, getattr(db_report, "variety", None)),
+                object_key=getattr(db_report, "object_key", None),
             )
             if norm is not None:
                 min_value, max_value, norm_text = norm.min_value, norm.max_value, norm.norm_text
@@ -207,6 +217,8 @@ def get_report(
         "batch_number": db_report.batch_number,
         "variety": getattr(db_report, "variety", None),
         "container": getattr(db_report, "container", None),
+        "object_key": getattr(db_report, "object_key", None),
+        "object_name": _object_name(db, getattr(db_report, "object_key", None)),
         "analysis_type_id": db_report.analysis_type_id,
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
