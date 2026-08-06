@@ -18,6 +18,7 @@ const Dashboard: React.FC = () => {
   const [batchNumber, setBatchNumber] = useState('');
   const [variety, setVariety] = useState('');
   const [varietyOptions, setVarietyOptions] = useState<string[]>([]);
+  const [container, setContainer] = useState('');
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -312,6 +313,7 @@ const Dashboard: React.FC = () => {
     setSelectedTemplate(template);
     setBatchNumber('');
     setVariety('');
+    setContainer('');
     setIsEditing(false);
     setEditingReportId(null);
     const allIndicators = getAllIndicators(template);
@@ -365,6 +367,7 @@ const Dashboard: React.FC = () => {
         template_id: selectedTemplate.id,
         batch_number: batchNumber,
         variety: variety || null,
+        container: container || null,
         values: indicatorValues.map(v => ({
           indicator_id: v.indicator_id,
           value: typeof v.value === 'string' && !isNaN(parseFloat(v.value)) 
@@ -412,6 +415,7 @@ const Dashboard: React.FC = () => {
       
       setBatchNumber('');
     setVariety('');
+    setContainer('');
       setPlanItemId(null);
       if (selectedTemplate) {
         const allIndicators = getAllIndicators(selectedTemplate);
@@ -486,6 +490,7 @@ const Dashboard: React.FC = () => {
       setSelectedTemplate(template);
       setBatchNumber(report.batch_number || '');
       setVariety(report.variety || '');
+      setContainer(report.container || '');
       setIsEditing(true);
       setEditingReportId(reportId);
       
@@ -672,6 +677,21 @@ const Dashboard: React.FC = () => {
                           </Form.Text>
                         </Form.Group>
 
+                        {/* Тара / линия розлива (контекст для подбора нормы) */}
+                        <Form.Group className="mb-4">
+                          <Form.Label>Тара / линия розлива</Form.Label>
+                          <Form.Select value={container} onChange={(e) => setContainer(e.target.value)}>
+                            <option value="">— не задано —</option>
+                            <option value="КЕГ">КЕГ</option>
+                            <option value="Стекло">Стекло</option>
+                            <option value="ПЭТ">ПЭТ</option>
+                            <option value="Стекло2">Стекло2</option>
+                          </Form.Select>
+                          <Form.Text className="text-muted">
+                            Влияет на подбор нормы (нормы могут отличаться по таре).
+                          </Form.Text>
+                        </Form.Group>
+
                         {/* Indicators */}
                         <div className="mb-4">
                           <h5 className="mb-3">
@@ -764,6 +784,7 @@ const Dashboard: React.FC = () => {
                                 setEditingReportId(null);
                                 setBatchNumber('');
     setVariety('');
+    setContainer('');
                                 if (selectedTemplate) {
                                   const allIndicators = getAllIndicators(selectedTemplate);
                                   setIndicatorValues(allIndicators.map(indicator => ({
@@ -938,6 +959,11 @@ const Dashboard: React.FC = () => {
                 {(viewReport as any).variety && (
                   <div className="mb-3">
                     <strong>Сорт:</strong> {(viewReport as any).variety}
+                  </div>
+                )}
+                {(viewReport as any).container && (
+                  <div className="mb-3">
+                    <strong>Тара/линия:</strong> {(viewReport as any).container}
                   </div>
                 )}
                 <div className="mb-3">
