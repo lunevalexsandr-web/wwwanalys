@@ -83,6 +83,8 @@ export interface LibraryIndicatorRef {
   min_value: number | null;
   max_value: number | null;
   sort_order: number;
+  name?: string;  // имя из шаблона (фолбэк, если справочник на клиенте неполон)
+  unit?: string;
 }
 
 export interface TemplateFormData {

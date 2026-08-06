@@ -119,7 +119,7 @@ const Admin: React.FC = () => {
   const fetchLibraryIndicators = async (search?: string, category?: string, dataType?: string) => {
     setLibIsSearching(true);
     try {
-      const params: any = {};
+      const params: any = { limit: 1000 };
       if (search) params.search = search;
       if (category) params.category = category;
       if (dataType) params.data_type = dataType;
@@ -276,7 +276,9 @@ const Admin: React.FC = () => {
       indicator_id: ti.indicator_id,
       min_value: ti.min_value,
       max_value: ti.max_value,
-      sort_order: ti.sort_order
+      sort_order: ti.sort_order,
+      name: (ti as any).name,
+      unit: (ti as any).unit,
     }));
     setTemplateLibIndicators(libRefs);
     setShowTemplateModal(true);
@@ -1086,8 +1088,8 @@ const Admin: React.FC = () => {
                             </div>
                             <div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <strong>{libInd?.name || `#${ref.indicator_id}`}</strong>
-                                <small className="text-text-muted font-mono">{libInd?.unit}</small>
+                                <strong>{libInd?.name || ref.name || `#${ref.indicator_id}`}</strong>
+                                <small className="text-text-muted font-mono">{libInd?.unit || ref.unit}</small>
                                 <Badge bg="info" pill>Справочник</Badge>
                                 {libInd?.category && <Badge bg="secondary">{getCategoryLabel(libInd.category)}</Badge>}
                               </div>
