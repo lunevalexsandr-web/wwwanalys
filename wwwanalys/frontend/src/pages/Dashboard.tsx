@@ -17,6 +17,7 @@ const Dashboard: React.FC = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<AnalysisType | null>(null);
   const [batchNumber, setBatchNumber] = useState('');
   const [variety, setVariety] = useState('');
+  const [varietyOptions, setVarietyOptions] = useState<string[]>([]);
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -51,6 +52,10 @@ const Dashboard: React.FC = () => {
     api.get('/api/ai/status')
       .then((r) => setAiEnabled(!!r.data?.enabled))
       .catch(() => setAiEnabled(false));
+    // справочник сортов для автоподстановки в поле «Сорт»
+    api.get('/api/varieties', { params: { active_only: true } })
+      .then((r) => setVarietyOptions((r.data || []).map((v: any) => v.name)))
+      .catch(() => setVarietyOptions([]));
   }, []);
 
   /**
@@ -646,17 +651,24 @@ const Dashboard: React.FC = () => {
                           />
                         </Form.Group>
 
-                        {/* Сорт (для подбора техкарты AI-экспертом) */}
+                        {/* Сорт (справочник; для подбора техкарты AI-экспертом) */}
                         <Form.Group className="mb-4">
                           <Form.Label>Сорт</Form.Label>
                           <Form.Control
                             type="text"
+                            list="variety-options"
                             value={variety}
                             onChange={(e) => setVariety(e.target.value)}
-                            placeholder="Например: Жигулёвское (необязательно)"
+                            placeholder="Выберите из справочника или введите (необязательно)"
                           />
+                          <datalist id="variety-options">
+                            {varietyOptions.map((name) => (
+                              <option key={name} value={name} />
+                            ))}
+                          </datalist>
                           <Form.Text className="text-muted">
-                            Используется для подбора технологической карты при разборе отклонений.
+                            Справочник сортов загружается из 1С (вкладка «Интеграция»). Используется
+                            для подбора технологической карты при разборе отклонений.
                           </Form.Text>
                         </Form.Group>
 

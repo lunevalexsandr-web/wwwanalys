@@ -1108,4 +1108,109 @@ async def import_plans_from_1c(
         raise
     finally:
         await service.close()
+
+
+# ==================== Сорта (справочник) через OData ====================
+
+def transform_1c_odata_variety_to_local(
+    variety_1c: Dict[str, Any],
+    name_field: str = "Description",
+    code_field: str = "Code",
+) -> Optional[Dict[str, Any]]:
+    """Преобразовать элемент справочника сортов из стандартного OData 1С в локальный формат.
+
+    - name        <- Description (name_field)
+    - code        <- Code (code_field)
+    - external_id <- Ref_Key (GUID)
+    Группы (IsFolder) и помеченные на удаление (DeletionMark) отсекаются до вызова.
+    """
+    name = variety_1c.get(name_field)
+    if not name:
+        return None
+    ref_key = variety_1c.get("Ref_Key")
+    return {
+        "name": str(name).strip(),
+        "code": (str(variety_1c.get(code_field)).strip() or None) if variety_1c.get(code_field) else None,
+        "external_id": ref_key if (ref_key and ref_key != ZERO_GUID) else None,
+        "is_active": not bool(variety_1c.get("DeletionMark")),
+    }
+
+
+async def import_odata_varieties_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    skip_duplicates: bool = True,
+    name_field: str = "Description",
+    code_field: str = "Code",
+) -> Dict[str, Any]:
+    """Импортировать справочник сортов из стандартного OData 1С.
+
+    Сопоставление по external_id (Ref_Key), фолбэк по имени. Существующие
+    обновляются (если skip_duplicates=False) либо пропускаются.
+    """
+    from app.models import Variety
+
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        items = [v for v in raw if not v.get("IsFolder") and not v.get("DeletionMark")]
+        result["total"] = len(items)
+        logger.info(f"OData сорта: получено {len(raw)}, к импорту {len(items)}")
+
+        for row in items:
+            try:
+                local = transform_1c_odata_variety_to_local(row, name_field, code_field)
+                if not local:
+                    result["skipped"] += 1
+                    continue
+
+                existing = None
+                if local.get("external_id"):
+                    existing = db.query(Variety).filter(
+                        Variety.external_id == local["external_id"]
+                    ).first()
+                if existing is None:
+                    existing = db.query(Variety).filter(Variety.name == local["name"]).first()
+
+                if existing and skip_duplicates:
+                    result["skipped"] += 1
+                    continue
+
+                if existing:
+                    existing.name = local["name"]
+                    existing.code = local.get("code")
+                    existing.external_id = local.get("external_id") or existing.external_id
+                    existing.is_active = local.get("is_active", True)
+                    result["updated"] += 1
+                else:
+                    db.add(Variety(
+                        name=local["name"],
+                        code=local.get("code"),
+                        external_id=local.get("external_id"),
+                        is_active=local.get("is_active", True),
+                    ))
+                    result["created"] += 1
+            except Exception as e:
+                logger.error(f"Error processing variety: {e}")
+                result["errors"].append({"variety": row.get(name_field), "error": str(e)})
+
+        db.commit()
+        logger.info(
+            f"Varieties import: {result['created']} created, "
+            f"{result['updated']} updated, {result['skipped']} skipped, "
+            f"{len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Varieties import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result
     return result

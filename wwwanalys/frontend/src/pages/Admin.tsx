@@ -74,6 +74,7 @@ const Admin: React.FC = () => {
   const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/hs/labindicators/indicators');
   const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_24/hs/labindicators/templates');
   const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_24/hs/labindicators/plans');
+  const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Сорта');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -584,6 +585,30 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleImportVarietiesFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-varieties-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1CVarietiesEndpoint || undefined,
+        skip_duplicates: false,
+      });
+      setImport1CResult(response.data);
+      const r = response.data;
+      if (r.status === 'success') {
+        showToast(`Импорт сортов завершён: создано ${r.created}, обновлено ${r.updated}, пропущено ${r.skipped}`, 'success');
+      } else {
+        showToast(`Импорт сортов с ошибками: создано ${r.created}, ошибок ${r.errors.length}`, 'warning');
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка импорта сортов из 1С', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
   const handleLoad1CConfig = async () => {
     try {
       const response = await api.get('/api/external/1c/config');
@@ -594,6 +619,7 @@ const Admin: React.FC = () => {
       setC1CEndpoint(cfg.endpoint || '/erp_24/hs/labindicators/indicators');
       setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_24/hs/labindicators/templates');
       setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_24/hs/labindicators/plans');
+      setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_24/odata/standard.odata/Catalog_Сорта');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
     } catch (error) {
@@ -614,6 +640,7 @@ const Admin: React.FC = () => {
         indicators_endpoint: c1CEndpoint || null,
         templates_endpoint: c1CTemplatesEndpoint || null,
         plans_endpoint: c1CPlansEndpoint || null,
+        varieties_endpoint: c1CVarietiesEndpoint || null,
       });
       showToast('Настройки подключения к 1С сохранены', 'success');
     } catch (error: any) {
@@ -1320,6 +1347,11 @@ const Admin: React.FC = () => {
               <Form.Control type="text" placeholder="/erp_24/hs/labindicators/plans" value={c1CPlansEndpoint} onChange={(e) => setC1CPlansEndpoint(e.target.value)} />
               <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки планов анализа, например: /erp_24/hs/labindicators/plans</Form.Text>
             </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Путь OData 1С (справочник сортов)</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/odata/standard.odata/Catalog_Сорта" value={c1CVarietiesEndpoint} onChange={(e) => setC1CVarietiesEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Стандартный OData-справочник сортов в 1С, например: /erp_24/odata/standard.odata/Catalog_Сорта</Form.Text>
+            </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
             )}
@@ -1329,6 +1361,7 @@ const Admin: React.FC = () => {
                 <ul className="list-unstyled">
                   <li><strong>Всего получено:</strong> {import1CResult.total}</li>
                   <li><strong>Создано:</strong> {import1CResult.created}</li>
+                  {import1CResult.updated !== undefined && <li><strong>Обновлено:</strong> {import1CResult.updated}</li>}
                   <li><strong>Пропущено (дубликаты):</strong> {import1CResult.skipped}</li>
                   {import1CResult.errors.length > 0 && <li className="text-danger"><strong>Ошибок:</strong> {import1CResult.errors.length}</li>}
                 </ul>
@@ -1352,6 +1385,9 @@ const Admin: React.FC = () => {
           </Button>
           <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}
+          </Button>
+          <Button variant="dark" onClick={handleImportVarietiesFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить сорта'}
           </Button>
         </Modal.Footer>
       </Modal>

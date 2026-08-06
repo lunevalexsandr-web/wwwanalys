@@ -32,6 +32,12 @@ from .integration_config import (
     IntegrationConfigUpdate,
     IntegrationConfigResponse,
 )
+from .variety import (
+    Variety as VarietySchema,
+    VarietyCreate,
+    VarietyUpdate,
+    VarietyBase,
+)
 
 __all__ = [
     "User",
@@ -75,4 +81,8 @@ __all__ = [
     "PlanItemResponse",
     "IntegrationConfigUpdate",
     "IntegrationConfigResponse",
+    "VarietySchema",
+    "VarietyCreate",
+    "VarietyUpdate",
+    "VarietyBase",
 ]

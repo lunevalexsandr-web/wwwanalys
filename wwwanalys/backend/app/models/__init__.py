@@ -9,6 +9,7 @@ from .indicator_value import IndicatorValue
 from .preset import Preset, PresetIndicator
 from .analysis_plan import AnalysisPlan, PlanItem
 from .integration_config import IntegrationConfig
+from .variety import Variety
 
 __all__ = [
     "User",
@@ -24,5 +25,6 @@ __all__ = [
     "PresetIndicator",
     "AnalysisPlan",
     "PlanItem",
-    "IntegrationConfig"
+    "IntegrationConfig",
+    "Variety"
 ]

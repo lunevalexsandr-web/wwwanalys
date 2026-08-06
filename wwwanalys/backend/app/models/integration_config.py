@@ -20,6 +20,7 @@ class IntegrationConfig(Base):
     indicators_endpoint = Column(String(512), nullable=True, comment="Endpoint загрузки показателей из 1С")
     templates_endpoint = Column(String(512), nullable=True, comment="Endpoint загрузки шаблонов анализа из 1С")
     plans_endpoint = Column(String(512), nullable=True, comment="Endpoint загрузки планов анализа из 1С")
+    varieties_endpoint = Column(String(512), nullable=True, comment="Endpoint (OData) загрузки справочника сортов из 1С")
     verify_ssl = Column(Boolean, default=False, nullable=False, comment="Проверять SSL-сертификат")
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

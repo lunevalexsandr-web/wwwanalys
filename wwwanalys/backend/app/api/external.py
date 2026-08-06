@@ -422,6 +422,66 @@ async def import_templates_from_1c_odata(
         )
 
 
+# ==================== Сорта (справочник) ====================
+
+class OneCODataVarietyImportRequest(BaseModel):
+    """Запрос на импорт справочника сортов из стандартного OData 1С."""
+    connection: OneCConnectionConfig
+    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog_Сорта
+    name_field: str = "Description"
+    code_field: str = "Code"
+    skip_duplicates: bool = False
+
+
+@router.post("/1c/import-varieties-odata")
+async def import_varieties_from_1c_odata(
+    request: OneCODataVarietyImportRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Импортировать справочник сортов из СТАНДАРТНОГО OData 1С.
+
+    Сопоставление по Ref_Key (external_id), фолбэк по имени. Подключение
+    (base_url/логин/пароль) берётся из вкладки «Интеграция с 1С».
+    """
+    from app.services.external_integration import (
+        import_odata_varieties_from_1c,
+        ExternalSystemConfig,
+    )
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    config = ExternalSystemConfig(
+        base_url=request.connection.base_url,
+        api_key=request.connection.api_key,
+        username=request.connection.username,
+        password=request.connection.password,
+        timeout=request.connection.timeout,
+        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
+    )
+    endpoint = request.endpoint or (
+        getattr(saved_config, "varieties_endpoint", None) if saved_config else None
+    )
+    if not endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не задан endpoint OData для сортов (вкладка «Интеграция с 1С»)",
+        )
+    try:
+        result = await import_odata_varieties_from_1c(
+            db=db,
+            config=config,
+            endpoint=endpoint,
+            skip_duplicates=request.skip_duplicates,
+            name_field=request.name_field,
+            code_field=request.code_field,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OData import failed: {str(e)}"
+        )
+
+
 # ==================== Планы анализов ====================
 
 @router.post("/1c/import-plans")
