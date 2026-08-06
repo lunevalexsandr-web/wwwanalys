@@ -40,8 +40,10 @@ def _format_template(template, db: Session):
     else:
         template_indicators = template.template_indicators or []
     
+    from app.services.norms import get_schedule_days
     for ti in template_indicators:
         lib_ind = ti.indicator_ref
+        days = get_schedule_days(db, ti.template_id, ti.indicator_id)
         if lib_ind:
             # Парсим options из JSON
             options = None
@@ -61,6 +63,7 @@ def _format_template(template, db: Session):
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
                 "norm_text": ti.norm_text,
+                "days": days,
                 "sort_order": ti.sort_order or 0,
                 "is_custom": ti.is_custom if ti.is_custom is not None else False,
                 "template_notes": ti.template_notes,
@@ -77,6 +80,7 @@ def _format_template(template, db: Session):
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
                 "norm_text": ti.norm_text,
+                "days": days,
                 "sort_order": ti.sort_order or 0,
                 "is_custom": ti.is_custom if ti.is_custom is not None else False,
                 "template_notes": ti.template_notes,

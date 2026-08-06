@@ -31,22 +31,35 @@ logger = logging.getLogger(__name__)
 
 def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
     """Собрать значения показателей отчёта с нормами (min/max) из шаблона."""
+    from app.services.norms import resolve_norm
     template = db.query(AnalysisType).filter(AnalysisType.id == report.analysis_type_id).first()
     values: List[Dict[str, Any]] = []
     for v in (report.indicator_values or []):
         lib = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
-        ti = db.query(TemplateIndicator).filter(
-            TemplateIndicator.indicator_id == v.indicator_id,
-            TemplateIndicator.template_id == report.analysis_type_id,
-        ).first()
+        # норма: из матрицы (день+тара), фолбэк на TemplateIndicator
+        mn = mx = None
+        norm = resolve_norm(
+            db, report.analysis_type_id, v.indicator_id,
+            day=getattr(v, "day", None), container=getattr(report, "container", None),
+        )
+        if norm is not None:
+            mn, mx = norm.min_value, norm.max_value
+        if mn is None and mx is None:
+            ti = db.query(TemplateIndicator).filter(
+                TemplateIndicator.indicator_id == v.indicator_id,
+                TemplateIndicator.template_id == report.analysis_type_id,
+            ).first()
+            if ti:
+                mn, mx = ti.min_value, ti.max_value
         values.append({
             "indicator_id": v.indicator_id,
             "name": lib.name if lib else f"Показатель #{v.indicator_id}",
             "unit": (lib.unit if lib else "") or "",
             "value": v.value,
             "text_value": v.text_value,
-            "min_value": ti.min_value if ti else None,
-            "max_value": ti.max_value if ti else None,
+            "day": getattr(v, "day", None),
+            "min_value": mn,
+            "max_value": mx,
         })
     return {
         "batch_number": report.batch_number,

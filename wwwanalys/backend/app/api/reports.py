@@ -37,6 +37,7 @@ def create_report(
         "id": db_report.id,
         "batch_number": db_report.batch_number,
         "variety": db_report.variety,
+        "container": db_report.container,
         "analysis_type_id": db_report.analysis_type_id,
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,
@@ -70,6 +71,7 @@ def update_report(
         "id": updated_report.id,
         "batch_number": updated_report.batch_number,
         "variety": updated_report.variety,
+        "container": updated_report.container,
         "analysis_type_id": updated_report.analysis_type_id,
         "started_at": updated_report.started_at,
         "status": updated_report.status.value if hasattr(updated_report.status, 'value') else updated_report.status,
@@ -166,14 +168,24 @@ def get_report(
             name = lib_indicator.name if lib_indicator else f"Показатель #{v.indicator_id}"
             unit = lib_indicator.unit if lib_indicator else ""
             
-            # Получаем min/max из TemplateIndicator (нормы для данного шаблона)
-            template_indicator = db.query(TemplateIndicator).filter(
-                TemplateIndicator.indicator_id == v.indicator_id,
-                TemplateIndicator.template_id == db_report.analysis_type_id
-            ).first()
-            min_value = template_indicator.min_value if template_indicator else None
-            max_value = template_indicator.max_value if template_indicator else None
-            norm_text = template_indicator.norm_text if template_indicator else None
+            # Норма: сначала из матрицы (день+тара), фолбэк на TemplateIndicator
+            from app.services.norms import resolve_norm
+            min_value = max_value = norm_text = None
+            norm = resolve_norm(
+                db, db_report.analysis_type_id, v.indicator_id,
+                day=getattr(v, "day", None), container=getattr(db_report, "container", None),
+            )
+            if norm is not None:
+                min_value, max_value, norm_text = norm.min_value, norm.max_value, norm.norm_text
+            if min_value is None and max_value is None and not norm_text:
+                template_indicator = db.query(TemplateIndicator).filter(
+                    TemplateIndicator.indicator_id == v.indicator_id,
+                    TemplateIndicator.template_id == db_report.analysis_type_id
+                ).first()
+                if template_indicator:
+                    min_value = template_indicator.min_value
+                    max_value = template_indicator.max_value
+                    norm_text = template_indicator.norm_text
 
             indicator_values.append({
                 "id": v.id,
@@ -182,6 +194,7 @@ def get_report(
                 "unit": unit,
                 "value": v.value,
                 "text_value": v.text_value,
+                "day": getattr(v, "day", None),
                 "is_normal": v.is_normal,
                 "min_value": min_value,
                 "max_value": max_value,
@@ -192,6 +205,7 @@ def get_report(
         "id": db_report.id,
         "batch_number": db_report.batch_number,
         "variety": getattr(db_report, "variety", None),
+        "container": getattr(db_report, "container", None),
         "analysis_type_id": db_report.analysis_type_id,
         "started_at": db_report.started_at,
         "status": db_report.status.value if hasattr(db_report.status, 'value') else db_report.status,

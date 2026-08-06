@@ -23,6 +23,7 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
         db_report = ProcessLog(
             batch_number=batch_number,
             variety=report.variety,
+            container=report.container,
             analysis_type_id=report.template_id,
             created_by=user_id
         )
@@ -39,20 +40,28 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
             if not lib_indicator:
                 continue
             
-            # Получаем min/max из TemplateIndicator (нормы для данного шаблона)
-            template_indicator = db.query(TemplateIndicator).filter(
-                TemplateIndicator.indicator_id == value_data.indicator_id,
-                TemplateIndicator.template_id == report.template_id
-            ).first()
-            
-            min_value = template_indicator.min_value if template_indicator else None
-            max_value = template_indicator.max_value if template_indicator else None
-            
+            # Нормы: сначала из матрицы (день+тара), фолбэк на TemplateIndicator
+            from app.services.norms import resolve_norm
+            vday = getattr(value_data, "day", None)
+            norm = resolve_norm(
+                db, report.template_id, value_data.indicator_id,
+                day=vday, container=report.container,
+            )
+            if norm is not None and (norm.min_value is not None or norm.max_value is not None):
+                min_value, max_value = norm.min_value, norm.max_value
+            else:
+                template_indicator = db.query(TemplateIndicator).filter(
+                    TemplateIndicator.indicator_id == value_data.indicator_id,
+                    TemplateIndicator.template_id == report.template_id
+                ).first()
+                min_value = template_indicator.min_value if template_indicator else None
+                max_value = template_indicator.max_value if template_indicator else None
+
             data_type = lib_indicator.data_type
             options = lib_indicator.options
-            
+
             import json
-            
+
             # Подготовка значений для сохранения
             numeric_value = None
             text_value = None
@@ -93,6 +102,7 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 indicator_id=value_data.indicator_id,
                 value=numeric_value,
                 text_value=text_value,
+                day=vday,
                 is_normal=is_normal,
                 process_log_id=db_report.id
             )
@@ -167,6 +177,7 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
 
         db_report.batch_number = batch_number
         db_report.variety = report.variety
+        db_report.container = report.container
 
         # Удаляем старые значения показателей
         db.query(IndicatorValue).filter(IndicatorValue.process_log_id == report_id).delete()
@@ -180,19 +191,27 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
             if not lib_indicator:
                 continue
             
-            template_indicator = db.query(TemplateIndicator).filter(
-                TemplateIndicator.indicator_id == value_data.indicator_id,
-                TemplateIndicator.template_id == report.template_id
-            ).first()
-            
-            min_value = template_indicator.min_value if template_indicator else None
-            max_value = template_indicator.max_value if template_indicator else None
-            
+            from app.services.norms import resolve_norm
+            vday = getattr(value_data, "day", None)
+            norm = resolve_norm(
+                db, report.template_id, value_data.indicator_id,
+                day=vday, container=report.container,
+            )
+            if norm is not None and (norm.min_value is not None or norm.max_value is not None):
+                min_value, max_value = norm.min_value, norm.max_value
+            else:
+                template_indicator = db.query(TemplateIndicator).filter(
+                    TemplateIndicator.indicator_id == value_data.indicator_id,
+                    TemplateIndicator.template_id == report.template_id
+                ).first()
+                min_value = template_indicator.min_value if template_indicator else None
+                max_value = template_indicator.max_value if template_indicator else None
+
             data_type = lib_indicator.data_type
             options = lib_indicator.options
-            
+
             import json
-            
+
             numeric_value = None
             text_value = None
             is_normal = True
@@ -227,6 +246,7 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
                 indicator_id=value_data.indicator_id,
                 value=numeric_value,
                 text_value=text_value,
+                day=vday,
                 is_normal=is_normal,
                 process_log_id=db_report.id
             )

@@ -11,6 +11,7 @@ class IndicatorValue(Base):
     indicator_id = Column(Integer, ForeignKey("indicator_library.id"))
     value = Column(Float, nullable=True)
     text_value = Column(String, nullable=True)
+    day = Column(Integer, nullable=True)  # день измерения (для показателей с расписанием)
     is_normal = Column(Boolean, default=True)
     measured_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     notes = Column(String)
