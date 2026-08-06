@@ -362,6 +362,7 @@ def build_period_analytics(db, date_from=None, date_to=None, template_id=None, t
     by_day_dev = collections.Counter()
     by_template_dev = collections.Counter()
     by_indicator_dev = collections.Counter()
+    reports_with_dev = set()
     deviations = []
 
     for r in reports:
@@ -373,6 +374,7 @@ def build_period_analytics(db, date_from=None, date_to=None, template_id=None, t
             if v.is_normal:
                 normal += 1
                 continue
+            reports_with_dev.add(r.id)
             by_day_dev[day] += 1
             tname = tpl.get(r.analysis_type_id, "?")
             iname, unit = inds.get(v.indicator_id, (f"#{v.indicator_id}", ""))
@@ -402,6 +404,8 @@ def build_period_analytics(db, date_from=None, date_to=None, template_id=None, t
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "reports_count": len(reports),
+        "reports_with_deviations": len(reports_with_dev),
+        "reports_normal": len(reports) - len(reports_with_dev),
         "values_count": total_values,
         "normal": normal,
         "deviations_count": dev_count,

@@ -82,8 +82,9 @@ const ReportsAnalytics: React.FC = () => {
           <>
             <Row className="g-3 mb-4">
               {kpi('Отчётов', data.reports_count, 'primary')}
+              {kpi('Отчётов с отклонением', data.reports_with_deviations ?? '—', 'danger')}
+              {kpi('Отчётов в норме', data.reports_normal ?? '—', 'success')}
               {kpi('Показателей', data.values_count, 'secondary')}
-              {kpi('В норме', data.normal, 'success')}
               {kpi('Отклонений', data.deviations_count, 'danger')}
               {kpi('Доля отклонений', `${data.deviation_rate}%`, 'warning')}
             </Row>
