@@ -41,6 +41,21 @@ async def get_api_key(
     )
 
 
+def _build_service_config(connection, saved_config, default_endpoint: str = "/"):
+    """Собрать конфиг подключения к 1С, подставляя сохранённые креды, если в
+    запросе они пустые (форма не возвращает пароль по соображениям безопасности)."""
+    from app.services.external_integration import ExternalSystemConfig
+    return ExternalSystemConfig(
+        base_url=(getattr(connection, "base_url", None) or (saved_config.base_url if saved_config else None) or ""),
+        api_key=(getattr(connection, "api_key", None) or (saved_config.api_key if saved_config else None)),
+        username=(getattr(connection, "username", None) or (saved_config.username if saved_config else None)),
+        password=(getattr(connection, "password", None) or (saved_config.password if saved_config else None)),
+        timeout=getattr(connection, "timeout", None) or 30,
+        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
+        endpoint=(getattr(connection, "endpoint", None) or default_endpoint),
+    )
+
+
 # ==================== Схемы для интеграции с 1С ====================
 
 class OneCConnectionConfig(BaseModel):
@@ -99,32 +114,17 @@ async def save_1c_config(
 @router.post("/1c/test-connection", response_model=OneCTestConnectionResponse)
 async def test_1c_connection(
     request: OneCTestConnectionRequest,
+    db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
     """
-    Проверить подключение к 1С Предприятие.
-    
-    Пример запроса:
-    {
-        "connection": {
-            "base_url": "http://1c-server:8080",
-            "api_key": "your-api-key",
-            "timeout": 30
-        }
-    }
+    Проверить подключение к 1С Предприятие. Пустые логин/пароль в запросе
+    подставляются из сохранённой конфигурации.
     """
-    from app.services.external_integration import (
-        OneCIntegrationService,
-        ExternalSystemConfig,
-    )
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-        endpoint=request.connection.endpoint,
-    )
+    from app.services.external_integration import OneCIntegrationService
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    default_ep = (saved_config.indicators_endpoint if saved_config else None) or "/erp_tek/odata/standard.odata/"
+    config = _build_service_config(request.connection, saved_config, default_endpoint=default_ep)
     service = OneCIntegrationService(config)
     try:
         result = await service.test_connection()
@@ -162,14 +162,7 @@ async def import_indicators_from_1c_odata(
         ExternalSystemConfig,
     )
     saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
-    )
+    config = _build_service_config(request.connection, saved_config)
     endpoint = request.endpoint or (
         saved_config.indicators_endpoint if saved_config else None
     )
@@ -234,14 +227,7 @@ async def import_templates_from_1c_odata(
         ExternalSystemConfig,
     )
     saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
-    )
+    config = _build_service_config(request.connection, saved_config)
     endpoint = request.endpoint or (
         saved_config.templates_endpoint if saved_config else None
     ) or "/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий"
@@ -292,14 +278,7 @@ async def import_varieties_from_1c_odata(
         ExternalSystemConfig,
     )
     saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
-    )
+    config = _build_service_config(request.connection, saved_config)
     endpoint = request.endpoint or (
         getattr(saved_config, "varieties_endpoint", None) if saved_config else None
     )
@@ -355,14 +334,7 @@ async def import_plans_from_1c_odata(
         ExternalSystemConfig,
     )
     saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
-    )
+    config = _build_service_config(request.connection, saved_config)
     endpoint = request.endpoint or (
         saved_config.plans_endpoint if saved_config else None
     )
