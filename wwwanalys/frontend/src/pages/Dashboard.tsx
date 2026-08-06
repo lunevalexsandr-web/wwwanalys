@@ -108,6 +108,12 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchTemplates();
     fetchReports();
+    // Если открыли «Новый отчёт» не из «Планирования» — чистим возможные
+    // устаревшие данные плана, чтобы форма стартовала с пустым шаблоном.
+    const st = location.state as any;
+    if (!(st?.activeTab === 'new-report' && st?.autoCreate)) {
+      localStorage.removeItem('planItemToReport');
+    }
   }, []);
 
   // Функция для обработки данных из Plans
