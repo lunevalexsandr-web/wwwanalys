@@ -26,6 +26,8 @@ const Admin: React.FC = () => {
 
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<AnalysisType | null>(null);
+  const [previewNorms, setPreviewNorms] = useState<any[]>([]);
+  const [normSearch, setNormSearch] = useState('');
 
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyTemplateId, setCopyTemplateId] = useState<number | null>(null);
@@ -296,7 +298,12 @@ const Admin: React.FC = () => {
 
   const handleOpenPreview = (template: AnalysisType) => {
     setPreviewTemplate(template);
+    setPreviewNorms([]);
+    setNormSearch('');
     setShowPreviewModal(true);
+    api.get(`/api/templates/${template.id}/norms`)
+      .then((r) => setPreviewNorms(r.data || []))
+      .catch(() => setPreviewNorms([]));
   };
 
   const handleOpenCopyModal = (template: AnalysisType) => {
@@ -1350,6 +1357,47 @@ const Admin: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Матрица норм: зависимость от сорта / объекта / тары / дня */}
+              <hr />
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h6 className="mb-0">Матрица норм <Badge bg="secondary">{previewNorms.length}</Badge></h6>
+                <Form.Control
+                  size="sm" style={{ maxWidth: 240 }} placeholder="Фильтр по показателю…"
+                  value={normSearch} onChange={(e) => setNormSearch(e.target.value)}
+                />
+              </div>
+              {previewNorms.length === 0 ? (
+                <Alert variant="info" className="mb-0 py-2">Нормы с разбивкой не загружены (или их нет для шаблона).</Alert>
+              ) : (
+                <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                  <Table striped bordered size="sm" className="mb-0">
+                    <thead style={{ position: 'sticky', top: 0 }}>
+                      <tr>
+                        <th>Показатель</th><th>День</th><th>Сорт</th><th>Объект отбора</th><th>Тара</th><th>Норма</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewNorms
+                        .filter((n) => !normSearch || n.indicator.toLowerCase().includes(normSearch.toLowerCase()))
+                        .map((n, i) => (
+                          <tr key={i}>
+                            <td>{n.indicator}</td>
+                            <td>{n.day ?? '—'}</td>
+                            <td>{n.variety || (n.variety_key ? '⟨guid⟩' : '—')}</td>
+                            <td>{n.object || '—'}</td>
+                            <td>{n.container || '—'}</td>
+                            <td>
+                              {(n.min_value !== null || n.max_value !== null)
+                                ? `${n.min_value ?? '?'} – ${n.max_value ?? '?'}`
+                                : (n.norm_text || '—')}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </Table>
                 </div>
               )}
             </>

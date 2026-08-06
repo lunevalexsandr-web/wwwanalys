@@ -152,6 +152,41 @@ def get_active_templates(
     return result
 
 
+@router.get("/{template_id}/norms")
+def get_template_norms(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Матрица норм шаблона: по каждому показателю — нормы с разбивкой по
+    сорту / объекту отбора / таре / дню (для проверки зависимостей)."""
+    from app.models import TemplateNorm, IndicatorLibrary, Variety
+    rows = (
+        db.query(TemplateNorm)
+        .filter(TemplateNorm.template_id == template_id)
+        .all()
+    )
+    ind_names = {i.id: i.name for i in db.query(IndicatorLibrary).all()}
+    var_names = {str(v.external_id).lower(): v.name for v in db.query(Variety).all() if v.external_id}
+    out = []
+    for r in rows:
+        out.append({
+            "indicator": ind_names.get(r.indicator_id, f"#{r.indicator_id}"),
+            "indicator_id": r.indicator_id,
+            "day": r.day,
+            "variety": var_names.get(str(r.variety_key).lower()) if r.variety_key else None,
+            "variety_key": r.variety_key,
+            "container": r.container,
+            "object": r.object_name or r.object_key,
+            "min_value": r.min_value,
+            "max_value": r.max_value,
+            "norm_text": r.norm_text,
+        })
+    out.sort(key=lambda x: (x["indicator"], x["day"] if x["day"] is not None else -1,
+                            x["variety"] or "", x["object"] or "", x["container"] or ""))
+    return out
+
+
 @router.get("/{template_id}", response_model=AnalysisType)
 def get_template(
     template_id: int,
