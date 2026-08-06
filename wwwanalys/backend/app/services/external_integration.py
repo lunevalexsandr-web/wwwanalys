@@ -1742,3 +1742,106 @@ async def import_odata_objects_from_1c(
     finally:
         await service.close()
     return result
+
+
+# ============ Варианты из справочника Склады (папка Емкости) → показатели ============
+
+def _norm_name(s: str) -> str:
+    return str(s or "").replace("ё", "е").replace("Ё", "Е").strip().lower()
+
+# Правила по умолчанию: какой показатель наполнять из какой папки Складов
+DEFAULT_STORAGE_RULES = [
+    {"folder": ["Емкости"], "indicator": "Номер ёмкости"},
+    {"folder": ["Емкости", "Танки"], "indicator": "Номер танка"},
+]
+
+
+async def import_odata_storage_options_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    rules: Optional[list] = None,
+) -> Dict[str, Any]:
+    """Наполнить показатели вариантами из справочника Склады (иерархия).
+
+    Для каждого правила {folder: [путь папок], indicator: имя показателя}
+    собираем все элементы (рекурсивно) под указанной папкой и записываем их
+    в options показателя (+ data_type='select'). Сопоставление показателя по
+    имени без учёта регистра и ё/е.
+    """
+    import json as _json
+    from app.models import IndicatorLibrary
+
+    rules = rules or DEFAULT_STORAGE_RULES
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {"rules": [], "errors": [], "timestamp": datetime.utcnow().isoformat()}
+    try:
+        rows = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        await service.close()
+
+        by_ref = {str(r.get("Ref_Key")).lower(): r for r in rows}
+        children = {}
+        for r in rows:
+            children.setdefault(str(r.get("Parent_Key")).lower(), []).append(r)
+
+        def find_folder(path):
+            """Найти папку по пути имён; вернуть Ref_Key или None."""
+            parent = None  # верхний уровень
+            cur_ref = None
+            for name in path:
+                candidates = [
+                    r for r in rows
+                    if r.get("IsFolder") and _norm_name(r.get("Description")) == _norm_name(name)
+                    and (cur_ref is None or str(r.get("Parent_Key")).lower() == cur_ref)
+                ]
+                if not candidates:
+                    return None
+                cur_ref = str(candidates[0].get("Ref_Key")).lower()
+            return cur_ref
+
+        def collect_leaves(folder_ref):
+            """Все элементы (не папки, не удалённые) рекурсивно под папкой."""
+            out = []
+            stack = [folder_ref]
+            while stack:
+                ref = stack.pop()
+                for ch in children.get(ref, []):
+                    if ch.get("DeletionMark"):
+                        continue
+                    if ch.get("IsFolder"):
+                        stack.append(str(ch.get("Ref_Key")).lower())
+                    else:
+                        d = (ch.get("Description") or "").strip()
+                        if d:
+                            out.append(d)
+            return sorted(set(out))
+
+        # индекс показателей по нормализованному имени
+        lib = {}
+        for ind in db.query(IndicatorLibrary).all():
+            lib.setdefault(_norm_name(ind.name), ind)
+
+        for rule in rules:
+            info = {"folder": " / ".join(rule["folder"]), "indicator": rule["indicator"]}
+            fref = find_folder(rule["folder"])
+            if not fref:
+                info["status"] = "папка не найдена"
+                result["rules"].append(info); continue
+            leaves = collect_leaves(fref)
+            ind = lib.get(_norm_name(rule["indicator"]))
+            if not ind:
+                info["status"] = "показатель не найден"; info["values"] = len(leaves)
+                result["rules"].append(info); continue
+            ind.options = _json.dumps(leaves, ensure_ascii=False)
+            ind.data_type = "select"
+            info["status"] = "ok"; info["values"] = len(leaves)
+            result["rules"].append(info)
+
+        db.commit()
+        logger.info(f"Storage options import: {result['rules']}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Storage options import failed: {e}")
+        result["errors"].append({"error": str(e)})
+        raise
+    return result
