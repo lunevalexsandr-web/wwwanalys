@@ -173,7 +173,8 @@ def get_report(
             ).first()
             min_value = template_indicator.min_value if template_indicator else None
             max_value = template_indicator.max_value if template_indicator else None
-            
+            norm_text = template_indicator.norm_text if template_indicator else None
+
             indicator_values.append({
                 "id": v.id,
                 "indicator_id": v.indicator_id,
@@ -183,7 +184,8 @@ def get_report(
                 "text_value": v.text_value,
                 "is_normal": v.is_normal,
                 "min_value": min_value,
-                "max_value": max_value
+                "max_value": max_value,
+                "norm_text": norm_text
             })
     
     return {

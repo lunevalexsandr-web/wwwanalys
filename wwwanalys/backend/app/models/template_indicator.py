@@ -12,6 +12,7 @@ class TemplateIndicator(Base):
     indicator_id = Column(Integer, ForeignKey("indicator_library.id", ondelete="CASCADE"))
     min_value = Column(Float, nullable=True)
     max_value = Column(Float, nullable=True)
+    norm_text = Column(String, nullable=True)  # нечисловая (эталонная) норма из 1С
     sort_order = Column(Integer, default=0)
 
     # Новые поля

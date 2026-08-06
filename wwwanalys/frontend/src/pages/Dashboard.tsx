@@ -970,9 +970,9 @@ const Dashboard: React.FC = () => {
                           <td>{v.name}, {v.unit}</td>
                           <td><strong>{v.value || v.text_value || '-'}</strong></td>
                           <td>
-                            {(v.min_value !== null || v.max_value !== null)
+                            {(v.min_value !== null && v.min_value !== undefined) || (v.max_value !== null && v.max_value !== undefined)
                               ? `от ${v.min_value ?? '?'} до ${v.max_value ?? '?'}`
-                              : 'Не задана'}
+                              : (v.norm_text || 'Не задана')}
                           </td>
                           <td>
                             <Badge bg={v.is_normal ? 'success' : 'danger'}>

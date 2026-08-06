@@ -31,6 +31,12 @@ def ensure_indicator_columns(engine):
         ))
         conn.execute(text(
             """
+            ALTER TABLE template_indicators
+            ADD COLUMN IF NOT EXISTS norm_text VARCHAR
+            """
+        ))
+        conn.execute(text(
+            """
             ALTER TABLE integration_configs
             ADD COLUMN IF NOT EXISTS varieties_endpoint VARCHAR(512)
             """

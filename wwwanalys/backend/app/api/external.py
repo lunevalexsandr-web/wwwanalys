@@ -287,6 +287,7 @@ async def import_templates_from_1c_odata(
             indicator_key_field=request.indicator_key_field,
             name_field=request.name_field,
             create_missing_indicators=request.create_missing_indicators,
+            variants_endpoint=(getattr(saved_config, "options_endpoint", None) if saved_config else None),
         )
         return {"status": "success" if not result["errors"] else "partial", **result}
     except Exception as e:

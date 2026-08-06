@@ -101,6 +101,7 @@ class TemplateIndicatorDetail(BaseModel):
     options: Optional[List[str]] = None
     min_value: Optional[float] = None
     max_value: Optional[float] = None
+    norm_text: Optional[str] = None
     sort_order: int = 0
     is_custom: bool = False
     template_notes: Optional[str] = None

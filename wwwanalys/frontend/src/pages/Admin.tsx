@@ -1317,9 +1317,11 @@ const Admin: React.FC = () => {
                           <span className="badge bg-secondary me-1">{idx + 1}</span>
                           <strong>{ti.name}</strong>
                           <small className="text-muted ms-1">{ti.unit}</small>
-                          {(ti.min_value !== null || ti.max_value !== null) && (
+                          {(ti.min_value !== null || ti.max_value !== null) ? (
                             <small className="text-muted ms-2">Норма: {ti.min_value !== null ? ti.min_value : 'от'} - {ti.max_value !== null ? ti.max_value : 'до'}</small>
-                          )}
+                          ) : (ti as any).norm_text ? (
+                            <small className="text-muted ms-2">Норма: {(ti as any).norm_text}</small>
+                          ) : null}
                           <Badge bg="info" className="ms-1" pill>{ti.data_type}</Badge>
                         </div>
                       </div>

@@ -811,12 +811,29 @@ def _odata_num(value: Any) -> Optional[float]:
         return None
 
 
+def _etalon_ref_text(val: Any, vtype: Any, variant_map: Optional[Dict[str, str]]) -> Optional[str]:
+    """Текст нечисловой границы нормы (ЭталонОт/ЭталонДо).
+
+    Если это ссылка на справочник вариантов (ДопАналитика) — резолвим GUID в текст
+    по variant_map; если строка — берём как есть; числа и пустое игнорируем.
+    """
+    if val in (None, "") or str(val) == ZERO_GUID:
+        return None
+    t = str(vtype or "")
+    if "ДопАналитика" in t:
+        return (variant_map or {}).get(str(val).lower())
+    if t == "Edm.String":
+        return str(val).strip() or None
+    return None
+
+
 def transform_1c_odata_template_to_local(
     template_1c: Dict[str, Any],
     indicators_field: str = "ПоказателиАнализа",
     norms_field: str = "Нормативы",
     indicator_key_field: str = "Показатель_Key",
     name_field: str = "Description",
+    variant_map: Optional[Dict[str, str]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Преобразовать шаблон из стандартного OData 1С (справочник ТиповыеАнализыСерий)
@@ -825,8 +842,8 @@ def transform_1c_odata_template_to_local(
     - name          <- Description
     - external_id   <- Ref_Key (GUID шаблона)
     - показатели    <- табличная часть `ПоказателиАнализа` (ссылка Показатель_Key = GUID)
-    - мин/макс      <- табличная часть `Нормативы` (Минимум/Максимум по Показатель_Key),
-                       фолбэк на ЭталонОт/ЭталонДо из строки показателя
+    - мин/макс      <- ЭталонОт/ЭталонДо (числовые); фолбэк на ТЧ `Нормативы` Минимум/Максимум
+    - norm_text     <- нечисловая норма ЭталонОт/ЭталонДо (ссылки на варианты → текст)
     Группы (IsFolder) и помеченные на удаление (DeletionMark) должны отсекаться ДО вызова.
     """
     name = template_1c.get(name_field)
@@ -835,7 +852,7 @@ def transform_1c_odata_template_to_local(
 
     ref_key = template_1c.get("Ref_Key")
 
-    # Нормы: Показатель_Key -> (min, max)
+    # Числовые нормы из ТЧ Нормативы: Показатель_Key -> (min, max)
     norms_map: Dict[str, tuple] = {}
     for norm in (template_1c.get(norms_field) or []):
         key = norm.get(indicator_key_field)
@@ -852,16 +869,26 @@ def transform_1c_odata_template_to_local(
         if not key or key == ZERO_GUID or str(key) in seen:
             continue
         seen.add(str(key))
-        nmin, nmax = norms_map.get(str(key), (None, None))
-        if nmin is None:
-            nmin = _odata_num(row.get("ЭталонОт"))
-        if nmax is None:
-            nmax = _odata_num(row.get("ЭталонДо"))
+        # Числовая норма: сначала ЭталонОт/ЭталонДо, фолбэк на ТЧ Нормативы
+        nmin = _odata_num(row.get("ЭталонОт"))
+        nmax = _odata_num(row.get("ЭталонДо"))
+        if nmin is None or nmax is None:
+            fb_min, fb_max = norms_map.get(str(key), (None, None))
+            nmin = nmin if nmin is not None else fb_min
+            nmax = nmax if nmax is not None else fb_max
+        # Нечисловая норма: ЭталонОт/ЭталонДо как ссылки на варианты (или строки)
+        ot_t = _etalon_ref_text(row.get("ЭталонОт"), row.get("ЭталонОт_Type"), variant_map)
+        do_t = _etalon_ref_text(row.get("ЭталонДо"), row.get("ЭталонДо_Type"), variant_map)
+        if ot_t and do_t:
+            norm_text = ot_t if ot_t == do_t else f"{ot_t} – {do_t}"
+        else:
+            norm_text = ot_t or do_t
         library_indicators.append({
             "indicator_external_id": str(key),
             "external_id": str(key),
             "min_value": nmin,
             "max_value": nmax,
+            "norm_text": norm_text,
             "sort_order": row.get("LineNumber") or (len(library_indicators) + 1),
         })
 
@@ -885,6 +912,7 @@ async def import_odata_templates_from_1c(
     indicator_key_field: str = "Показатель_Key",
     name_field: str = "Description",
     create_missing_indicators: bool = False,
+    variants_endpoint: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Импортировать шаблоны анализов из стандартного OData 1С.
@@ -895,6 +923,9 @@ async def import_odata_templates_from_1c(
         его GUID добавляется в result["missing_indicators"] (сначала импортируйте
         справочник показателей);
       - create_missing_indicators=True — создаётся заглушка показателя.
+
+    variants_endpoint — путь к справочнику вариантов (ДопАналитика); если задан,
+    строится карта GUID→текст для нечисловых норм (ЭталонОт/ЭталонДо-ссылок).
     """
     service = OneCIntegrationService(config)
     result: Dict[str, Any] = {
@@ -903,6 +934,20 @@ async def import_odata_templates_from_1c(
         "timestamp": datetime.utcnow().isoformat(),
     }
     try:
+        # Карта вариантов (для нечисловых норм): GUID варианта -> текст
+        variant_map: Dict[str, str] = {}
+        if variants_endpoint:
+            try:
+                vrows = await service._fetch_list(variants_endpoint, params={"$format": "json"}, key="value")
+                for v in vrows:
+                    rk = v.get("Ref_Key")
+                    dsc = (v.get("Description") or "").strip()
+                    if rk and dsc:
+                        variant_map[str(rk).lower()] = dsc
+                logger.info(f"OData: карта вариантов норм — {len(variant_map)} значений")
+            except Exception as e:
+                logger.warning(f"Не удалось загрузить варианты для нечисловых норм: {e}")
+
         # 1С OData отдаёт XML по умолчанию — запрашиваем JSON и берём массив из "value"
         raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
         # Отсекаем группы и помеченные на удаление
@@ -924,7 +969,8 @@ async def import_odata_templates_from_1c(
         for tpl in templates:
             try:
                 local = transform_1c_odata_template_to_local(
-                    tpl, indicators_field, norms_field, indicator_key_field, name_field
+                    tpl, indicators_field, norms_field, indicator_key_field, name_field,
+                    variant_map=variant_map,
                 )
                 if not local:
                     result["skipped"] += 1
@@ -988,6 +1034,7 @@ async def import_odata_templates_from_1c(
                         indicator_id=ind.id,
                         min_value=li.get("min_value"),
                         max_value=li.get("max_value"),
+                        norm_text=li.get("norm_text"),
                         sort_order=li.get("sort_order", 0),
                         external_id=li.get("external_id"),
                     )
