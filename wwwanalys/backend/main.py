@@ -55,6 +55,20 @@ def ensure_indicator_columns(engine):
         ))
         conn.execute(text(
             """
+            ALTER TABLE process_logs
+            ADD COLUMN IF NOT EXISTS series_key VARCHAR,
+            ADD COLUMN IF NOT EXISTS external_id VARCHAR
+            """
+        ))
+        conn.execute(text(
+            """
+            ALTER TABLE indicator_values
+            ADD COLUMN IF NOT EXISTS deviation_code INTEGER,
+            ADD COLUMN IF NOT EXISTS external_id VARCHAR
+            """
+        ))
+        conn.execute(text(
+            """
             ALTER TABLE integration_configs
             ADD COLUMN IF NOT EXISTS varieties_endpoint VARCHAR(512)
             """

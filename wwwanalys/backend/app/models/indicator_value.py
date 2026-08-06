@@ -11,8 +11,10 @@ class IndicatorValue(Base):
     indicator_id = Column(Integer, ForeignKey("indicator_library.id"))
     value = Column(Float, nullable=True)
     text_value = Column(String, nullable=True)
-    day = Column(Integer, nullable=True)  # день измерения (для показателей с расписанием)
+    day = Column(Integer, nullable=True)  # день измерения (для показателей с расписанием) = «День» в 1С
     is_normal = Column(Boolean, default=True)
+    deviation_code = Column(Integer, nullable=True)  # ЕстьОтклонение из 1С: 0/1/2 (0-норма,2-откл.)
+    external_id = Column(String(255), nullable=True, index=True)  # ссылка на запись регистра 1С
     measured_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     notes = Column(String)
     
