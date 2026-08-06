@@ -1519,3 +1519,135 @@ async def import_odata_indicator_options_from_1c(
     finally:
         await service.close()
     return result
+
+
+# ============ Матрица норм шаблонов (Этап 1: наполнение данных) ============
+
+async def import_odata_template_norms_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    templates_endpoint: str,
+    variants_endpoint: Optional[str] = None,
+    objects_endpoint: Optional[str] = None,
+    indicators_field: str = "ПоказателиАнализа",
+    norms_field: str = "Нормативы",
+) -> Dict[str, Any]:
+    """Загрузить полную матрицу норм в таблицу template_norms.
+
+    Источники (inline ТЧ шаблона ТиповыеАнализыСерий):
+      - Нормативы: (Показатель, Характеристика=сорт, Тара, Объект) -> Минимум/Максимум
+      - ПоказателиАнализа: (Показатель, День[, сорт, тара]) -> ЭталонОт/ЭталонДо, norm_text
+    Сопоставление показателя по IndicatorLibrary.external_id == Показатель_Key.
+    Существующие нормы шаблона перезаписываются. Поведение остального приложения не меняется.
+    """
+    from app.models.template_norm import TemplateNorm
+
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "templates": 0, "norm_rows": 0, "skipped_no_indicator": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        # карты для резолва
+        variant_map: Dict[str, str] = {}
+        if variants_endpoint:
+            try:
+                for v in await service._fetch_list(variants_endpoint, params={"$format": "json"}, key="value"):
+                    rk = v.get("Ref_Key"); dsc = (v.get("Description") or "").strip()
+                    if rk and dsc:
+                        variant_map[str(rk).lower()] = dsc
+            except Exception as e:
+                logger.warning(f"variants map: {e}")
+        object_map: Dict[str, str] = {}
+        if objects_endpoint:
+            try:
+                for o in await service._fetch_list(objects_endpoint, params={"$format": "json"}, key="value"):
+                    rk = o.get("Ref_Key"); dsc = (o.get("Description") or "").strip()
+                    if rk and dsc:
+                        object_map[str(rk).lower()] = dsc
+            except Exception as e:
+                logger.warning(f"objects map: {e}")
+
+        lib_by_guid: Dict[str, IndicatorLibrary] = {}
+        for ind in db.query(IndicatorLibrary).all():
+            if ind.external_id:
+                lib_by_guid[str(ind.external_id).lower()] = ind
+
+        raw = await service._fetch_list(templates_endpoint, params={"$format": "json"}, key="value")
+        templates = [t for t in raw if not t.get("IsFolder") and not t.get("DeletionMark")]
+
+        def _norm_key(v):
+            return v if (v not in (None, "", ZERO_GUID) and str(v) != ZERO_GUID) else None
+
+        def _ind(guid):
+            g = str(guid or "").lower()
+            return lib_by_guid.get(g)
+
+        for tpl in templates:
+            ext_id = tpl.get("Ref_Key")
+            tmpl = None
+            if ext_id:
+                tmpl = db.query(AnalysisType).filter(AnalysisType.external_id == str(ext_id)).first()
+            if tmpl is None:
+                tmpl = db.query(AnalysisType).filter(AnalysisType.name == tpl.get("Description")).first()
+            if tmpl is None:
+                continue
+
+            # очистить прежние нормы шаблона
+            db.query(TemplateNorm).filter(TemplateNorm.template_id == tmpl.id).delete()
+            db.flush()
+            result["templates"] += 1
+
+            # 1) Нормативы: сорт/тара/объект -> min/max (день = любой)
+            for r in (tpl.get(norms_field) or []):
+                ind = _ind(r.get("Показатель_Key"))
+                if ind is None:
+                    result["skipped_no_indicator"] += 1
+                    continue
+                mn = _odata_num(r.get("Минимум")); mx = _odata_num(r.get("Максимум"))
+                nt_ot = _etalon_ref_text(r.get("Минимум"), r.get("Минимум_Type"), variant_map)
+                nt_do = _etalon_ref_text(r.get("Максимум"), r.get("Максимум_Type"), variant_map)
+                nt = (f"{nt_ot} – {nt_do}" if nt_ot and nt_do and nt_ot != nt_do else (nt_ot or nt_do))
+                obj = _norm_key(r.get("ОбъектАнализа_Key"))
+                db.add(TemplateNorm(
+                    template_id=tmpl.id, indicator_id=ind.id, day=None,
+                    variety_key=_norm_key(r.get("Характеристика_Key")),
+                    container=(str(r.get("ТараДляПива")).strip() or None) if r.get("ТараДляПива") else None,
+                    object_key=obj, object_name=object_map.get(str(obj).lower()) if obj else None,
+                    min_value=mn, max_value=mx, norm_text=nt, source="normativy",
+                ))
+                result["norm_rows"] += 1
+
+            # 2) ПоказателиАнализа: день + ЭталонОт/До
+            for r in (tpl.get(indicators_field) or []):
+                ind = _ind(r.get("Показатель_Key"))
+                if ind is None:
+                    result["skipped_no_indicator"] += 1
+                    continue
+                mn = _odata_num(r.get("ЭталонОт")); mx = _odata_num(r.get("ЭталонДо"))
+                ot = _etalon_ref_text(r.get("ЭталонОт"), r.get("ЭталонОт_Type"), variant_map)
+                do = _etalon_ref_text(r.get("ЭталонДо"), r.get("ЭталонДо_Type"), variant_map)
+                nt = (f"{ot} – {do}" if ot and do and ot != do else (ot or do))
+                try:
+                    day = int(r.get("День")) if r.get("День") not in (None, "") else None
+                except (TypeError, ValueError):
+                    day = None
+                db.add(TemplateNorm(
+                    template_id=tmpl.id, indicator_id=ind.id, day=day,
+                    variety_key=_norm_key(r.get("Характеристика_Key")),
+                    container=(str(r.get("ТараДляПива")).strip() or None) if r.get("ТараДляПива") else None,
+                    object_key=None, object_name=None,
+                    min_value=mn, max_value=mx, norm_text=nt, source="schedule",
+                ))
+                result["norm_rows"] += 1
+
+        db.commit()
+        logger.info(f"Template norms: templates={result['templates']}, rows={result['norm_rows']}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Template norms import failed: {e}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result

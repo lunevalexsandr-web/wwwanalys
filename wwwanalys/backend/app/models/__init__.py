@@ -10,6 +10,7 @@ from .preset import Preset, PresetIndicator
 from .analysis_plan import AnalysisPlan, PlanItem
 from .integration_config import IntegrationConfig
 from .variety import Variety
+from .template_norm import TemplateNorm
 
 __all__ = [
     "User",
@@ -26,5 +27,6 @@ __all__ = [
     "AnalysisPlan",
     "PlanItem",
     "IntegrationConfig",
-    "Variety"
+    "Variety",
+    "TemplateNorm"
 ]
