@@ -13,6 +13,7 @@ from app.auth.auth import get_current_active_user, get_current_admin_user
 router = APIRouter()
 
 
+@router.get("", response_model=List[VarietySchema])
 @router.get("/", response_model=List[VarietySchema])
 def list_varieties(
     active_only: bool = False,

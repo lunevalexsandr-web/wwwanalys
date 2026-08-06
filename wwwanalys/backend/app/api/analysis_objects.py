@@ -22,6 +22,7 @@ class AnalysisObjectOut(BaseModel):
         from_attributes = True
 
 
+@router.get("", response_model=List[AnalysisObjectOut])
 @router.get("/", response_model=List[AnalysisObjectOut])
 def list_objects(
     db: Session = Depends(get_db),
