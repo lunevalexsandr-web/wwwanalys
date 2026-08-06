@@ -75,6 +75,7 @@ const Admin: React.FC = () => {
   const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
   const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_tek/odata/standard.odata/Document_ПланАнализов');
   const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Сорта');
+  const [c1COptionsEndpoint, setC1COptionsEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -615,6 +616,31 @@ const Admin: React.FC = () => {
     }
   };
 
+  const handleImportOptionsFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-indicator-options-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1COptionsEndpoint || undefined,
+      });
+      setImport1CResult(response.data);
+      const r = response.data;
+      if (r.status === 'success') {
+        showToast(`Варианты значений загружены: показателей ${r.updated}, значений ${r.options}`, 'success');
+        fetchLibraryIndicators();
+      } else {
+        showToast(`Загрузка вариантов с ошибками (обновлено ${r.updated})`, 'warning');
+        fetchLibraryIndicators();
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка загрузки вариантов значений', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
   const handleLoad1CConfig = async () => {
     try {
       const response = await api.get('/api/external/1c/config');
@@ -626,6 +652,7 @@ const Admin: React.FC = () => {
       setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
       setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_tek/odata/standard.odata/Document_ПланАнализов');
       setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_tek/odata/standard.odata/Catalog_Сорта');
+      setC1COptionsEndpoint(cfg.options_endpoint || '/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
     } catch (error) {
@@ -647,6 +674,7 @@ const Admin: React.FC = () => {
         templates_endpoint: c1CTemplatesEndpoint || null,
         plans_endpoint: c1CPlansEndpoint || null,
         varieties_endpoint: c1CVarietiesEndpoint || null,
+        options_endpoint: c1COptionsEndpoint || null,
       });
       showToast('Настройки подключения к 1С сохранены', 'success');
     } catch (error: any) {
@@ -1358,6 +1386,11 @@ const Admin: React.FC = () => {
               <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Сорта" value={c1CVarietiesEndpoint} onChange={(e) => setC1CVarietiesEndpoint(e.target.value)} />
               <Form.Text className="text-muted">Стандартный OData-справочник сортов в 1С</Form.Text>
             </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>OData 1С — варианты значений показателей</Form.Label>
+              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов" value={c1COptionsEndpoint} onChange={(e) => setC1COptionsEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Подчинённый справочник «ДопАналитикаПоказателейАнализов»: списки значений для показателей типа «выбор»</Form.Text>
+            </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
             )}
@@ -1388,6 +1421,9 @@ const Admin: React.FC = () => {
           </Button>
           <Button variant="info" onClick={handleImportTemplatesFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить шаблоны'}
+          </Button>
+          <Button variant="outline-primary" onClick={handleImportOptionsFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить варианты значений'}
           </Button>
           <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}

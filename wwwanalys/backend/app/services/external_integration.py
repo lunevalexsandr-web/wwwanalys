@@ -1402,3 +1402,73 @@ async def import_odata_plans_from_1c(
     finally:
         await service.close()
     return result
+
+# ============ Варианты значений показателей (ДопАналитика) через OData ============
+
+async def import_odata_indicator_options_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    owner_field: str = "Owner_Key",
+    value_field: str = "Description",
+) -> Dict[str, Any]:
+    """Загрузить варианты значений показателей из подчинённого справочника 1С
+    (Catalog__ДопАналитикаПоказателейАнализов).
+
+    Каждая запись — один вариант: value_field (Description) = значение,
+    owner_field (Owner_Key) = GUID показателя-владельца. Группируем по владельцу,
+    сопоставляем с IndicatorLibrary по external_id, пишем options (JSON) и
+    data_type='select'.
+    """
+    import json as _json
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "updated": 0, "options": 0, "no_match": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        rows = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        result["total"] = len(rows)
+
+        groups: Dict[str, list] = {}
+        for r in rows:
+            if r.get("DeletionMark"):
+                continue
+            owner = r.get(owner_field)
+            val = (r.get(value_field) or "").strip()
+            if not owner or str(owner) == ZERO_GUID or not val:
+                continue
+            groups.setdefault(str(owner).lower(), []).append((r.get("Code") or "", val))
+
+        lib: Dict[str, IndicatorLibrary] = {}
+        for ind in db.query(IndicatorLibrary).all():
+            if ind.external_id:
+                lib[str(ind.external_id).lower()] = ind
+
+        for owner, items in groups.items():
+            ind = lib.get(owner)
+            if not ind:
+                result["no_match"] += 1
+                continue
+            seen = set(); uniq = []
+            for _code, val in sorted(items):
+                if val not in seen:
+                    seen.add(val); uniq.append(val)
+            ind.options = _json.dumps(uniq, ensure_ascii=False)
+            ind.data_type = "select"
+            result["updated"] += 1
+            result["options"] += len(uniq)
+
+        db.commit()
+        logger.info(
+            f"Indicator options import: updated={result['updated']}, "
+            f"options={result['options']}, no_match={result['no_match']}"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Indicator options import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result

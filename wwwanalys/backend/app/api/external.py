@@ -184,6 +184,51 @@ async def import_indicators_from_1c_odata(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
+# --- Варианты значений показателей (ДопАналитика) через OData ---
+
+class OneCODataOptionsImportRequest(BaseModel):
+    """Запрос на импорт вариантов значений показателей (список для select)."""
+    connection: OneCConnectionConfig
+    endpoint: Optional[str] = None  # напр. /erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов
+    owner_field: str = "Owner_Key"
+    value_field: str = "Description"
+
+
+@router.post("/1c/import-indicator-options-odata")
+async def import_indicator_options_from_1c_odata(
+    request: OneCODataOptionsImportRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Импортировать варианты значений показателей из OData 1С
+    (подчинённый справочник ДопАналитикаПоказателейАнализов).
+
+    Для показателей с вариантами проставляется options (список) и data_type='select'.
+    Сопоставление по external_id показателя (== Owner_Key варианта).
+    """
+    from app.services.external_integration import (
+        import_odata_indicator_options_from_1c,
+    )
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    config = _build_service_config(request.connection, saved_config)
+    endpoint = request.endpoint or (
+        getattr(saved_config, "options_endpoint", None) if saved_config else None
+    )
+    if not endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не задан endpoint OData для вариантов значений (вкладка «Интеграция с 1С»)",
+        )
+    try:
+        result = await import_odata_indicator_options_from_1c(
+            db=db, config=config, endpoint=endpoint,
+            owner_field=request.owner_field, value_field=request.value_field,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
+
+
 # --- Шаблоны через стандартный OData 1С ---
 
 class OneCODataTemplateImportRequest(BaseModel):

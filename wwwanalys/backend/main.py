@@ -35,6 +35,12 @@ def ensure_indicator_columns(engine):
             ADD COLUMN IF NOT EXISTS varieties_endpoint VARCHAR(512)
             """
         ))
+        conn.execute(text(
+            """
+            ALTER TABLE integration_configs
+            ADD COLUMN IF NOT EXISTS options_endpoint VARCHAR(512)
+            """
+        ))
         conn.commit()
 
 try:
