@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, analysis_type, process_log, templates, reports, external, indicators, presets, statistics, plans, ai_analysis
+from app.api import auth, analysis_type, process_log, templates, reports, external, indicators, presets, statistics, plans
 from app.core.database import engine, Base
 from app.core.config import settings
 from app.models import User, AnalysisType, Indicator, ProcessLog, IndicatorValue, Preset, PresetIndicator, AnalysisPlan, PlanItem
@@ -59,7 +59,19 @@ app.include_router(indicators.router, prefix="/api/indicators", tags=["Indicator
 app.include_router(presets.router, prefix="/api/presets", tags=["Presets"])
 app.include_router(statistics.router, prefix="/api", tags=["Statistics"])
 app.include_router(plans.router, prefix="/api/plans", tags=["Plans"])
-app.include_router(ai_analysis.router, prefix="/api/ai", tags=["AI Assistant"])
+
+# Дополнительный (необязательный) модуль AI-ассистента. Подключается изолированно:
+# любая проблема с ним (импорт, зависимость anthropic и т.п.) не должна мешать
+# запуску основного API. Полностью выключается через AI_ENABLED=false.
+if settings.ai_enabled:
+    try:
+        from app.api import ai_analysis
+        app.include_router(ai_analysis.router, prefix="/api/ai", tags=["AI Assistant"])
+        print("AI assistant module enabled")
+    except Exception as e:
+        print(f"AI assistant module disabled (load error): {e}")
+else:
+    print("AI assistant module disabled by AI_ENABLED=false")
 
 @app.get("/")
 def read_root():

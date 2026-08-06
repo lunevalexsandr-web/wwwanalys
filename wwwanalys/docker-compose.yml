@@ -28,6 +28,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-to-a-secret-key}
       API_KEY: ${API_KEY:-change-me-api-key}
       CORS_ORIGINS: http://localhost:5173,http://localhost:80
+      AI_ENABLED: ${AI_ENABLED:-true}
       AI_PROVIDER: ${AI_PROVIDER:-auto}
       AI_MODEL: ${AI_MODEL:-claude-opus-4-8}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

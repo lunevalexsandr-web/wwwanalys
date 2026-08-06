@@ -34,7 +34,8 @@ const Dashboard: React.FC = () => {
   const [viewReport, setViewReport] = useState<Report | null>(null);
   const [viewReportIndicators, setViewReportIndicators] = useState<any[]>([]);
 
-  // AI-разбор отклонений (эксперт-пивовар)
+  // AI-разбор отклонений (эксперт-пивовар) — дополнительный модуль
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [aiResult, setAiResult] = useState<any | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -42,6 +43,14 @@ const Dashboard: React.FC = () => {
   const { toast, showToast, hideToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Разовая проверка доступности модуля Агента. Любая ошибка = модуль скрыт,
+  // основной интерфейс от этого не зависит.
+  useEffect(() => {
+    api.get('/api/ai/status')
+      .then((r) => setAiEnabled(!!r.data?.enabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   /**
    * Получить все показатели шабона (только из справочника).
@@ -937,6 +946,8 @@ const Dashboard: React.FC = () => {
                   </Table>
                 )}
 
+                {aiEnabled && (
+                <>
                 <hr />
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <h6 className="mb-0">🍺 Разбор ИИ-эксперта</h6>
@@ -999,6 +1010,8 @@ const Dashboard: React.FC = () => {
                       </Card>
                     ))}
                   </div>
+                )}
+                </>
                 )}
               </div>
               <div className="modal-footer">

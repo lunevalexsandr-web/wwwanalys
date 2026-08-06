@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.config import settings
 from app.crud import report as crud_report
 from app.models import User
 from app.auth.auth import get_current_active_user
@@ -13,6 +14,23 @@ from app.services import ai_analysis
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/status")
+def ai_status(current_user: User = Depends(get_current_active_user)):
+    """Доступность модуля Агента для интерфейса.
+
+    enabled — модуль включён; model_configured — подключена ли экспертная модель
+    (иначе разбор работает в режиме «только факты»).
+    """
+    if not settings.ai_enabled:
+        return {"enabled": False, "provider": None, "model_configured": False}
+    provider = ai_analysis.get_provider()
+    return {
+        "enabled": True,
+        "provider": provider.name,
+        "model_configured": provider.name != "none",
+    }
 
 
 @router.post("/reports/{report_id}/analyze")
@@ -27,6 +45,9 @@ def analyze_report(
     модель — добавляется текстовый разбор (трактовка, причины, действия).
     Возвращает {deviations_count, model, summary, deviations:[...]}.
     """
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+
     report = crud_report.get_report(db, report_id=report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Отчёт не найден")
