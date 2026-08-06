@@ -288,7 +288,7 @@ const Dashboard: React.FC = () => {
       processedPlanDataRef.current = dataKey;
       
       setActiveTab('new-report');
-      
+
       // Сначала пробуем данные из navigate state
       if (state.planData) {
         processPlanData(state.planData);
@@ -296,6 +296,9 @@ const Dashboard: React.FC = () => {
         // Fallback на localStorage
         processPlanItemToReport();
       }
+      // Очищаем состояние навигации, чтобы обновление страницы (F5) не
+      // повторяло авто-выбор шаблона из старого перехода «Планирование».
+      navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state]);
 
