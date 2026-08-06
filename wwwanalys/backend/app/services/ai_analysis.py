@@ -1,13 +1,19 @@
 """
 AI-ассистент «эксперт-пивовар»: разбор отклонений показателей в отчёте.
 
-Два слоя:
-1. compute_deviations() — детерминированный расчёт отклонений от норм (без ИИ).
-2. analyze_deviations() — экспертная трактовка/причины/рекомендации через Claude
-   (модель эксперта-пивовара), строго структурированный ответ через tool-use.
+Архитектура — два независимых слоя:
 
-Данные (факты, нормы) считаются в коде и передаются модели как есть — модель
-не выдумывает числа, а только трактует и советует.
+1. Движок отклонений (compute_deviations) — чистый Python, БЕЗ модели.
+   Сравнивает значения показателей с нормами шаблона, считает направление и % —
+   работает всегда и является источником всех чисел.
+
+2. Экспертный слой (провайдеры) — трактовка/причины/рекомендации текстом.
+   Спрятан за интерфейсом ExpertProvider, поэтому конкретную модель
+   (Anthropic / локальная Ollama / GigaChat / YandexGPT / …) можно выбрать позже,
+   не меняя движок, API и интерфейс. Пока модель не выбрана, работает провайдер
+   "none": возвращаются только факты по отклонениям, без текстового разбора.
+
+Модель НИКОГДА не выдумывает числа — факты считаются в коде и передаются как есть.
 """
 import json
 import logging
@@ -49,7 +55,7 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
     }
 
 
-# ==================== Слой 1: расчёт отклонений ====================
+# ==================== Слой 1: расчёт отклонений (без модели) ====================
 
 def compute_deviations(values: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Найти показатели, вышедшие за норму (числовые). Возвращает список отклонений."""
@@ -102,7 +108,7 @@ def _num(x: float) -> str:
     return str(int(x)) if float(x).is_integer() else str(x)
 
 
-# ==================== Слой 2: экспертный разбор через Claude ====================
+# ==================== Слой 2: экспертные провайдеры ====================
 
 _SYSTEM_PROMPT = (
     "Ты — опытный технолог-пивовар и заведующий производственной лабораторией "
@@ -116,59 +122,10 @@ _SYSTEM_PROMPT = (
     "Ты — советник: окончательное решение принимает технолог."
 )
 
-_ANALYSIS_TOOL = {
-    "name": "report_deviation_analysis",
-    "description": "Вернуть экспертный разбор отклонений показателей партии пива.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
-                "description": "Краткий общий вывод по партии, 1–2 предложения.",
-            },
-            "deviations": {
-                "type": "array",
-                "description": "По одному элементу на каждое переданное отклонение.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "indicator": {"type": "string", "description": "Название показателя (как в исходных данных)."},
-                        "severity": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high"],
-                            "description": "Критичность отклонения для партии.",
-                        },
-                        "interpretation": {"type": "string", "description": "Что это отклонение означает для партии."},
-                        "likely_causes": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Вероятные технологические причины (2–4 пункта).",
-                        },
-                        "actions": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Конкретные шаги для исправления/предотвращения (2–4 пункта).",
-                        },
-                    },
-                    "required": ["indicator", "severity", "interpretation", "likely_causes", "actions"],
-                },
-            },
-        },
-        "required": ["summary", "deviations"],
-    },
-}
 
-
-def is_ai_configured() -> bool:
-    return bool(settings.anthropic_api_key)
-
-
-def analyze_deviations(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Экспертный разбор отклонений через Claude. Возвращает {summary, deviations:[...]}."""
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=settings.anthropic_api_key)
-    payload = {
+def _build_user_payload(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Единый набор фактов для любой модели."""
+    return {
         "batch_number": report_ctx.get("batch_number"),
         "template": report_ctx.get("template_name"),
         "deviations": [
@@ -183,19 +140,153 @@ def analyze_deviations(report_ctx: Dict[str, Any], deviations: List[Dict[str, An
             for d in deviations
         ],
     }
-    user_msg = (
-        "Разбери отклонения показателей этой партии. "
-        "Данные (JSON):\n" + json.dumps(payload, ensure_ascii=False, indent=2)
-    )
-    resp = client.messages.create(
-        model=settings.ai_model,
-        max_tokens=settings.ai_max_tokens,
-        system=_SYSTEM_PROMPT,
-        tools=[_ANALYSIS_TOOL],
-        tool_choice={"type": "tool", "name": "report_deviation_analysis"},
-        messages=[{"role": "user", "content": user_msg}],
-    )
-    for block in resp.content:
-        if block.type == "tool_use" and block.name == "report_deviation_analysis":
-            return block.input
-    raise RuntimeError("Модель не вернула структурированный разбор")
+
+
+class ExpertProvider:
+    """Интерфейс экспертного слоя. Реализация переводит факты в текстовый разбор."""
+
+    name: str = "base"
+
+    def is_configured(self) -> bool:
+        raise NotImplementedError
+
+    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Вернуть {summary: str, deviations: [{indicator, severity, interpretation,
+        likely_causes[], actions[]}]}."""
+        raise NotImplementedError
+
+
+class NoneProvider(ExpertProvider):
+    """Заглушка: модель не выбрана. Возвращает факты без текстового разбора."""
+
+    name = "none"
+
+    def is_configured(self) -> bool:
+        return True  # всегда доступна — деградация к «только факты»
+
+    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return {
+            "summary": (
+                f"Найдено отклонений: {len(deviations)}. "
+                "Текстовый разбор эксперта появится после подключения модели "
+                "(настройка AI_PROVIDER на сервере)."
+            ),
+            "model_configured": False,
+            "deviations": [
+                {
+                    "indicator": d["indicator"],
+                    "severity": _fallback_severity(d),
+                    "interpretation": "",
+                    "likely_causes": [],
+                    "actions": [],
+                }
+                for d in deviations
+            ],
+        }
+
+
+def _fallback_severity(d: Dict[str, Any]) -> str:
+    """Грубая оценка критичности по величине отклонения (когда модели нет)."""
+    pct = d.get("deviation_pct")
+    if pct is None:
+        return "medium"
+    if pct >= 25:
+        return "high"
+    if pct >= 10:
+        return "medium"
+    return "low"
+
+
+_ANTHROPIC_TOOL = {
+    "name": "report_deviation_analysis",
+    "description": "Вернуть экспертный разбор отклонений показателей партии пива.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string", "description": "Краткий общий вывод по партии, 1–2 предложения."},
+            "deviations": {
+                "type": "array",
+                "description": "По одному элементу на каждое переданное отклонение.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "indicator": {"type": "string", "description": "Название показателя (как в исходных данных)."},
+                        "severity": {"type": "string", "enum": ["low", "medium", "high"],
+                                     "description": "Критичность отклонения для партии."},
+                        "interpretation": {"type": "string", "description": "Что это отклонение означает для партии."},
+                        "likely_causes": {"type": "array", "items": {"type": "string"},
+                                          "description": "Вероятные технологические причины (2–4 пункта)."},
+                        "actions": {"type": "array", "items": {"type": "string"},
+                                    "description": "Конкретные шаги для исправления/предотвращения (2–4 пункта)."},
+                    },
+                    "required": ["indicator", "severity", "interpretation", "likely_causes", "actions"],
+                },
+            },
+        },
+        "required": ["summary", "deviations"],
+    },
+}
+
+
+class AnthropicProvider(ExpertProvider):
+    """Экспертный разбор через Claude (structured output, forced tool-use)."""
+
+    name = "anthropic"
+
+    def is_configured(self) -> bool:
+        return bool(settings.anthropic_api_key)
+
+    def analyze(self, report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=settings.anthropic_api_key)
+        payload = _build_user_payload(report_ctx, deviations)
+        user_msg = "Разбери отклонения показателей этой партии. Данные (JSON):\n" + \
+            json.dumps(payload, ensure_ascii=False, indent=2)
+        resp = client.messages.create(
+            model=settings.ai_model,
+            max_tokens=settings.ai_max_tokens,
+            system=_SYSTEM_PROMPT,
+            tools=[_ANTHROPIC_TOOL],
+            tool_choice={"type": "tool", "name": "report_deviation_analysis"},
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        for block in resp.content:
+            if block.type == "tool_use" and block.name == "report_deviation_analysis":
+                out = dict(block.input)
+                out["model_configured"] = True
+                return out
+        raise RuntimeError("Модель не вернула структурированный разбор")
+
+
+# Реестр провайдеров. Новую модель добавить = зарегистрировать класс здесь.
+_PROVIDERS = {
+    "none": NoneProvider,
+    "anthropic": AnthropicProvider,
+}
+
+
+def get_provider() -> ExpertProvider:
+    """Выбрать экспертный провайдер по настройкам.
+
+    "auto" — взять первый настроенный из известных; иначе NoneProvider.
+    Явное имя — взять именно его (или NoneProvider, если не настроен).
+    """
+    choice = (settings.ai_provider or "auto").strip().lower()
+
+    if choice == "auto":
+        for cls in (AnthropicProvider,):  # порядок = приоритет автовыбора
+            p = cls()
+            if p.is_configured():
+                return p
+        return NoneProvider()
+
+    cls = _PROVIDERS.get(choice)
+    if cls is None:
+        logger.warning("Неизвестный AI_PROVIDER=%r, использую 'none'", choice)
+        return NoneProvider()
+    provider = cls()
+    if not provider.is_configured():
+        logger.warning("AI_PROVIDER=%r не настроен, использую 'none'", choice)
+        return NoneProvider()
+    return provider

@@ -21,17 +21,12 @@ def analyze_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Разобрать отклонения показателей отчёта с помощью ИИ-эксперта.
+    """Разобрать отклонения показателей отчёта.
 
-    Возвращает {deviations_count, summary, deviations:[...]}.
-    Если отклонений нет — summary с сообщением и пустой список.
+    Движок отклонений работает всегда (без модели). Если подключена экспертная
+    модель — добавляется текстовый разбор (трактовка, причины, действия).
+    Возвращает {deviations_count, model, summary, deviations:[...]}.
     """
-    if not ai_analysis.is_ai_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="AI-ассистент не настроен: не задан ANTHROPIC_API_KEY на сервере.",
-        )
-
     report = crud_report.get_report(db, report_id=report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Отчёт не найден")
@@ -42,17 +37,19 @@ def analyze_report(
     if not deviations:
         return {
             "deviations_count": 0,
+            "model": None,
             "summary": "Все показатели в пределах норм — отклонений не обнаружено.",
             "deviations": [],
         }
 
+    provider = ai_analysis.get_provider()
     try:
-        result = ai_analysis.analyze_deviations(ctx, deviations)
+        result = provider.analyze(ctx, deviations)
     except Exception as e:
-        logger.exception("AI-анализ отчёта %s не удался", report_id)
-        raise HTTPException(status_code=502, detail=f"Ошибка AI-ассистента: {e}")
+        logger.exception("AI-разбор отчёта %s (провайдер %s) не удался", report_id, provider.name)
+        raise HTTPException(status_code=502, detail=f"Ошибка экспертного слоя: {e}")
 
-    # Дополняем ответ модели фактами-числами из движка (по названию показателя)
+    # Дополняем ответ факты-числами из движка (по названию показателя)
     facts = {d["indicator"]: d for d in deviations}
     for item in result.get("deviations", []):
         f = facts.get(item.get("indicator"))
@@ -65,6 +62,7 @@ def analyze_report(
 
     return {
         "deviations_count": len(deviations),
+        "model": provider.name,
         "summary": result.get("summary", ""),
         "deviations": result.get("deviations", []),
     }
