@@ -53,67 +53,6 @@ class OneCConnectionConfig(BaseModel):
     endpoint: str = "/erp_24/hs/labindicators/indicators"
 
 
-# --- Показатели ---
-
-class OneCImportRequest(BaseModel):
-    """Запрос на импорт показателей из 1С."""
-    connection: OneCConnectionConfig
-    endpoint: str = "/api/v1/indicators"
-    field_mapping: Optional[Dict[str, str]] = None
-    skip_duplicates: bool = True
-
-
-class OneCImportResponse(BaseModel):
-    """Ответ на импорт показателей из 1С."""
-    status: str
-    total: int = 0
-    created: int = 0
-    skipped: int = 0
-    errors: List[Dict[str, Any]] = []
-    timestamp: str
-
-
-# --- Шаблоны ---
-
-class OneCTemplateImportRequest(BaseModel):
-    """Запрос на импорт шаблонов из 1С."""
-    connection: OneCConnectionConfig
-    endpoint: str = "/api/v1/analysis-templates"
-    field_mapping: Optional[Dict[str, str]] = None
-    skip_duplicates: bool = True
-
-
-class OneCTemplateImportResponse(BaseModel):
-    """Ответ на импорт шаблонов из 1С."""
-    status: str
-    total: int = 0
-    created: int = 0
-    updated: int = 0
-    skipped: int = 0
-    errors: List[Dict[str, Any]] = []
-    timestamp: str
-
-
-# --- Планы ---
-
-class OneCPlanImportRequest(BaseModel):
-    """Запрос на импорт планов из 1С."""
-    connection: OneCConnectionConfig
-    endpoint: str = "/api/v1/analysis-plans"
-    field_mapping: Optional[Dict[str, str]] = None
-    skip_duplicates: bool = True
-
-
-class OneCPlanImportResponse(BaseModel):
-    """Ответ на импорт планов из 1С."""
-    status: str
-    total: int = 0
-    created: int = 0
-    skipped: int = 0
-    errors: List[Dict[str, Any]] = []
-    timestamp: str
-
-
 # --- Проверка связи ---
 
 class OneCTestConnectionRequest(BaseModel):
@@ -194,158 +133,62 @@ async def test_1c_connection(
         await service.close()
 
 
-# ==================== Показатели ====================
+# ==================== Показатели (справочник) через OData ====================
 
-@router.post("/1c/import-indicators")
-async def import_indicators_from_1c(
-    request: OneCImportRequest,
+class OneCODataIndicatorImportRequest(BaseModel):
+    """Запрос на импорт справочника показателей из стандартного OData 1С."""
+    connection: OneCConnectionConfig
+    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Catalog_Показатели
+    name_field: str = "Description"
+    unit_field: str = "ЕдиницаИзмерения"
+    code_field: str = "Code"
+    skip_duplicates: bool = False
+
+
+@router.post("/1c/import-indicators-odata")
+async def import_indicators_from_1c_odata(
+    request: OneCODataIndicatorImportRequest,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
-    """
-    Импортировать справочник показателей из 1С Предприятие.
+    """Импортировать справочник показателей из СТАНДАРТНОГО OData 1С.
+
+    Сопоставление по Ref_Key (external_id). Именно external_id используется затем
+    при импорте шаблонов для связи показателей. Подключение берётся из вкладки
+    «Интеграция с 1С».
     """
     from app.services.external_integration import (
-        import_indicators_from_1c,
+        import_odata_indicators_from_1c,
         ExternalSystemConfig,
     )
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
     config = ExternalSystemConfig(
         base_url=request.connection.base_url,
         api_key=request.connection.api_key,
         username=request.connection.username,
         password=request.connection.password,
         timeout=request.connection.timeout,
-        endpoint=request.connection.endpoint,
+        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
     )
-    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (indicators_endpoint)
-    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    endpoint = request.connection.endpoint or (
+    endpoint = request.endpoint or (
         saved_config.indicators_endpoint if saved_config else None
-    ) or "/erp_24/hs/labindicators/indicators"
-    try:
-        result = await import_indicators_from_1c(
-            db=db, config=config, endpoint=endpoint,
-            field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
-        )
-        return OneCImportResponse(status="success" if not result["errors"] else "partial", **result)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Import failed: {str(e)}")
-
-
-@router.get("/1c/indicators")
-async def fetch_indicators_from_1c(
-    base_url: str,
-    api_key: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
-    endpoint: str = "/api/v1/indicators",
-    api_key_header: str = Depends(get_api_key),
-):
-    """
-    Получить список показателей из 1С без сохранения в БД.
-    Полезно для предпросмотра данных перед импортом.
-    """
-    from app.services.external_integration import OneCIntegrationService, ExternalSystemConfig
-    config = ExternalSystemConfig(base_url=base_url, api_key=api_key, username=username, password=password)
-    service = OneCIntegrationService(config)
-    try:
-        indicators = await service.fetch_indicators_from_1c(endpoint)
-        return {"status": "success", "count": len(indicators), "indicators": indicators}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch: {str(e)}")
-    finally:
-        await service.close()
-
-
-# ==================== Шаблоны анализов ====================
-
-@router.post("/1c/import-templates")
-async def import_templates_from_1c(
-    request: OneCTemplateImportRequest,
-    db: Session = Depends(get_db),
-    api_key: str = Depends(get_api_key)
-):
-    """
-    Импортировать шаблоны анализов из 1С Предприятие.
-    
-    Пример запроса:
-    {
-        "connection": {
-            "base_url": "http://1c-server:8080",
-            "api_key": "your-api-key"
-        },
-        "endpoint": "/api/v1/analysis-templates",
-        "field_mapping": {
-            "name": "Наименование",
-            "description": "Описание",
-            "is_active": "Активен",
-            "indicators": "Показатели"
-        },
-        "skip_duplicates": true
-    }
-    
-    Ожидаемый формат данных от 1С:
-    [
-        {
-            "id": 1,
-            "name": "Общий анализ крови",
-            "description": "Шаблон для общего анализа",
-            "is_active": true,
-            "indicators": [
-                {"indicator_id": 1, "min_value": 3.5, "max_value": 5.5, "sort_order": 0}
-            ]
-        }
-    ]
-    """
-    from app.services.external_integration import (
-        import_templates_from_1c,
-        ExternalSystemConfig,
     )
-    config = ExternalSystemConfig(
-        base_url=request.connection.base_url,
-        api_key=request.connection.api_key,
-        username=request.connection.username,
-        password=request.connection.password,
-        timeout=request.connection.timeout,
-    )
-    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (templates_endpoint)
-    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    endpoint = request.connection.endpoint or (
-        saved_config.templates_endpoint if saved_config else None
-    ) or "/erp_24/hs/labindicators/templates"
-    try:
-        result = await import_templates_from_1c(
-            db=db, config=config, endpoint=endpoint,
-            field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
+    if not endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не задан endpoint OData для показателей (вкладка «Интеграция с 1С»)",
         )
-        return OneCTemplateImportResponse(status="success" if not result["errors"] else "partial", **result)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Import failed: {str(e)}")
-
-
-@router.get("/1c/templates")
-async def fetch_templates_from_1c(
-    base_url: str,
-    api_key: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
-    endpoint: str = "/api/v1/analysis-templates",
-    api_key_header: str = Depends(get_api_key),
-):
-    """
-    Получить список шаблонов анализов из 1С без сохранения в БД.
-    Полезно для предпросмотра данных перед импортом.
-    """
-    from app.services.external_integration import OneCIntegrationService, ExternalSystemConfig
-    config = ExternalSystemConfig(base_url=base_url, api_key=api_key, username=username, password=password)
-    service = OneCIntegrationService(config)
     try:
-        templates = await service.fetch_templates_from_1c(endpoint)
-        return {"status": "success", "count": len(templates), "templates": templates}
+        result = await import_odata_indicators_from_1c(
+            db=db, config=config, endpoint=endpoint,
+            skip_duplicates=request.skip_duplicates,
+            name_field=request.name_field,
+            unit_field=request.unit_field,
+            code_field=request.code_field,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch: {str(e)}")
-    finally:
-        await service.close()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
 # --- Шаблоны через стандартный OData 1С ---
@@ -482,95 +325,65 @@ async def import_varieties_from_1c_odata(
         )
 
 
-# ==================== Планы анализов ====================
+# ==================== Планы анализов через OData ====================
 
-@router.post("/1c/import-plans")
-async def import_plans_from_1c(
-    request: OneCPlanImportRequest,
+class OneCODataPlanImportRequest(BaseModel):
+    """Запрос на импорт планов анализов из стандартного OData 1С (документ)."""
+    connection: OneCConnectionConfig
+    endpoint: Optional[str] = None  # напр. /erp_24/odata/standard.odata/Document_ПланАнализов
+    name_field: str = "Number"
+    date_field: str = "Date"
+    items_field: str = "СоставАнализов"
+    template_key_field: str = "ТиповойАнализ_Key"
+    batch_field: str = "Серия"
+    skip_duplicates: bool = True
+
+
+@router.post("/1c/import-plans-odata")
+async def import_plans_from_1c_odata(
+    request: OneCODataPlanImportRequest,
     db: Session = Depends(get_db),
     api_key: str = Depends(get_api_key)
 ):
-    """
-    Импортировать планы анализов из 1С Предприятие.
-    
-    Пример запроса:
-    {
-        "connection": {
-            "base_url": "http://1c-server:8080",
-            "api_key": "your-api-key"
-        },
-        "endpoint": "/api/v1/analysis-plans",
-        "field_mapping": {
-            "name": "Наименование",
-            "description": "Описание",
-            "plan_date": "ДатаПлана",
-            "items": "Элементы"
-        },
-        "skip_duplicates": true
-    }
-    
-    Ожидаемый формат данных от 1С:
-    [
-        {
-            "id": 1,
-            "name": "План на 18.06.2026",
-            "description": "План анализов на день",
-            "plan_date": "2026-06-18",
-            "items": [
-                {"template_id": 1, "batch_number": "П-001", "sort_order": 0}
-            ]
-        }
-    ]
+    """Импортировать планы анализов из СТАНДАРТНОГО OData 1С (документ с табличной частью).
+
+    Шаблоны позиций сопоставляются со справочником по external_id (GUID) — сначала
+    импортируйте шаблоны. Имена полей документа настраиваются в теле запроса.
     """
     from app.services.external_integration import (
-        import_plans_from_1c,
+        import_odata_plans_from_1c,
         ExternalSystemConfig,
     )
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
     config = ExternalSystemConfig(
         base_url=request.connection.base_url,
         api_key=request.connection.api_key,
         username=request.connection.username,
         password=request.connection.password,
         timeout=request.connection.timeout,
+        verify=bool(getattr(saved_config, "verify_ssl", False)) if saved_config else False,
     )
-    # Endpoint: из тела запроса, иначе из сохранённой конфигурации (plans_endpoint)
-    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
-    endpoint = request.connection.endpoint or (
+    endpoint = request.endpoint or (
         saved_config.plans_endpoint if saved_config else None
-    ) or "/erp_24/hs/labindicators/plans"
-    try:
-        result = await import_plans_from_1c(
-            db=db, config=config, endpoint=endpoint,
-            field_mapping=request.field_mapping, skip_duplicates=request.skip_duplicates,
+    )
+    if not endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Не задан endpoint OData для планов (вкладка «Интеграция с 1С»)",
         )
-        return OneCPlanImportResponse(status="success" if not result["errors"] else "partial", **result)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Import failed: {str(e)}")
-
-
-@router.get("/1c/plans")
-async def fetch_plans_from_1c(
-    base_url: str,
-    api_key: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
-    endpoint: str = "/api/v1/analysis-plans",
-    api_key_header: str = Depends(get_api_key),
-):
-    """
-    Получить список планов анализов из 1С без сохранения в БД.
-    Полезно для предпросмотра данных перед импортом.
-    """
-    from app.services.external_integration import OneCIntegrationService, ExternalSystemConfig
-    config = ExternalSystemConfig(base_url=base_url, api_key=api_key, username=username, password=password)
-    service = OneCIntegrationService(config)
     try:
-        plans = await service.fetch_plans_from_1c(endpoint)
-        return {"status": "success", "count": len(plans), "plans": plans}
+        result = await import_odata_plans_from_1c(
+            db=db, config=config, endpoint=endpoint,
+            skip_duplicates=request.skip_duplicates,
+            name_field=request.name_field,
+            date_field=request.date_field,
+            items_field=request.items_field,
+            template_key_field=request.template_key_field,
+            batch_field=request.batch_field,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch: {str(e)}")
-    finally:
-        await service.close()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
 # ==================== Отправка данных в 1С ====================

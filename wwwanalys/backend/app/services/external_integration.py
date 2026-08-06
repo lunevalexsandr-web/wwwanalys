@@ -1213,4 +1213,192 @@ async def import_odata_varieties_from_1c(
     finally:
         await service.close()
     return result
+
+
+# ==================== Показатели (справочник) через OData ====================
+
+async def import_odata_indicators_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    skip_duplicates: bool = False,
+    name_field: str = "Description",
+    unit_field: str = "ЕдиницаИзмерения",
+    code_field: str = "Code",
+) -> Dict[str, Any]:
+    """Импортировать справочник показателей из стандартного OData 1С.
+
+    Сопоставление по external_id (Ref_Key). name <- Description, unit <- unit_field
+    (если это скалярное значение), external_id <- Ref_Key. Именно external_id (GUID)
+    используется затем при импорте шаблонов для связи показателей.
+    """
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        items = [i for i in raw if not i.get("IsFolder") and not i.get("DeletionMark")]
+        result["total"] = len(items)
+        logger.info(f"OData показатели: получено {len(raw)}, к импорту {len(items)}")
+
+        for row in items:
+            try:
+                name = row.get(name_field)
+                if not name:
+                    result["skipped"] += 1
+                    continue
+                ref_key = row.get("Ref_Key")
+                ext_id = ref_key if (ref_key and ref_key != ZERO_GUID) else None
+                unit_val = row.get(unit_field)
+                unit = str(unit_val).strip() if isinstance(unit_val, (str, int, float)) and str(unit_val).strip() else None
+
+                existing = None
+                if ext_id:
+                    existing = db.query(IndicatorLibrary).filter(
+                        IndicatorLibrary.external_id == ext_id
+                    ).first()
+                if existing is None:
+                    existing = db.query(IndicatorLibrary).filter(
+                        IndicatorLibrary.name == str(name).strip()
+                    ).first()
+
+                if existing and skip_duplicates:
+                    result["skipped"] += 1
+                    continue
+
+                if existing:
+                    existing.name = str(name).strip()
+                    if unit:
+                        existing.unit = unit
+                    existing.external_id = ext_id or existing.external_id
+                    result["updated"] += 1
+                else:
+                    db.add(IndicatorLibrary(
+                        name=str(name).strip(),
+                        unit=unit,
+                        data_type="number",
+                        external_id=ext_id,
+                    ))
+                    result["created"] += 1
+            except Exception as e:
+                logger.error(f"Error processing indicator: {e}")
+                result["errors"].append({"indicator": row.get(name_field), "error": str(e)})
+
+        db.commit()
+        logger.info(
+            f"Indicators import (OData): {result['created']} created, "
+            f"{result['updated']} updated, {result['skipped']} skipped, "
+            f"{len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Indicators OData import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
+    return result
+
+
+# ==================== Планы анализов через OData ====================
+
+async def import_odata_plans_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    endpoint: str,
+    skip_duplicates: bool = True,
+    user_id: int = 1,
+    name_field: str = "Number",
+    date_field: str = "Date",
+    items_field: str = "СоставАнализов",
+    template_key_field: str = "ТиповойАнализ_Key",
+    batch_field: str = "Серия",
+) -> Dict[str, Any]:
+    """Импортировать планы анализов из стандартного OData 1С (документ с табличной частью).
+
+    Шаблоны позиций сопоставляются со справочником AnalysisType по external_id (GUID).
+    Поля документа настраиваются (по умолчанию — типичные имена ERP). Требует
+    предварительного импорта шаблонов из 1С.
+    """
+    service = OneCIntegrationService(config)
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        raw = await service._fetch_list(endpoint, params={"$format": "json"}, key="value")
+        docs = [d for d in raw if not d.get("DeletionMark")]
+        result["total"] = len(docs)
+        logger.info(f"OData планы: получено {len(raw)}, к импорту {len(docs)}")
+
+        # индекс шаблонов по GUID
+        tpl_by_guid: Dict[str, AnalysisType] = {}
+        for t in db.query(AnalysisType).all():
+            if t.external_id:
+                tpl_by_guid[str(t.external_id).lower()] = t
+
+        for doc in docs:
+            try:
+                name = doc.get(name_field) or doc.get("Description")
+                if not name:
+                    result["skipped"] += 1
+                    continue
+                ref_key = doc.get("Ref_Key")
+                ext_id = ref_key if (ref_key and ref_key != ZERO_GUID) else None
+
+                existing = None
+                if ext_id:
+                    existing = db.query(AnalysisPlan).filter(
+                        AnalysisPlan.external_id == ext_id
+                    ).first() if hasattr(AnalysisPlan, "external_id") else None
+                if existing and skip_duplicates:
+                    result["skipped"] += 1
+                    continue
+
+                date_raw = doc.get(date_field)
+                try:
+                    plan_date = date.fromisoformat(str(date_raw)[:10]) if date_raw else date.today()
+                except Exception:
+                    plan_date = date.today()
+
+                plan = AnalysisPlan(
+                    name=str(name),
+                    plan_date=plan_date,
+                    created_by=user_id,
+                )
+                if hasattr(plan, "external_id"):
+                    plan.external_id = ext_id
+                db.add(plan)
+                db.flush()
+
+                for idx, row in enumerate(doc.get(items_field, []) or []):
+                    guid = str(row.get(template_key_field, "")).lower()
+                    tpl = tpl_by_guid.get(guid)
+                    if not tpl:
+                        continue
+                    db.add(PlanItem(
+                        plan_id=plan.id,
+                        template_id=tpl.id,
+                        batch_number=str(row.get(batch_field, "") or ""),
+                        sort_order=idx,
+                    ))
+                result["created"] += 1
+            except Exception as e:
+                logger.error(f"Error processing plan: {e}")
+                result["errors"].append({"plan": doc.get(name_field), "error": str(e)})
+
+        db.commit()
+        logger.info(
+            f"Plans import (OData): {result['created']} created, "
+            f"{result['skipped']} skipped, {len(result['errors'])} errors"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Plans OData import failed: {str(e)}")
+        result["errors"].append({"error": str(e)})
+        raise
+    finally:
+        await service.close()
     return result

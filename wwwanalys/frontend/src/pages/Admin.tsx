@@ -71,9 +71,9 @@ const Admin: React.FC = () => {
   const [c1CApiKey, setC1CApiKey] = useState('');
   const [c1CUsername, setC1CUsername] = useState('');
   const [c1CPassword, setC1CPassword] = useState('');
-  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/hs/labindicators/indicators');
-  const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_24/hs/labindicators/templates');
-  const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_24/hs/labindicators/plans');
+  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Показатели');
+  const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
+  const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_24/odata/standard.odata/Document_ПланАнализов');
   const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Сорта');
 
   const [showUserModal, setShowUserModal] = useState(false);
@@ -520,16 +520,18 @@ const Admin: React.FC = () => {
     setIs1CImporting(true);
     setImport1CResult(null);
     try {
-      const response = await api.post('/api/external/1c/import-indicators', {
-        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CEndpoint },
-        skip_duplicates: true,
+      const response = await api.post('/api/external/1c/import-indicators-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1CEndpoint || undefined,
+        skip_duplicates: false,
       });
       setImport1CResult(response.data);
-      if (response.data.status === 'success') {
-        showToast(`Импорт завершён: создано ${response.data.created}, пропущено ${response.data.skipped}`, 'success');
+      const r = response.data;
+      if (r.status === 'success') {
+        showToast(`Импорт показателей завершён: создано ${r.created}, обновлено ${r.updated}, пропущено ${r.skipped}`, 'success');
         fetchLibraryIndicators();
       } else {
-        showToast(`Импорт завершён с ошибками: создано ${response.data.created}, ошибок ${response.data.errors.length}`, 'warning');
+        showToast(`Импорт показателей с ошибками: создано ${r.created}, ошибок ${r.errors.length}`, 'warning');
         fetchLibraryIndicators();
       }
     } catch (error: any) {
@@ -544,9 +546,10 @@ const Admin: React.FC = () => {
     setIs1CImporting(true);
     setImport1CResult(null);
     try {
-      const response = await api.post('/api/external/1c/import-templates', {
-        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CTemplatesEndpoint },
-        skip_duplicates: true,
+      const response = await api.post('/api/external/1c/import-templates-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1CTemplatesEndpoint || undefined,
+        skip_duplicates: false,
       });
       setImport1CResult(response.data);
       if (response.data.status === 'success') {
@@ -568,8 +571,9 @@ const Admin: React.FC = () => {
     setIs1CImporting(true);
     setImport1CResult(null);
     try {
-      const response = await api.post('/api/external/1c/import-plans', {
-        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined, endpoint: c1CPlansEndpoint },
+      const response = await api.post('/api/external/1c/import-plans-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        endpoint: c1CPlansEndpoint || undefined,
         skip_duplicates: true,
       });
       setImport1CResult(response.data);
@@ -616,9 +620,9 @@ const Admin: React.FC = () => {
       setC1CBaseUrl(cfg.base_url || '');
       setC1CApiKey(cfg.api_key || '');
       setC1CUsername(cfg.username || '');
-      setC1CEndpoint(cfg.endpoint || '/erp_24/hs/labindicators/indicators');
-      setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_24/hs/labindicators/templates');
-      setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_24/hs/labindicators/plans');
+      setC1CEndpoint(cfg.indicators_endpoint || cfg.endpoint || '/erp_24/odata/standard.odata/Catalog_Показатели');
+      setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
+      setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_24/odata/standard.odata/Document_ПланАнализов');
       setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_24/odata/standard.odata/Catalog_Сорта');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
@@ -1333,24 +1337,24 @@ const Admin: React.FC = () => {
               </Col>
             </Row>
             <Form.Group className="mb-3">
-              <Form.Label>Путь к API 1С (endpoint показателей)</Form.Label>
-              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/indicators" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки показателей, например: /erp_24/hs/labindicators/indicators</Form.Text>
+              <Form.Label>OData 1С — справочник показателей</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/odata/standard.odata/Catalog_Показатели" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Стандартный OData-справочник показателей, например: /erp_24/odata/standard.odata/Catalog_Показатели</Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Путь к API 1С (endpoint шаблонов анализа)</Form.Label>
-              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/templates" value={c1CTemplatesEndpoint} onChange={(e) => setC1CTemplatesEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки шаблонов анализа, например: /erp_24/hs/labindicators/templates</Form.Text>
+              <Form.Label>OData 1С — шаблоны анализа</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий" value={c1CTemplatesEndpoint} onChange={(e) => setC1CTemplatesEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Стандартный OData-справочник шаблонов (ТиповыеАнализыСерий)</Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Путь к API 1С (endpoint планов анализа)</Form.Label>
-              <Form.Control type="text" placeholder="/erp_24/hs/labindicators/plans" value={c1CPlansEndpoint} onChange={(e) => setC1CPlansEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Путь HTTP-сервиса 1С для загрузки планов анализа, например: /erp_24/hs/labindicators/plans</Form.Text>
+              <Form.Label>OData 1С — планы анализа</Form.Label>
+              <Form.Control type="text" placeholder="/erp_24/odata/standard.odata/Document_ПланАнализов" value={c1CPlansEndpoint} onChange={(e) => setC1CPlansEndpoint(e.target.value)} />
+              <Form.Text className="text-muted">Стандартный OData-документ планов анализа</Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
-              <Form.Label>Путь OData 1С (справочник сортов)</Form.Label>
+              <Form.Label>OData 1С — справочник сортов</Form.Label>
               <Form.Control type="text" placeholder="/erp_24/odata/standard.odata/Catalog_Сорта" value={c1CVarietiesEndpoint} onChange={(e) => setC1CVarietiesEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Стандартный OData-справочник сортов в 1С, например: /erp_24/odata/standard.odata/Catalog_Сорта</Form.Text>
+              <Form.Text className="text-muted">Стандартный OData-справочник сортов в 1С</Form.Text>
             </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
