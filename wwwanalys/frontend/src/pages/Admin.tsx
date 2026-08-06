@@ -79,6 +79,8 @@ const Admin: React.FC = () => {
   const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Сорта');
   const [c1COptionsEndpoint, setC1COptionsEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
   const [c1CStorageEndpoint, setC1CStorageEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Склады');
+  const [c1CResFrom, setC1CResFrom] = useState('');
+  const [c1CResTo, setC1CResTo] = useState('');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -644,6 +646,26 @@ const Admin: React.FC = () => {
       }
     } catch (error: any) {
       showToast(error.response?.data?.detail || 'Ошибка загрузки вариантов значений', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
+  const handleImportResultsFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    if (!c1CResFrom || !c1CResTo) { showToast('Укажите период (с/по)', 'warning'); return; }
+    setIs1CImporting(true);
+    setImport1CResult(null);
+    try {
+      const response = await api.post('/api/external/1c/import-results-odata', {
+        connection: { base_url: c1CBaseUrl, api_key: c1CApiKey || undefined, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        date_from: c1CResFrom,
+        date_to: c1CResTo,
+      });
+      const r = response.data;
+      showToast(`Результаты: документов ${r.documents}, отчётов +${r.reports_created}/${r.reports_updated}, значений ${r.values}`, r.status === 'success' ? 'success' : 'warning');
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка импорта результатов', 'danger');
     } finally {
       setIs1CImporting(false);
     }
@@ -1469,6 +1491,14 @@ const Admin: React.FC = () => {
               <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Склады" value={c1CStorageEndpoint} onChange={(e) => setC1CStorageEndpoint(e.target.value)} />
               <Form.Text className="text-muted">Из папки «Емкости» наполняются «Номер ёмкости» и «Номер танка» (подпапка «Танки»)</Form.Text>
             </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Результаты анализов за период (из 1С)</Form.Label>
+              <Row className="g-2">
+                <Col><Form.Control type="date" value={c1CResFrom} onChange={(e) => setC1CResFrom(e.target.value)} /></Col>
+                <Col><Form.Control type="date" value={c1CResTo} onChange={(e) => setC1CResTo(e.target.value)} /></Col>
+              </Row>
+              <Form.Text className="text-muted">Документы «УстановкаАнализовСерии» → отчёты приложения (идемпотентно)</Form.Text>
+            </Form.Group>
             {connection1CStatus !== 'idle' && (
               <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
             )}
@@ -1505,6 +1535,9 @@ const Admin: React.FC = () => {
           </Button>
           <Button variant="outline-dark" onClick={handleImportStorageFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить ёмкости/танки'}
+          </Button>
+          <Button variant="success" onClick={handleImportResultsFrom1C} disabled={is1CImporting}>
+            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить результаты за период'}
           </Button>
           <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
             {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}

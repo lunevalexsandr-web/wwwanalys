@@ -229,6 +229,38 @@ async def import_indicator_options_from_1c_odata(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
+# --- Результаты анализов за период ---
+
+class OneCODataResultsImportRequest(BaseModel):
+    """Запрос на импорт результатов анализов за период (документ УстановкаАнализовСерии)."""
+    connection: OneCConnectionConfig
+    date_from: str  # YYYY-MM-DD
+    date_to: str    # YYYY-MM-DD
+
+
+@router.post("/1c/import-results-odata")
+async def import_results_from_1c_odata(
+    request: OneCODataResultsImportRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Импортировать результаты анализов за период из 1С в отчёты приложения."""
+    from app.services.external_integration import import_odata_results_from_1c
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    config = _build_service_config(request.connection, saved_config)
+    config.timeout = 180  # регистр/документы большие
+    uid = db.query(User).order_by(User.id).first()
+    try:
+        result = await import_odata_results_from_1c(
+            db=db, config=config,
+            date_from=request.date_from, date_to=request.date_to,
+            user_id=uid.id if uid else 1,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
+
+
 # --- Ёмкости/танки из справочника Склады ---
 
 class OneCODataStorageImportRequest(BaseModel):

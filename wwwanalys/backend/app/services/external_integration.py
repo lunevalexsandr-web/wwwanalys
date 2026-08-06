@@ -1308,44 +1308,55 @@ async def import_odata_indicators_from_1c(
         result["total"] = len(items)
         logger.info(f"OData показатели: получено {len(raw)}, к импорту {len(items)}")
 
+        # сопоставление ТОЛЬКО по GUID; дубли имён (в 1С бывают) различаем по коду
+        existing_all = db.query(IndicatorLibrary).all()
+        by_guid = {str(i.external_id).lower(): i for i in existing_all if i.external_id}
+        used_names = {i.name for i in existing_all}
+
+        def _uniq_ind(name, code, guid):
+            if name not in used_names:
+                return name
+            suffix = (str(code).strip() if code else None) or (guid or "")[:8] or "dup"
+            cand = f"{name} ({suffix})"
+            k = 2
+            while cand in used_names:
+                cand = f"{name} ({suffix}-{k})"; k += 1
+            return cand
+
         for row in items:
             try:
-                name = row.get(name_field)
+                name = (row.get(name_field) or "").strip()
                 if not name:
                     result["skipped"] += 1
                     continue
                 ref_key = row.get("Ref_Key")
                 ext_id = ref_key if (ref_key and ref_key != ZERO_GUID) else None
+                gkey = str(ext_id).lower() if ext_id else None
                 unit_val = row.get(unit_field)
                 unit = str(unit_val).strip() if isinstance(unit_val, (str, int, float)) and str(unit_val).strip() else None
+                code = row.get(code_field)
 
-                existing = None
-                if ext_id:
-                    existing = db.query(IndicatorLibrary).filter(
-                        IndicatorLibrary.external_id == ext_id
-                    ).first()
-                if existing is None:
-                    existing = db.query(IndicatorLibrary).filter(
-                        IndicatorLibrary.name == str(name).strip()
-                    ).first()
-
+                existing = by_guid.get(gkey) if gkey else None
                 if existing and skip_duplicates:
                     result["skipped"] += 1
                     continue
 
                 if existing:
-                    existing.name = str(name).strip()
+                    if name != existing.name:
+                        nm = _uniq_ind(name, code, ext_id)
+                        used_names.discard(existing.name)
+                        used_names.add(nm)
+                        existing.name = nm
                     if unit:
                         existing.unit = unit
-                    existing.external_id = ext_id or existing.external_id
                     result["updated"] += 1
                 else:
-                    db.add(IndicatorLibrary(
-                        name=str(name).strip(),
-                        unit=unit,
-                        data_type="number",
-                        external_id=ext_id,
-                    ))
+                    nm = _uniq_ind(name, code, ext_id)
+                    ind = IndicatorLibrary(name=nm, unit=unit, data_type="number", external_id=ext_id)
+                    db.add(ind)
+                    used_names.add(nm)
+                    if gkey:
+                        by_guid[gkey] = ind
                     result["created"] += 1
             except Exception as e:
                 logger.error(f"Error processing indicator: {e}")
