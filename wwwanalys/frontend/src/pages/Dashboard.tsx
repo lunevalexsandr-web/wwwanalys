@@ -69,6 +69,8 @@ const Dashboard: React.FC = () => {
       unit: ti.unit,
       min_value: ti.min_value,
       max_value: ti.max_value,
+      norm_text: (ti as any).norm_text,
+      days: (ti as any).days || [],
       data_type: ti.data_type,
       options: ti.options,
       is_library: true
@@ -325,26 +327,39 @@ const Dashboard: React.FC = () => {
     setIndicatorValues(values);
   };
 
-  const handleIndicatorValueChange = (indicatorId: number, value: string) => {
+  const handleIndicatorValueChange = (indicatorId: number, value: string, day?: number) => {
     setIndicatorValues(prev => {
       const updated = [...prev];
-      const index = updated.findIndex(v => v.indicator_id === indicatorId);
-      
-      if (index !== -1) {
-        updated[index] = { ...updated[index], value };
-        
-        const allIndicators = selectedTemplate ? getAllIndicators(selectedTemplate) : [];
-        const indicator = allIndicators.find(ind => ind.id === indicatorId);
-        if (indicator && indicator.min_value !== null && indicator.max_value !== null) {
-          const numValue = parseFloat(value);
-          if (!isNaN(numValue)) {
-            updated[index].is_normal = numValue >= indicator.min_value && 
-                                       numValue <= indicator.max_value;
-          }
+      const index = updated.findIndex(
+        (v: any) => v.indicator_id === indicatorId && (v.day ?? undefined) === (day ?? undefined)
+      );
+
+      const allIndicators = selectedTemplate ? getAllIndicators(selectedTemplate) : [];
+      const indicator = allIndicators.find(ind => ind.id === indicatorId);
+      let is_normal: boolean | undefined = undefined;
+      // для одиночных показателей считаем на клиенте; для многодневных норму
+      // подберёт бэкенд (она может отличаться по дню)
+      if (day === undefined && indicator && indicator.min_value !== null && indicator.max_value !== null) {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+          is_normal = numValue >= indicator.min_value && numValue <= indicator.max_value;
         }
+      }
+
+      if (index !== -1) {
+        updated[index] = { ...updated[index], value, is_normal };
+      } else {
+        updated.push({ indicator_id: indicatorId, day, value, is_normal } as any);
       }
       return updated;
     });
+  };
+
+  const getValue = (indicatorId: number, day?: number): string => {
+    const entry: any = indicatorValues.find(
+      (v: any) => v.indicator_id === indicatorId && (v.day ?? undefined) === (day ?? undefined)
+    );
+    return (entry?.value ?? '') as string;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -355,8 +370,11 @@ const Dashboard: React.FC = () => {
       return;
     }
     
-    if (indicatorValues.some(v => v.value === '' || v.value === undefined)) {
-      showToast('Пожалуйста, заполните все значения показателей', 'warning');
+    const filledValues = indicatorValues.filter(
+      (v: any) => v.value !== '' && v.value !== undefined && v.value !== null
+    );
+    if (filledValues.length === 0) {
+      showToast('Заполните хотя бы одно значение показателя', 'warning');
       return;
     }
     
@@ -368,12 +386,13 @@ const Dashboard: React.FC = () => {
         batch_number: batchNumber,
         variety: variety || null,
         container: container || null,
-        values: indicatorValues.map(v => ({
+        values: filledValues.map((v: any) => ({
           indicator_id: v.indicator_id,
-          value: typeof v.value === 'string' && !isNaN(parseFloat(v.value)) 
-            ? parseFloat(v.value) 
+          value: typeof v.value === 'string' && !isNaN(parseFloat(v.value))
+            ? parseFloat(v.value)
             : v.value,
-          is_normal: v.is_normal
+          is_normal: v.is_normal,
+          day: v.day ?? undefined,
         }))
       };
 
@@ -494,18 +513,14 @@ const Dashboard: React.FC = () => {
       setIsEditing(true);
       setEditingReportId(reportId);
       
-      const allIndicators = getAllIndicators(template);
-      const values = allIndicators.map(indicator => {
-        const existingValue = report.indicator_values?.find(
-          (v: any) => v.indicator_id === indicator.id
-        );
-        return {
-          indicator_id: indicator.id,
-          value: existingValue?.value?.toString() || existingValue?.text_value || '',
-          is_normal: existingValue?.is_normal
-        };
-      });
-      setIndicatorValues(values);
+      // сохранённые значения (в т.ч. по дням) переносим как есть
+      const stored = (report.indicator_values || []).map((v: any) => ({
+        indicator_id: v.indicator_id,
+        day: v.day ?? undefined,
+        value: (v.value !== null && v.value !== undefined) ? v.value.toString() : (v.text_value || ''),
+        is_normal: v.is_normal,
+      }));
+      setIndicatorValues(stored as any);
       
       setActiveTab('new-report');
     } catch (error) {
@@ -714,6 +729,54 @@ const Dashboard: React.FC = () => {
                                   <div key={indicator.id} className="col-12">
                                     <Card>
                                       <CardBody>
+                                        {indicator.days && indicator.days.length > 0 ? (
+                                          /* Многодневный показатель — ввод по дням */
+                                          <div>
+                                            <Form.Label className="mb-2">
+                                              {indicator.name}, {indicator.unit}
+                                              <Badge bg="warning" text="dark" className="ms-1" pill>по дням</Badge>
+                                              {(indicator.min_value !== null || indicator.max_value !== null) && (
+                                                <small className="text-muted ms-2">
+                                                  Норма: {indicator.min_value !== null ? `от ${indicator.min_value}` : ''} {indicator.max_value !== null ? `до ${indicator.max_value}` : ''}
+                                                </small>
+                                              )}
+                                              {indicator.norm_text && (
+                                                <small className="text-muted ms-2">Норма: {indicator.norm_text}</small>
+                                              )}
+                                            </Form.Label>
+                                            <div className="d-flex flex-wrap gap-2">
+                                              {indicator.days.map((d: number) => (
+                                                <div key={d} style={{ width: 110 }}>
+                                                  <small className="text-muted d-block">День {d}</small>
+                                                  {indicator.data_type === 'select' ? (
+                                                    <Form.Select
+                                                      size="sm"
+                                                      value={getValue(indicator.id, d)}
+                                                      onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value, d)}
+                                                    >
+                                                      <option value="">—</option>
+                                                      {(indicator.options || []).map((opt: string, i: number) => (
+                                                        <option key={i} value={opt}>{opt}</option>
+                                                      ))}
+                                                    </Form.Select>
+                                                  ) : (
+                                                    <Form.Control
+                                                      size="sm"
+                                                      type={indicator.data_type === 'number' ? 'number' : 'text'}
+                                                      value={getValue(indicator.id, d)}
+                                                      onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value, d)}
+                                                      step={indicator.data_type === 'number' ? '0.01' : undefined}
+                                                      placeholder="—"
+                                                    />
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                            <small className="text-muted d-block mt-1">
+                                              Заполняйте по мере наступления дней — отчёт можно сохранять частично.
+                                            </small>
+                                          </div>
+                                        ) : (
                                         <div className="row g-3">
                                             <div className="col-md-4">
                                             <Form.Label>
@@ -722,11 +785,13 @@ const Dashboard: React.FC = () => {
                                                 <Badge bg="info" className="ms-1" pill>Справочник</Badge>
                                               )}
                                             </Form.Label>
-                                            {(indicator.min_value !== null || indicator.max_value !== null) && (
+                                            {(indicator.min_value !== null || indicator.max_value !== null) ? (
                                               <small className="text-muted d-block">
                                                 Норма: {indicator.min_value !== null ? `от ${indicator.min_value}` : ''} {indicator.max_value !== null ? `до ${indicator.max_value}` : ''}
                                               </small>
-                                            )}
+                                            ) : indicator.norm_text ? (
+                                              <small className="text-muted d-block">Норма: {indicator.norm_text}</small>
+                                            ) : null}
                                           </div>
                                           <div className="col-md-8">
                                             {indicator.data_type === 'select' ? (
@@ -734,7 +799,6 @@ const Dashboard: React.FC = () => {
                                                 className={isOutOfRange ? 'is-invalid' : ''}
                                                 value={indicatorValue?.value || ''}
                                                 onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
-                                                required
                                               >
                                                 <option value="">-- Выберите --</option>
                                                 {(indicator.options || []).map((opt: string, i: number) => (
@@ -749,16 +813,15 @@ const Dashboard: React.FC = () => {
                                                 onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value)}
                                                 step={indicator.data_type === 'number' ? '0.01' : undefined}
                                                 placeholder={`Введите значение (${indicator.data_type})`}
-                                                required
                                               />
                                             )}
-                                            
+
                                             {indicatorValue?.value && indicator.data_type === 'select' && indicator.options && (
                                               <small className="text-muted d-block mt-1">
                                                 Варианты: {indicator.options.join(', ')}
                                               </small>
                                             )}
-                                            
+
                                             {isOutOfRange && (
                                               <div className="invalid-feedback d-block">
                                                 Значение вне нормы!
@@ -766,6 +829,7 @@ const Dashboard: React.FC = () => {
                                             )}
                                           </div>
                                         </div>
+                                        )}
                                       </CardBody>
                                     </Card>
                                   </div>
@@ -985,6 +1049,7 @@ const Dashboard: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Показатель</th>
+                        <th>День</th>
                         <th>Значение</th>
                         <th>Норма</th>
                         <th>Статус</th>
@@ -994,6 +1059,7 @@ const Dashboard: React.FC = () => {
                       {viewReportIndicators.map((v, i) => (
                         <tr key={i}>
                           <td>{v.name}, {v.unit}</td>
+                          <td>{v.day !== null && v.day !== undefined ? v.day : '—'}</td>
                           <td><strong>{v.value || v.text_value || '-'}</strong></td>
                           <td>
                             {(v.min_value !== null && v.min_value !== undefined) || (v.max_value !== null && v.max_value !== undefined)
