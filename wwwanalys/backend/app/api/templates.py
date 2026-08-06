@@ -166,6 +166,39 @@ def get_active_templates(
     return result
 
 
+@router.get("/{template_id}/resolved-norms")
+def get_resolved_norms(
+    template_id: int,
+    variety: Optional[str] = None,
+    container: Optional[str] = None,
+    object_key: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Подобрать нормы для показателей шаблона под контекст (сорт/тара/объект) и день.
+    Возвращает [{indicator_id, day, min_value, max_value, norm_text}] — для живого
+    отображения нормы в форме отчёта."""
+    from app.models import TemplateIndicator
+    from app.services.norms import resolve_norm, get_schedule_days, variety_key_by_name
+    vkey = variety_key_by_name(db, variety)
+    tis = db.query(TemplateIndicator).filter(TemplateIndicator.template_id == template_id).all()
+    out = []
+    for ti in tis:
+        days = get_schedule_days(db, template_id, ti.indicator_id) or [None]
+        for d in days:
+            n = resolve_norm(db, template_id, ti.indicator_id,
+                             day=d, container=container or None,
+                             variety_key=vkey, object_key=object_key or None)
+            out.append({
+                "indicator_id": ti.indicator_id,
+                "day": d,
+                "min_value": n.min_value if n else None,
+                "max_value": n.max_value if n else None,
+                "norm_text": n.norm_text if n else None,
+            })
+    return out
+
+
 @router.get("/{template_id}/norms")
 def get_template_norms(
     template_id: int,

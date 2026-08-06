@@ -22,6 +22,7 @@ const Dashboard: React.FC = () => {
   const [container, setContainer] = useState('');
   const [objectKey, setObjectKey] = useState('');
   const [objectOptions, setObjectOptions] = useState<{ key: string; name: string }[]>([]);
+  const [normMap, setNormMap] = useState<Record<string, any>>({});
   const [indicatorValues, setIndicatorValues] = useState<IndicatorValue[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -61,6 +62,28 @@ const Dashboard: React.FC = () => {
       .then((r) => setVarietyOptions((r.data || []).map((v: any) => v.name)))
       .catch(() => setVarietyOptions([]));
   }, []);
+
+  // Живой подбор норм под контекст (сорт/тара/объект) — для отображения в форме
+  useEffect(() => {
+    if (!selectedTemplate) { setNormMap({}); return; }
+    const params: any = {};
+    if (variety) params.variety = variety;
+    if (container) params.container = container;
+    if (objectKey) params.object_key = objectKey;
+    api.get(`/api/templates/${selectedTemplate.id}/resolved-norms`, { params })
+      .then((r) => {
+        const m: Record<string, any> = {};
+        (r.data || []).forEach((n: any) => {
+          m[`${n.indicator_id}:${n.day ?? ''}`] = n;
+        });
+        setNormMap(m);
+      })
+      .catch(() => setNormMap({}));
+  }, [selectedTemplate, variety, container, objectKey]);
+
+  const getNorm = (indicatorId: number, day?: number) => {
+    return normMap[`${indicatorId}:${day ?? ''}`] || null;
+  };
 
   /**
    * Получить все показатели шабона (только из справочника).
@@ -314,6 +337,21 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const resetNewReportForm = () => {
+    setSelectedTemplate(null);
+    setTemplateSearch('');
+    setBatchNumber('');
+    setVariety('');
+    setContainer('');
+    setObjectKey('');
+    setObjectOptions([]);
+    setIndicatorValues([]);
+    setNormMap({});
+    setIsEditing(false);
+    setEditingReportId(null);
+    setPlanItemId(null);
+  };
+
   const handleTemplateSelect = async (template: AnalysisType) => {
     setBatchNumber('');
     setVariety('');
@@ -448,20 +486,8 @@ const Dashboard: React.FC = () => {
         }
       }
       
-      setBatchNumber('');
-    setVariety('');
-    setContainer('');
-    setObjectKey('');
-      setPlanItemId(null);
-      if (selectedTemplate) {
-        const allIndicators = getAllIndicators(selectedTemplate);
-        setIndicatorValues(allIndicators.map(indicator => ({
-          indicator_id: indicator.id,
-          value: '',
-          is_normal: undefined
-        })));
-      }
-      
+      // после отправки — чистая стартовая страница (только поиск шаблона)
+      resetNewReportForm();
       fetchReports();
     } catch (error: any) {
       console.error('Error submitting report:', error);
@@ -615,7 +641,10 @@ const Dashboard: React.FC = () => {
               <p className="text-muted mb-0">Внесение данных и просмотр истории анализов</p>
             </div>
 
-            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'new-report')} className="mb-4">
+            <Tabs activeKey={activeTab} onSelect={(k) => {
+              setActiveTab(k || 'new-report');
+              if (k === 'new-report' && !isEditing) resetNewReportForm();
+            }} className="mb-4">
               <Tab eventKey="new-report" title={
                 <span>Новый отчет</span>
               }>
@@ -779,12 +808,17 @@ const Dashboard: React.FC = () => {
                               const allIndicators = getAllIndicators(selectedTemplate);
                               return allIndicators.map((indicator: any) => {
                                 const indicatorValue = indicatorValues.find(v => v.indicator_id === indicator.id);
-                                const isOutOfRange = indicatorValue && 
-                                    indicator.min_value !== null && 
-                                    indicator.max_value !== null &&
+                                // норма, подобранная под контекст (сорт/тара/объект); фолбэк — базовая
+                                const nrm = getNorm(indicator.id);
+                                const eMin = nrm ? nrm.min_value : indicator.min_value;
+                                const eMax = nrm ? nrm.max_value : indicator.max_value;
+                                const eNormText = nrm ? nrm.norm_text : indicator.norm_text;
+                                const isOutOfRange = indicatorValue &&
+                                    eMin !== null && eMin !== undefined &&
+                                    eMax !== null && eMax !== undefined &&
                                     !isNaN(parseFloat(indicatorValue.value as string)) &&
-                                    (parseFloat(indicatorValue.value as string) < indicator.min_value || 
-                                     parseFloat(indicatorValue.value as string) > indicator.max_value);
+                                    (parseFloat(indicatorValue.value as string) < eMin ||
+                                     parseFloat(indicatorValue.value as string) > eMax);
                                 
                                 return (
                                   <div key={indicator.id} className="col-12">
@@ -796,19 +830,16 @@ const Dashboard: React.FC = () => {
                                             <Form.Label className="mb-2">
                                               {indicator.name}, {indicator.unit}
                                               <Badge bg="warning" text="dark" className="ms-1" pill>по дням</Badge>
-                                              {(indicator.min_value !== null || indicator.max_value !== null) && (
-                                                <small className="text-muted ms-2">
-                                                  Норма: {indicator.min_value !== null ? `от ${indicator.min_value}` : ''} {indicator.max_value !== null ? `до ${indicator.max_value}` : ''}
-                                                </small>
-                                              )}
-                                              {indicator.norm_text && (
-                                                <small className="text-muted ms-2">Норма: {indicator.norm_text}</small>
-                                              )}
                                             </Form.Label>
                                             <div className="d-flex flex-wrap gap-2">
-                                              {indicator.days.map((d: number) => (
-                                                <div key={d} style={{ width: 110 }}>
-                                                  <small className="text-muted d-block">День {d}</small>
+                                              {indicator.days.map((d: number) => {
+                                                const dn = getNorm(indicator.id, d);
+                                                const dNorm = dn && (dn.min_value != null || dn.max_value != null)
+                                                  ? `${dn.min_value ?? '?'}–${dn.max_value ?? '?'}`
+                                                  : (dn && dn.norm_text ? dn.norm_text : '');
+                                                return (
+                                                <div key={d} style={{ width: 120 }}>
+                                                  <small className="text-muted d-block">День {d}{dNorm ? ` · ${dNorm}` : ''}</small>
                                                   {indicator.data_type === 'select' ? (
                                                     <Form.Select
                                                       size="sm"
@@ -831,7 +862,8 @@ const Dashboard: React.FC = () => {
                                                     />
                                                   )}
                                                 </div>
-                                              ))}
+                                                );
+                                              })}
                                             </div>
                                             <small className="text-muted d-block mt-1">
                                               Заполняйте по мере наступления дней — отчёт можно сохранять частично.
@@ -846,12 +878,12 @@ const Dashboard: React.FC = () => {
                                                 <Badge bg="info" className="ms-1" pill>Справочник</Badge>
                                               )}
                                             </Form.Label>
-                                            {(indicator.min_value !== null || indicator.max_value !== null) ? (
+                                            {(eMin !== null && eMin !== undefined) || (eMax !== null && eMax !== undefined) ? (
                                               <small className="text-muted d-block">
-                                                Норма: {indicator.min_value !== null ? `от ${indicator.min_value}` : ''} {indicator.max_value !== null ? `до ${indicator.max_value}` : ''}
+                                                Норма: {eMin !== null && eMin !== undefined ? `от ${eMin}` : ''} {eMax !== null && eMax !== undefined ? `до ${eMax}` : ''}
                                               </small>
-                                            ) : indicator.norm_text ? (
-                                              <small className="text-muted d-block">Норма: {indicator.norm_text}</small>
+                                            ) : eNormText ? (
+                                              <small className="text-muted d-block">Норма: {eNormText}</small>
                                             ) : null}
                                           </div>
                                           <div className="col-md-8">
