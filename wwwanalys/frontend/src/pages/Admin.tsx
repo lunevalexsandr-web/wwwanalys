@@ -28,6 +28,9 @@ const Admin: React.FC = () => {
   const [previewTemplate, setPreviewTemplate] = useState<AnalysisType | null>(null);
   const [previewNorms, setPreviewNorms] = useState<any[]>([]);
   const [normSearch, setNormSearch] = useState('');
+  const [tplSearch, setTplSearch] = useState('');
+  const [presetSearch, setPresetSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
 
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyTemplateId, setCopyTemplateId] = useState<number | null>(null);
@@ -868,12 +871,17 @@ const Admin: React.FC = () => {
                       <div className="text-center py-8"><p className="text-text-muted mt-2">Нет шаблонов анализа</p></div>
                     ) : (
                       <div className="table-responsive">
+                        <Form.Control
+                          className="mb-3" style={{ maxWidth: 320 }}
+                          placeholder="🔍 Поиск по названию…"
+                          value={tplSearch} onChange={(e) => setTplSearch(e.target.value)}
+                        />
                         <Table striped hover className="rounded-lg overflow-hidden">
                           <thead className="bg-background-gray">
                             <tr><th>Название</th><th>Описание</th><th>Показатели</th><th>Статус</th><th className="text-end">Действия</th></tr>
                           </thead>
                           <tbody>
-                            {templates.map((template) => (
+                            {templates.filter(t => !tplSearch || (`${t.name} ${t.description || ''}`).toLowerCase().includes(tplSearch.toLowerCase())).map((template) => (
                               <tr key={template.id}>
                                 <td><strong>{template.name}</strong></td>
                                 <td>{template.description || '-'}</td>
@@ -914,12 +922,17 @@ const Admin: React.FC = () => {
                       </div>
                     ) : (
                       <div className="table-responsive">
+                        <Form.Control
+                          className="mb-3" style={{ maxWidth: 320 }}
+                          placeholder="🔍 Поиск по названию…"
+                          value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)}
+                        />
                         <Table striped hover className="rounded-lg overflow-hidden">
                           <thead className="bg-background-gray">
                             <tr><th>Название</th><th>Категория</th><th>Показателей</th><th className="text-end">Действия</th></tr>
                           </thead>
                           <tbody>
-                            {presets.map((preset) => (
+                            {presets.filter(p => !presetSearch || p.name.toLowerCase().includes(presetSearch.toLowerCase())).map((preset) => (
                               <tr key={preset.id}>
                                 <td><strong>{preset.name}</strong></td>
                                 <td><Badge bg="secondary">{getCategoryLabel(preset.category)}</Badge></td>
@@ -1040,7 +1053,14 @@ const Admin: React.FC = () => {
                       <div className="text-center py-8"><p className="text-text-muted mt-2">Нет пользователей</p></div>
                     ) : (
                       <div className="divide-y divide-border">
-                        {users.map((user) => (
+                        <div className="p-3">
+                          <Form.Control
+                            style={{ maxWidth: 320 }}
+                            placeholder="🔍 Поиск по имени или email…"
+                            value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                          />
+                        </div>
+                        {users.filter(u => !userSearch || (`${u.username || ''} ${u.email || ''}`).toLowerCase().includes(userSearch.toLowerCase())).map((user) => (
                           <div key={user.id} className="flex items-center justify-between p-4 hover:bg-background-gray transition-colors">
                             <div className="flex items-center gap-3">
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ${user.is_admin ? 'bg-primary' : 'bg-secondary'}`}>
