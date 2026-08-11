@@ -337,15 +337,8 @@ const Dashboard: React.FC = () => {
     try {
       const response = await api.get('/api/templates/active');
       setTemplates(response.data);
-      // Проверяем, есть ли данные из Plans в localStorage
-      const storedData = localStorage.getItem('planItemToReport');
-      const state = location.state as any;
-      const hasNavigateData = state?.activeTab === 'new-report' && state?.autoCreate && state?.planData;
-      if (!storedData && !hasNavigateData && response.data.length > 0) {
-        handleTemplateSelect(response.data[0]);
-      } else if (storedData) {
-        // Данные из Plans будут обработаны отдельным useEffect
-      }
+      // Шаблон по умолчанию НЕ выбираем — форма начинается с пустого поиска шаблона.
+      // Данные из «Планирования» (если есть) обрабатываются отдельными useEffect.
     } catch (error) {
       console.error('Error fetching templates:', error);
       showToast('Ошибка при загрузке шаблонов', 'danger');
