@@ -1438,113 +1438,88 @@ const Admin: React.FC = () => {
         <Modal.Header closeButton><Modal.Title>Загрузка из 1С Предприятие</Modal.Title></Modal.Header>
         <Modal.Body>
           <Form>
+            {/* Подключение */}
+            <h6 className="text-uppercase text-muted small mb-2">Подключение</h6>
             <Form.Group className="mb-3">
               <Form.Label>URL сервера 1С</Form.Label>
-              <Form.Control type="text" placeholder="http://1c-server:8080" value={c1CBaseUrl} onChange={(e) => setC1CBaseUrl(e.target.value)} />
-              <Form.Text className="text-muted">Базовый URL для подключения к 1С</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>API-ключ (опционально)</Form.Label>
-              <Form.Control type="password" placeholder="Введите API-ключ" value={c1CApiKey} onChange={(e) => setC1CApiKey(e.target.value)} />
+              <Form.Control type="text" placeholder="https://mp.rugen.ru:8443" value={c1CBaseUrl} onChange={(e) => setC1CBaseUrl(e.target.value)} />
             </Form.Group>
             <Row>
               <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Логин (опционально)</Form.Label>
-                  <Form.Control type="text" placeholder="Имя пользователя" value={c1CUsername} onChange={(e) => setC1CUsername(e.target.value)} />
+                <Form.Group className="mb-2">
+                  <Form.Label>Логин</Form.Label>
+                  <Form.Control type="text" placeholder="Пользователь OData" value={c1CUsername} onChange={(e) => setC1CUsername(e.target.value)} />
                 </Form.Group>
               </Col>
               <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Пароль (опционально)</Form.Label>
+                <Form.Group className="mb-2">
+                  <Form.Label>Пароль</Form.Label>
                   <Form.Control type="password" placeholder="Пароль" value={c1CPassword} onChange={(e) => setC1CPassword(e.target.value)} />
                 </Form.Group>
               </Col>
             </Row>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — справочник показателей</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов" value={c1CEndpoint} onChange={(e) => setC1CEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Показатели анализов (план видов характеристик 1С): ChartOfCharacteristicTypes__ПоказателиАнализов</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — шаблоны анализа</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий" value={c1CTemplatesEndpoint} onChange={(e) => setC1CTemplatesEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Стандартный OData-справочник шаблонов (ТиповыеАнализыСерий)</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — планы анализа</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Document_ПланАнализов" value={c1CPlansEndpoint} onChange={(e) => setC1CPlansEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Стандартный OData-документ планов анализа</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — справочник сортов</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Сорта" value={c1CVarietiesEndpoint} onChange={(e) => setC1CVarietiesEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Стандартный OData-справочник сортов в 1С</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — варианты значений показателей</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов" value={c1COptionsEndpoint} onChange={(e) => setC1COptionsEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Подчинённый справочник «ДопАналитикаПоказателейАнализов»: списки значений для показателей типа «выбор»</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>OData 1С — справочник Склады (ёмкости/танки)</Form.Label>
-              <Form.Control type="text" placeholder="/erp_tek/odata/standard.odata/Catalog_Склады" value={c1CStorageEndpoint} onChange={(e) => setC1CStorageEndpoint(e.target.value)} />
-              <Form.Text className="text-muted">Из папки «Емкости» наполняются «Номер ёмкости» и «Номер танка» (подпапка «Танки»)</Form.Text>
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Результаты анализов за период (из 1С)</Form.Label>
-              <Row className="g-2">
-                <Col><Form.Control type="date" value={c1CResFrom} onChange={(e) => setC1CResFrom(e.target.value)} /></Col>
-                <Col><Form.Control type="date" value={c1CResTo} onChange={(e) => setC1CResTo(e.target.value)} /></Col>
-              </Row>
+            <div className="mb-2">
+              <Button variant="outline-primary" size="sm" onClick={handleTest1CConnection} disabled={is1CConnecting}>
+                {is1CConnecting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Проверка…</>) : 'Проверить подключение'}
+              </Button>
+              <Button variant="outline-success" size="sm" className="ms-2" onClick={handleSave1CConfig} disabled={is1CSaving}>
+                {is1CSaving ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Сохранение…</>) : 'Сохранить настройки'}
+              </Button>
+            </div>
+            {connection1CStatus !== 'idle' && (
+              <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'} className="py-2">{connection1CMessage}</Alert>
+            )}
+
+            <hr />
+            {/* Загрузка из 1С — кнопка рядом с путём */}
+            <h6 className="text-uppercase text-muted small mb-1">Загрузка из 1С</h6>
+            <small className="text-muted d-block mb-3">Пути OData можно не менять. Порядок при первой загрузке: показатели → шаблоны.</small>
+
+            {[
+              { label: 'Показатели', val: c1CEndpoint, set: setC1CEndpoint, on: handleImportFrom1C, hint: 'ChartOfCharacteristicTypes__ПоказателиАнализов' },
+              { label: 'Шаблоны анализа', val: c1CTemplatesEndpoint, set: setC1CTemplatesEndpoint, on: handleImportTemplatesFrom1C, hint: 'Catalog__ТиповыеАнализыСерий' },
+              { label: 'Варианты значений', val: c1COptionsEndpoint, set: setC1COptionsEndpoint, on: handleImportOptionsFrom1C, hint: 'ДопАналитикаПоказателейАнализов — списки для показателей типа «выбор»' },
+              { label: 'Ёмкости / танки', val: c1CStorageEndpoint, set: setC1CStorageEndpoint, on: handleImportStorageFrom1C, hint: 'Catalog_Склады, папка «Емкости»' },
+              { label: 'Сорта', val: c1CVarietiesEndpoint, set: setC1CVarietiesEndpoint, on: handleImportVarietiesFrom1C, hint: 'Catalog_ХарактеристикиНоменклатуры' },
+              { label: 'Планы анализа', val: c1CPlansEndpoint, set: setC1CPlansEndpoint, on: handleImportPlansFrom1C, hint: 'Document_ПланАнализов' },
+            ].map((r) => (
+              <Form.Group className="mb-3" key={r.label}>
+                <Form.Label className="mb-1">{r.label}</Form.Label>
+                <div className="d-flex gap-2">
+                  <Form.Control size="sm" type="text" value={r.val} onChange={(e) => r.set(e.target.value)} />
+                  <Button variant="outline-primary" size="sm" style={{ whiteSpace: 'nowrap' }} onClick={r.on} disabled={is1CImporting}>
+                    {is1CImporting ? <Spinner as="span" animation="border" size="sm" /> : 'Загрузить'}
+                  </Button>
+                </div>
+                <Form.Text className="text-muted">{r.hint}</Form.Text>
+              </Form.Group>
+            ))}
+
+            <Form.Group className="mb-2">
+              <Form.Label className="mb-1">Результаты анализов за период</Form.Label>
+              <div className="d-flex gap-2 align-items-center">
+                <Form.Control size="sm" type="date" value={c1CResFrom} onChange={(e) => setC1CResFrom(e.target.value)} />
+                <span className="text-muted">—</span>
+                <Form.Control size="sm" type="date" value={c1CResTo} onChange={(e) => setC1CResTo(e.target.value)} />
+                <Button variant="success" size="sm" style={{ whiteSpace: 'nowrap' }} onClick={handleImportResultsFrom1C} disabled={is1CImporting}>
+                  {is1CImporting ? <Spinner as="span" animation="border" size="sm" /> : 'Загрузить'}
+                </Button>
+              </div>
               <Form.Text className="text-muted">Документы «УстановкаАнализовСерии» → отчёты приложения (идемпотентно)</Form.Text>
             </Form.Group>
-            {connection1CStatus !== 'idle' && (
-              <Alert variant={connection1CStatus === 'success' ? 'success' : 'danger'}>{connection1CMessage}</Alert>
-            )}
+
             {import1CResult && (
-              <div className="mt-3">
-                <h6>Результат импорта:</h6>
-                <ul className="list-unstyled">
-                  <li><strong>Всего получено:</strong> {import1CResult.total}</li>
-                  <li><strong>Создано:</strong> {import1CResult.created}</li>
-                  {import1CResult.updated !== undefined && <li><strong>Обновлено:</strong> {import1CResult.updated}</li>}
-                  <li><strong>Пропущено (дубликаты):</strong> {import1CResult.skipped}</li>
-                  {import1CResult.errors.length > 0 && <li className="text-danger"><strong>Ошибок:</strong> {import1CResult.errors.length}</li>}
-                </ul>
-              </div>
+              <Alert variant={(import1CResult.errors?.length ? 'warning' : 'success')} className="mt-2 py-2 mb-0">
+                Результат: получено {import1CResult.total ?? '—'}, создано {import1CResult.created ?? '—'}
+                {import1CResult.updated !== undefined ? `, обновлено ${import1CResult.updated}` : ''}
+                {import1CResult.skipped !== undefined ? `, пропущено ${import1CResult.skipped}` : ''}
+                {import1CResult.errors?.length ? `, ошибок ${import1CResult.errors.length}` : ''}
+              </Alert>
             )}
           </Form>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShow1CModal(false)}>Закрыть</Button>
-          <Button variant="outline-success" onClick={handleSave1CConfig} disabled={is1CSaving}>
-            {is1CSaving ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Сохранение...</>) : 'Сохранить настройки'}
-          </Button>
-          <Button variant="outline-primary" onClick={handleTest1CConnection} disabled={is1CConnecting}>
-            {is1CConnecting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Проверка...</>) : 'Проверить подключение'}
-          </Button>
-          <Button variant="primary" onClick={handleImportFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить показатели'}
-          </Button>
-          <Button variant="info" onClick={handleImportTemplatesFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить шаблоны'}
-          </Button>
-          <Button variant="outline-primary" onClick={handleImportOptionsFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить варианты значений'}
-          </Button>
-          <Button variant="outline-dark" onClick={handleImportStorageFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить ёмкости/танки'}
-          </Button>
-          <Button variant="success" onClick={handleImportResultsFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить результаты за период'}
-          </Button>
-          <Button variant="warning" onClick={handleImportPlansFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить планы'}
-          </Button>
-          <Button variant="dark" onClick={handleImportVarietiesFrom1C} disabled={is1CImporting}>
-            {is1CImporting ? (<><Spinner as="span" animation="border" size="sm" className="me-2" />Импорт...</>) : 'Загрузить сорта'}
-          </Button>
         </Modal.Footer>
       </Modal>
 
