@@ -46,11 +46,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:5173"
+      - "80:80"
     depends_on:
       - backend
-    environment:
-      VITE_BACKEND_URL: http://backend:8000
     restart: unless-stopped
 
 volumes:
