@@ -85,6 +85,16 @@ const Dashboard: React.FC = () => {
     return normMap[`${indicatorId}:${day ?? ''}`] || null;
   };
 
+  // Значение вне числовой нормы (для подсветки красным)
+  const isValueOut = (value: any, norm: { min_value?: number | null; max_value?: number | null } | null): boolean => {
+    if (!norm) return false;
+    const mn = norm.min_value, mx = norm.max_value;
+    if (mn === null || mn === undefined) { if (mx === null || mx === undefined) return false; }
+    const n = parseFloat(value);
+    if (isNaN(n)) return false;
+    return (mn !== null && mn !== undefined && n < mn) || (mx !== null && mx !== undefined && n > mx);
+  };
+
   /**
    * Получить все показатели шабона (только из справочника).
    */
@@ -862,6 +872,7 @@ const Dashboard: React.FC = () => {
                                                   ) : (
                                                     <Form.Control
                                                       size="sm"
+                                                      className={isValueOut(getValue(indicator.id, d), dn) ? 'is-invalid' : ''}
                                                       type={indicator.data_type === 'number' ? 'number' : 'text'}
                                                       value={getValue(indicator.id, d)}
                                                       onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value, d)}
