@@ -16,6 +16,7 @@ const Plans: React.FC = () => {
   const [activeTab, setActiveTab] = useState('today');
   const [plans, setPlans] = useState<AnalysisPlan[]>([]);
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
+  const [tplSearch, setTplSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast, showToast, hideToast } = useToast();
   
@@ -495,8 +496,17 @@ const Plans: React.FC = () => {
               {templates.length === 0 ? (
                 <Alert variant="warning">Нет доступных шаблонов</Alert>
               ) : (
+                <>
+                <Form.Control
+                  className="mb-2"
+                  placeholder="🔍 Поиск шаблона по названию…"
+                  value={tplSearch}
+                  onChange={(e) => setTplSearch(e.target.value)}
+                />
                 <div className="row g-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {templates.map((template) => (
+                  {templates
+                    .filter(t => !tplSearch || (`${t.name} ${t.description || ''}`).toLowerCase().includes(tplSearch.toLowerCase()))
+                    .map((template) => (
                     <div key={template.id} className="col-12">
                       <Card className={`cursor-pointer ${selectedPlanItems.includes(template.id) ? 'border-primary' : ''}`}>
                         <CardBody className="py-2">
@@ -528,6 +538,7 @@ const Plans: React.FC = () => {
                     </div>
                   ))}
                 </div>
+                </>
               )}
             </Form.Group>
           </Form>
