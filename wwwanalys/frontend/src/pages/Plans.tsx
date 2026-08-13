@@ -95,32 +95,9 @@ const Plans: React.FC = () => {
 
   // Переход к созданию отчета из элемента плана
   const handleCreateReportFromPlanItem = (item: PlanItem) => {
-    // Читаем актуальный batch_number из состояния plans, а не из замыкания
-    // Это гарантирует, что мы получим последнее введенное значение
-    const latestPlan = plans.find(p => p.plan_items?.some(pi => pi.id === item.id));
-    const latestItem = latestPlan?.plan_items?.find(pi => pi.id === item.id);
-    const batchNumber = latestItem?.batch_number || item.batch_number || '';
-    
-    console.log('Creating report from plan item:', { itemId: item.id, batchNumber, latestItem });
-    
-    if (item?.template) {
-      // Передаём данные напрямую через navigate state
-      navigate('/dashboard', { 
-        state: { 
-          activeTab: 'new-report', 
-          autoCreate: true,
-          planData: {
-            template_id: item.template_id,
-            batch_number: batchNumber,
-            template: item.template,
-            plan_item_id: item.id,
-          }
-        } 
-      });
-    } else {
-      // Fallback: загружаем шаблон и используем localStorage
-      handleCreateReportFromPlanItemAsync(item);
-    }
+    // Всегда загружаем шаблон свежим — чтобы форма отчёта получила актуальные
+    // данные, включая расписание дней (многодневные показатели), как в «Новом отчёте».
+    handleCreateReportFromPlanItemAsync(item);
   };
 
   // Асинхронная версия (fallback если шаблон не загружен)

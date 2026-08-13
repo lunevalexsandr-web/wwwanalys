@@ -39,7 +39,9 @@ def _format_template_indicators(template: AnalysisType, db: Session) -> List[dic
     else:
         template_indicators = template.template_indicators or []
     
+    from app.services.norms import get_schedule_days
     for ti in template_indicators:
+        days = get_schedule_days(db, template.id, ti.indicator_id)
         lib_ind = ti.indicator_ref
         if lib_ind:
             options = None
@@ -58,6 +60,8 @@ def _format_template_indicators(template: AnalysisType, db: Session) -> List[dic
                 "options": options,
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
+                "norm_text": ti.norm_text,
+                "days": days,
                 "sort_order": ti.sort_order or 0,
             })
         else:
@@ -71,6 +75,8 @@ def _format_template_indicators(template: AnalysisType, db: Session) -> List[dic
                 "options": None,
                 "min_value": ti.min_value,
                 "max_value": ti.max_value,
+                "norm_text": ti.norm_text,
+                "days": days,
                 "sort_order": ti.sort_order or 0,
             })
     return ti_list
