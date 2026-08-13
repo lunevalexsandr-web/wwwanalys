@@ -118,7 +118,32 @@ def update_plan(db: Session, plan_id: int, plan: AnalysisPlanUpdate):
         db_plan.plan_date = plan.plan_date
     if plan.is_completed is not None:
         db_plan.is_completed = plan.is_completed
-    
+
+    # Синхронизация состава шаблонов (если передан). Выполненные позиции
+    # (с отчётом) сохраняем, чтобы не потерять связь с отчётами.
+    if plan.plan_items is not None:
+        desired = {}
+        for i, item in enumerate(plan.plan_items):
+            desired[item.template_id] = (item, i)
+        existing = {it.template_id: it for it in list(db_plan.plan_items)}
+        # удаляем снятые позиции, кроме выполненных
+        for it in list(db_plan.plan_items):
+            if it.template_id not in desired and not it.is_completed:
+                db.delete(it)
+        # добавляем/обновляем
+        for tid, (item, order) in desired.items():
+            ex = existing.get(tid)
+            if ex:
+                ex.batch_number = item.batch_number
+                ex.sort_order = order
+            else:
+                tmpl = db.query(AnalysisType).filter(AnalysisType.id == tid).first()
+                if tmpl:
+                    db.add(PlanItem(
+                        plan_id=db_plan.id, template_id=tid,
+                        batch_number=item.batch_number, sort_order=order,
+                    ))
+
     db.commit()
     db.refresh(db_plan)
     return db_plan

@@ -24,6 +24,7 @@ const Plans: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(today);
   
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
   const [planName, setPlanName] = useState('');
   const [planDescription, setPlanDescription] = useState('');
   const [planDate, setPlanDate] = useState(today);
@@ -219,23 +220,44 @@ const Plans: React.FC = () => {
         })),
       };
 
-      await api.post('/api/plans/', planData);
-      showToast('План успешно создан!', 'success');
+      if (editingPlanId) {
+        await api.put(`/api/plans/${editingPlanId}`, planData);
+        showToast('План обновлён!', 'success');
+      } else {
+        await api.post('/api/plans/', planData);
+        showToast('План успешно создан!', 'success');
+      }
       setShowCreateModal(false);
       resetPlanForm();
       fetchPlansForDate(planDate);
     } catch (error: any) {
-      console.error('Error creating plan:', error);
-      showToast(error.response?.data?.detail || 'Ошибка при создании плана', 'danger');
+      console.error('Error saving plan:', error);
+      showToast(error.response?.data?.detail || 'Ошибка при сохранении плана', 'danger');
     }
   };
 
+  const handleEditPlan = (plan: any) => {
+    setEditingPlanId(plan.id);
+    setPlanName(plan.name || '');
+    setPlanDescription(plan.description || '');
+    setPlanDate((plan.plan_date || '').slice(0, 10) || today);
+    const items = plan.plan_items || [];
+    setSelectedPlanItems(items.map((it: any) => it.template_id));
+    const bn: Record<number, string> = {};
+    items.forEach((it: any) => { bn[it.template_id] = it.batch_number || ''; });
+    setPlanItemBatchNumbers(bn);
+    setTplSearch('');
+    setShowCreateModal(true);
+  };
+
   const resetPlanForm = () => {
+    setEditingPlanId(null);
     setPlanName('');
     setPlanDescription('');
     setPlanDate(today);
     setSelectedPlanItems([]);
     setPlanItemBatchNumbers({});
+    setTplSearch('');
   };
 
   const handleToggleTemplateSelection = (templateId: number) => {
@@ -434,6 +456,11 @@ const Plans: React.FC = () => {
                                   Подробно
                                 </Button>
                                 {isAdmin && (
+                                  <Button variant="outline-secondary" size="sm" onClick={() => handleEditPlan(plan)}>
+                                    Редактировать
+                                  </Button>
+                                )}
+                                {isAdmin && (
                                   <Button variant="outline-danger" size="sm" onClick={() => handleDeletePlan(plan.id)}>
                                     Удалить
                                   </Button>
@@ -453,9 +480,9 @@ const Plans: React.FC = () => {
       </main>
 
       {/* Create Plan Modal */}
-      <Modal show={showCreateModal} onHide={() => setShowCreateModal(false)} size="lg">
+      <Modal show={showCreateModal} onHide={() => { setShowCreateModal(false); resetPlanForm(); }} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Создание плана анализов</Modal.Title>
+          <Modal.Title>{editingPlanId ? 'Редактирование плана' : 'Создание плана анализов'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form onSubmit={handleCreatePlan}>
@@ -544,11 +571,11 @@ const Plans: React.FC = () => {
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
+          <Button variant="secondary" onClick={() => { setShowCreateModal(false); resetPlanForm(); }}>
             Отмена
           </Button>
           <Button variant="primary" onClick={handleCreatePlan}>
-            Создать план
+            {editingPlanId ? 'Сохранить' : 'Создать план'}
           </Button>
         </Modal.Footer>
       </Modal>

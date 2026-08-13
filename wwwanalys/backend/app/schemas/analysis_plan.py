@@ -62,6 +62,7 @@ class AnalysisPlanUpdate(BaseModel):
     description: Optional[str] = None
     plan_date: Optional[date] = None
     is_completed: Optional[bool] = None
+    plan_items: Optional[List[PlanItemCreate]] = None
 
 
 class AnalysisPlan(AnalysisPlanBase):
