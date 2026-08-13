@@ -76,12 +76,12 @@ const Admin: React.FC = () => {
   const [c1CApiKey, setC1CApiKey] = useState('');
   const [c1CUsername, setC1CUsername] = useState('');
   const [c1CPassword, setC1CPassword] = useState('');
-  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
-  const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
-  const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_tek/odata/standard.odata/Document_ПланАнализов');
-  const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Сорта');
-  const [c1COptionsEndpoint, setC1COptionsEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
-  const [c1CStorageEndpoint, setC1CStorageEndpoint] = useState('/erp_tek/odata/standard.odata/Catalog_Склады');
+  const [c1CEndpoint, setC1CEndpoint] = useState('/erp_24/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
+  const [c1CTemplatesEndpoint, setC1CTemplatesEndpoint] = useState('/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
+  const [c1CPlansEndpoint, setC1CPlansEndpoint] = useState('/erp_24/odata/standard.odata/Document_ПланАнализов');
+  const [c1CVarietiesEndpoint, setC1CVarietiesEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Сорта');
+  const [c1COptionsEndpoint, setC1COptionsEndpoint] = useState('/erp_24/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
+  const [c1CStorageEndpoint, setC1CStorageEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Склады');
   const [c1CResFrom, setC1CResFrom] = useState('');
   const [c1CResTo, setC1CResTo] = useState('');
 
@@ -701,12 +701,12 @@ const Admin: React.FC = () => {
       setC1CBaseUrl(cfg.base_url || '');
       setC1CApiKey(cfg.api_key || '');
       setC1CUsername(cfg.username || '');
-      setC1CEndpoint(cfg.indicators_endpoint || cfg.endpoint || '/erp_tek/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
-      setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
-      setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_tek/odata/standard.odata/Document_ПланАнализов');
-      setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_tek/odata/standard.odata/Catalog_Сорта');
-      setC1COptionsEndpoint(cfg.options_endpoint || '/erp_tek/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
-      setC1CStorageEndpoint(cfg.storage_endpoint || '/erp_tek/odata/standard.odata/Catalog_Склады');
+      setC1CEndpoint(cfg.indicators_endpoint || cfg.endpoint || '/erp_24/odata/standard.odata/ChartOfCharacteristicTypes__ПоказателиАнализов');
+      setC1CTemplatesEndpoint(cfg.templates_endpoint || '/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий');
+      setC1CPlansEndpoint(cfg.plans_endpoint || '/erp_24/odata/standard.odata/Document_ПланАнализов');
+      setC1CVarietiesEndpoint(cfg.varieties_endpoint || '/erp_24/odata/standard.odata/Catalog_Сорта');
+      setC1COptionsEndpoint(cfg.options_endpoint || '/erp_24/odata/standard.odata/Catalog__ДопАналитикаПоказателейАнализов');
+      setC1CStorageEndpoint(cfg.storage_endpoint || '/erp_24/odata/standard.odata/Catalog_Склады');
       // Пароль не возвращается из API — оставляем пустым (пользователь введёт при необходимости)
       setC1CPassword('');
     } catch (error) {

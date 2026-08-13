@@ -33,7 +33,7 @@ class ExternalSystemConfig:
         password: Optional[str] = None,
         timeout: int = 30,
         verify: bool = False,
-        endpoint: str = "/erp_tek/hs/labindicators/indicators",
+        endpoint: str = "/erp_24/hs/labindicators/indicators",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -904,7 +904,7 @@ def transform_1c_odata_template_to_local(
 async def import_odata_templates_from_1c(
     db: Session,
     config: ExternalSystemConfig,
-    endpoint: str = "/erp_tek/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
+    endpoint: str = "/erp_24/odata/standard.odata/Catalog__ТиповыеАнализыСерий",
     skip_duplicates: bool = True,
     user_id: int = 1,
     indicators_field: str = "ПоказателиАнализа",
@@ -1865,7 +1865,7 @@ async def import_odata_results_from_1c(
     config: "ExternalSystemConfig",
     date_from: str,
     date_to: str,
-    endpoint: str = "/erp_tek/odata/standard.odata/Document__УстановкаАнализовСерии",
+    endpoint: str = "/erp_24/odata/standard.odata/Document__УстановкаАнализовСерии",
     user_id: int = 1,
     only_posted: bool = True,
 ) -> Dict[str, Any]:
@@ -1888,7 +1888,7 @@ async def import_odata_results_from_1c(
         "timestamp": datetime.utcnow().isoformat(),
     }
     try:
-        base = "/erp_tek/odata/standard.odata/"
+        base = "/erp_24/odata/standard.odata/"
         ind_by_guid = {str(i.external_id).lower(): i for i in db.query(IndicatorLibrary).all() if i.external_id}
         tpl_by_guid = {str(t.external_id).lower(): t for t in db.query(AnalysisType).all() if t.external_id}
         var_by_guid = {str(v.external_id).lower(): v.name for v in db.query(Variety).all() if v.external_id}
