@@ -85,14 +85,22 @@ const Dashboard: React.FC = () => {
     return normMap[`${indicatorId}:${day ?? ''}`] || null;
   };
 
-  // Значение вне числовой нормы (для подсветки красным)
-  const isValueOut = (value: any, norm: { min_value?: number | null; max_value?: number | null } | null): boolean => {
+  // Отклонение значения от нормы (для подсветки красным):
+  // числовая норма — выход за min/max; текстовая (select/строка) — несовпадение с эталоном.
+  const isValueOut = (value: any, norm: { min_value?: number | null; max_value?: number | null; norm_text?: string | null } | null): boolean => {
     if (!norm) return false;
     const mn = norm.min_value, mx = norm.max_value;
-    if (mn === null || mn === undefined) { if (mx === null || mx === undefined) return false; }
-    const n = parseFloat(value);
-    if (isNaN(n)) return false;
-    return (mn !== null && mn !== undefined && n < mn) || (mx !== null && mx !== undefined && n > mx);
+    if ((mn !== null && mn !== undefined) || (mx !== null && mx !== undefined)) {
+      const n = parseFloat(value);
+      if (isNaN(n)) return false;
+      return (mn !== null && mn !== undefined && n < mn) || (mx !== null && mx !== undefined && n > mx);
+    }
+    if (norm.norm_text) {
+      const v = (value ?? '').toString().trim();
+      if (!v) return false;
+      return v.toLowerCase() !== String(norm.norm_text).trim().toLowerCase();
+    }
+    return false;
   };
 
   /**
@@ -831,12 +839,8 @@ const Dashboard: React.FC = () => {
                                 const eMin = nrm ? nrm.min_value : indicator.min_value;
                                 const eMax = nrm ? nrm.max_value : indicator.max_value;
                                 const eNormText = nrm ? nrm.norm_text : indicator.norm_text;
-                                const isOutOfRange = indicatorValue &&
-                                    eMin !== null && eMin !== undefined &&
-                                    eMax !== null && eMax !== undefined &&
-                                    !isNaN(parseFloat(indicatorValue.value as string)) &&
-                                    (parseFloat(indicatorValue.value as string) < eMin ||
-                                     parseFloat(indicatorValue.value as string) > eMax);
+                                const effNorm = { min_value: eMin, max_value: eMax, norm_text: eNormText };
+                                const isOutOfRange = !!(indicatorValue && isValueOut(indicatorValue.value, effNorm));
                                 
                                 return (
                                   <div key={indicator.id} className="col-12">
@@ -861,6 +865,7 @@ const Dashboard: React.FC = () => {
                                                   {indicator.data_type === 'select' ? (
                                                     <Form.Select
                                                       size="sm"
+                                                      className={isValueOut(getValue(indicator.id, d), dn) ? 'is-invalid' : ''}
                                                       value={getValue(indicator.id, d)}
                                                       onChange={(e) => handleIndicatorValueChange(indicator.id, e.target.value, d)}
                                                     >

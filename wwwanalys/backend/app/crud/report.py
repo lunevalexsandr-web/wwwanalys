@@ -101,6 +101,11 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 if numeric_value is not None and min_value is not None and max_value is not None:
                     is_normal = min_value <= numeric_value <= max_value
             
+            # Нечисловая норма (список/строка): отклонение, если значение не совпало с эталоном
+            if data_type in ('text', 'select') and norm is not None and getattr(norm, 'norm_text', None) and text_value:
+                if str(text_value).strip().lower() != str(norm.norm_text).strip().lower():
+                    is_normal = False
+
             db_indicator_value = IndicatorValue(
                 indicator_id=value_data.indicator_id,
                 value=numeric_value,
@@ -248,6 +253,11 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
                 if numeric_value is not None and min_value is not None and max_value is not None:
                     is_normal = min_value <= numeric_value <= max_value
             
+            # Нечисловая норма (список/строка): отклонение, если значение не совпало с эталоном
+            if data_type in ('text', 'select') and norm is not None and getattr(norm, 'norm_text', None) and text_value:
+                if str(text_value).strip().lower() != str(norm.norm_text).strip().lower():
+                    is_normal = False
+
             db_indicator_value = IndicatorValue(
                 indicator_id=value_data.indicator_id,
                 value=numeric_value,
