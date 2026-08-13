@@ -58,9 +58,13 @@ def resolve_norm(
                 ok = False
         if not ok:
             continue
-        # приоритет строк с числовой нормой при равном счёте
-        if r.min_value is not None or r.max_value is not None:
-            score = score * 2 + 1
+        # Строки с реальной нормой (число ИЛИ текст-эталон) имеют приоритет над
+        # пустыми: иначе для конкретного дня выбралась бы пустая строка этого дня
+        # вместо общей строки с эталоном (напр. «Вкус» → «В норме» без привязки к дню).
+        has_norm = (r.min_value is not None or r.max_value is not None
+                    or (r.norm_text is not None and str(r.norm_text).strip() != ""))
+        if has_norm:
+            score += 100
         if score > best_score:
             best_score = score
             best = r
