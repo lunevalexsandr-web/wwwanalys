@@ -105,7 +105,7 @@ const Admin: React.FC = () => {
   const fetchTemplates = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/templates/');
+      const response = await api.get('/api/templates/', { params: { limit: 1000 } });
       setTemplates(response.data);
     } catch (error) {
       console.error('Error fetching templates:', error);
