@@ -1,0 +1,55 @@
+# Запуск приложения из готовых образов Docker Hub (без локальной сборки).
+# На новом компе: положить рядом .env с OPENROUTER_API_KEY, затем:
+#   docker compose -f docker-compose.hub.yml up -d
+# Открыть http://localhost
+#
+# ВНИМАНИЕ: база данных стартует ПУСТОЙ. Данные анализов — на ВМ.
+# Чтобы перенести их сюда, нужно один раз сделать дамп с ВМ и восстановить (см. чат).
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_DB: wwwanalys
+      POSTGRES_USER: wwwanalys_user
+      POSTGRES_PASSWORD: wwwanalys_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wwwanalys_user -d wwwanalys"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: las84/wwwanalys-backend:v7.1.0
+    environment:
+      DATABASE_URL: postgresql://wwwanalys_user:wwwanalys_password@db:5432/wwwanalys
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-secret-key}
+      API_KEY: ${API_KEY:-change-me-api-key}
+      CORS_ORIGINS: http://localhost:5173,http://localhost:80
+      AI_ENABLED: ${AI_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      AI_MODEL: ${AI_MODEL:-claude-opus-4-8}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4.1-mini}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-none}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: las84/wwwanalys-frontend:v7.1.0
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
