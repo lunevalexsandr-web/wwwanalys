@@ -1234,26 +1234,14 @@ const Dashboard: React.FC = () => {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={handleAiAnalyze}
-                      disabled={aiLoading || agentLoading}
-                    >
-                      {aiLoading ? (
-                        <><Spinner animation="border" size="sm" className="me-2" />Анализирую…</>
-                      ) : (
-                        'Разобрать отклонения'
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
                       onClick={handleAgent}
-                      disabled={aiLoading || agentLoading}
+                      disabled={agentLoading}
                       title="Агент сам ищет причины в техкартах (RAG) и во внешних источниках (веб)"
                     >
                       {agentLoading ? (
                         <><Spinner animation="border" size="sm" className="me-2" />Агент работает…</>
                       ) : (
-                        '🤖 Агент (техкарты + веб)'
+                        'Разобрать отклонения'
                       )}
                     </Button>
                   </div>
