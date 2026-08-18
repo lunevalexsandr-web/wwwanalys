@@ -75,17 +75,11 @@ def create_report(db: Session, report: ReportCreate, user_id: int):
                 text_value = str(value_data.value) if value_data.value is not None else None
                 
             elif data_type == 'select':
-                # Для select-показателей сохраняем выбранное значение как текст
+                # Для select-показателей сохраняем выбранное значение как текст.
+                # Отклонение определяется ТОЛЬКО по эталону (norm_text ниже),
+                # а не по членству в options — options это лишь варианты выбора.
                 text_value = str(value_data.value) if value_data.value is not None else None
-                # Валидация: проверяем, что значение есть в списке options
-                if options and text_value:
-                    try:
-                        allowed_options = json.loads(options)
-                        if text_value not in allowed_options:
-                            is_normal = False
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                        
+
             else:  # number
                 # Для числовых показателей конвертируем в число
                 value = value_data.value
@@ -231,15 +225,9 @@ def update_report(db: Session, report_id: int, report: ReportCreate):
                 text_value = str(value_data.value) if value_data.value is not None else None
                 
             elif data_type == 'select':
+                # Отклонение select — только по эталону (norm_text ниже), не по options.
                 text_value = str(value_data.value) if value_data.value is not None else None
-                if options and text_value:
-                    try:
-                        allowed_options = json.loads(options)
-                        if text_value not in allowed_options:
-                            is_normal = False
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                        
+
             else:
                 value = value_data.value
                 if isinstance(value, str):

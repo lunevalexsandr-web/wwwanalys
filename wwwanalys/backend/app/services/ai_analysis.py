@@ -39,6 +39,7 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
         lib = db.query(IndicatorLibrary).filter(IndicatorLibrary.id == v.indicator_id).first()
         # норма: из матрицы (день+сорт+тара), фолбэк на TemplateIndicator
         mn = mx = None
+        norm_text = None
         norm = resolve_norm(
             db, report.analysis_type_id, v.indicator_id,
             day=getattr(v, "day", None), container=getattr(report, "container", None),
@@ -46,6 +47,7 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
         )
         if norm is not None:
             mn, mx = norm.min_value, norm.max_value
+            norm_text = getattr(norm, "norm_text", None)
         if mn is None and mx is None:
             ti = db.query(TemplateIndicator).filter(
                 TemplateIndicator.indicator_id == v.indicator_id,
@@ -62,6 +64,8 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
             "day": getattr(v, "day", None),
             "min_value": mn,
             "max_value": mx,
+            "norm_text": norm_text,
+            "is_normal": getattr(v, "is_normal", None),
         })
     return {
         "batch_number": report.batch_number,
@@ -80,33 +84,45 @@ def compute_deviations(values: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         val = v.get("value")
         mn = v.get("min_value")
         mx = v.get("max_value")
-        if val is None:
-            continue  # текстовые показатели или без значения — пропускаем
-        if mn is None and mx is None:
-            continue  # нет нормы — сравнивать не с чем
-        below = mn is not None and val < mn
-        above = mx is not None and val > mx
-        if not (below or above):
-            continue
 
-        # Насколько вышли за границу (в процентах от превышенной границы)
-        dev_pct: Optional[float] = None
-        if below and mn not in (None, 0):
-            dev_pct = round((mn - val) / abs(mn) * 100, 1)
-        elif above and mx not in (None, 0):
-            dev_pct = round((val - mx) / abs(mx) * 100, 1)
+        # 1. Числовой показатель с нормой — сравниваем с диапазоном
+        if val is not None and (mn is not None or mx is not None):
+            below = mn is not None and val < mn
+            above = mx is not None and val > mx
+            if below or above:
+                dev_pct: Optional[float] = None
+                if below and mn not in (None, 0):
+                    dev_pct = round((mn - val) / abs(mn) * 100, 1)
+                elif above and mx not in (None, 0):
+                    dev_pct = round((val - mx) / abs(mx) * 100, 1)
+                deviations.append({
+                    "indicator": v["name"],
+                    "unit": v.get("unit", ""),
+                    "value": val,
+                    "min_value": mn,
+                    "max_value": mx,
+                    "norm": _format_norm(mn, mx),
+                    "direction": "below" if below else "above",
+                    "deviation_pct": dev_pct,
+                })
+            continue  # числовой с диапазоном полностью обработан
 
-        norm = _format_norm(mn, mx)
-        deviations.append({
-            "indicator": v["name"],
-            "unit": v.get("unit", ""),
-            "value": val,
-            "min_value": mn,
-            "max_value": mx,
-            "norm": norm,
-            "direction": "below" if below else "above",
-            "deviation_pct": dev_pct,
-        })
+        # 2. Текстовый/select или число без диапазона — по сохранённому is_normal.
+        #    is_normal ставится при сохранении (по эталону norm_text) или из 1С.
+        if v.get("is_normal") is False:
+            shown = v.get("text_value")
+            if shown is None:
+                shown = val
+            deviations.append({
+                "indicator": v["name"],
+                "unit": v.get("unit", ""),
+                "value": shown,
+                "min_value": None,
+                "max_value": None,
+                "norm": v.get("norm_text") or "",
+                "direction": None,
+                "deviation_pct": None,
+            })
     return deviations
 
 
