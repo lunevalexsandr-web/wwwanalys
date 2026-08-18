@@ -33,8 +33,9 @@ const ReportsAnalytics: React.FC = () => {
     setAiLoading(true); setAiText(null); setAiMsg(null);
     try {
       const r = await api.post('/api/ai/analytics/analyze', null, { params: { date_from: dateFrom || undefined, date_to: dateTo || undefined } });
-      if (r.data?.report_text) setAiText(r.data.report_text);
-      else setAiMsg('Текстовый разбор появится после подключения внешней модели (сейчас — только цифры выше).');
+      const txt = r.data?.summary || r.data?.report_text;
+      if (txt) setAiText(txt);
+      else setAiMsg('Разбор пуст. Проверьте подключение модели.');
     } catch (e: any) {
       setAiMsg(e?.response?.data?.detail || 'Ошибка разбора ИИ');
     } finally { setAiLoading(false); }

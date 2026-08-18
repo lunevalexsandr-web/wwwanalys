@@ -43,12 +43,18 @@ def analytics_analyze(
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
     analytics = ai_analysis.build_period_analytics(db, date_from=date_from, date_to=date_to, template_id=template_id)
+    from app.services import ai_agent
     try:
-        result = ai_analysis.analyze_period(analytics)
+        result = ai_agent.run_period_agent(db, analytics)
     except Exception as e:
-        logger.exception("AI period analysis failed")
-        raise HTTPException(status_code=502, detail=f"Ошибка AI-ассистента: {e}")
-    return {**analytics, **result}
+        logger.exception("Агентный разбор периода не удался")
+        raise HTTPException(status_code=502, detail=f"Ошибка агента: {e}")
+    if not result.get("model_configured"):
+        raise HTTPException(
+            status_code=409,
+            detail="Модель не подключена. Задайте OPENROUTER_API_KEY (или ANTHROPIC_API_KEY).",
+        )
+    return {**analytics, "summary": result.get("text", ""), "tool_calls": result.get("tool_calls", 0)}
 
 
 @router.get("/status")

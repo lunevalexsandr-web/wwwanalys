@@ -73,6 +73,39 @@ def _build_user_msg(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]
     )
 
 
+_PERIOD_AGENT_SYSTEM_PROMPT = (
+    "Ты — эксперт-пивовар и технолог лаборатории. Разбираешь СВОДКУ отклонений "
+    "показателей за период по всем отчётам и даёшь рекомендации по улучшению.\n\n"
+    "Инструменты: search_tech_cards — ищи причины и регламенты во внутренней базе "
+    "техкарт (приоритет); при необходимости опирайся на внешние источники.\n\n"
+    "Числа в сводке даны как факты — не изменяй их. Дай: общую картину качества за "
+    "период, топ проблемных показателей и вероятные системные причины, конкретные "
+    "корректирующие действия, и краткое резюме. Отвечай на русском, структурно."
+)
+
+
+def _build_period_user_msg(analytics: Dict[str, Any]) -> str:
+    """Сжать аналитику периода в компактный JSON для модели."""
+    payload = {
+        "период": {"с": analytics.get("date_from"), "по": analytics.get("date_to")},
+        "отчётов": analytics.get("reports_count"),
+        "отчётов_с_отклонением": analytics.get("reports_with_deviations"),
+        "показателей_всего": analytics.get("values_count"),
+        "отклонений": analytics.get("deviations_count"),
+        "доля_отклонений_%": analytics.get("deviation_rate"),
+        "по_дням": analytics.get("by_day"),
+        "топ_показателей_по_отклонениям": analytics.get("top_indicators"),
+        "по_шаблонам": analytics.get("by_template"),
+        # список отклонений может быть большим — берём до 80 записей
+        "примеры_отклонений": (analytics.get("deviations") or [])[:80],
+    }
+    return (
+        "Разбери сводку отклонений за период и дай рекомендации. Сначала ищи "
+        "причины в техкартах (search_tech_cards). Данные (JSON):\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    )
+
+
 def _build_rag_tool():
     """Создать инструмент RAG (декоратор beta_tool) с доступом к БД через contextvar."""
     from anthropic import beta_tool
@@ -130,14 +163,26 @@ def run_brewing_agent(
     Возвращает {"model_configured": bool, "text": str|None, "tool_calls": int}.
     """
     variety = variety or report_ctx.get("variety")
+    user_msg = _build_user_msg(report_ctx, deviations, variety)
+    return _dispatch(db, _AGENT_SYSTEM_PROMPT, user_msg, variety)
+
+
+def run_period_agent(db, analytics: Dict[str, Any]) -> Dict[str, Any]:
+    """Агентный разбор всех отклонений за период (для страницы «Аналитика»)."""
+    user_msg = _build_period_user_msg(analytics)
+    return _dispatch(db, _PERIOD_AGENT_SYSTEM_PROMPT, user_msg, variety=None)
+
+
+def _dispatch(db, system_prompt: str, user_msg: str, variety: Optional[str]) -> Dict[str, Any]:
+    """Выбрать провайдера по наличию ключа: OpenRouter → иначе Anthropic Tool Runner."""
     if settings.openrouter_api_key:
-        return _run_openrouter(db, report_ctx, deviations, variety)
+        return _run_openrouter(db, system_prompt, user_msg, variety)
     if settings.anthropic_api_key:
-        return _run_anthropic(db, report_ctx, deviations, variety)
+        return _run_anthropic(db, system_prompt, user_msg, variety)
     return {"model_configured": False, "text": None, "tool_calls": 0}
 
 
-def _run_openrouter(db, report_ctx, deviations, variety) -> Dict[str, Any]:
+def _run_openrouter(db, system_prompt: str, user_msg: str, variety) -> Dict[str, Any]:
     """Агент через OpenRouter (OpenAI SDK): function-calling для RAG + веб-плагин."""
     from openai import OpenAI
 
@@ -156,8 +201,8 @@ def _run_openrouter(db, report_ctx, deviations, variety) -> Dict[str, Any]:
         },
     }]
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": _AGENT_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_user_msg(report_ctx, deviations, variety)},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_msg},
     ]
     tool_calls = 0
     last_text = ""
@@ -193,20 +238,19 @@ def _run_openrouter(db, report_ctx, deviations, variety) -> Dict[str, Any]:
     return {"model_configured": True, "text": last_text, "tool_calls": tool_calls}
 
 
-def _run_anthropic(db, report_ctx, deviations, variety) -> Dict[str, Any]:
+def _run_anthropic(db, system_prompt: str, user_msg: str, variety) -> Dict[str, Any]:
     """Запустить агента-эксперта на харнессе Anthropic Tool Runner (RAG + web_search)."""
     from anthropic import Anthropic
 
     client = Anthropic(api_key=settings.anthropic_api_key)
     search_tech_cards = _build_rag_tool()
-    user_msg = _build_user_msg(report_ctx, deviations, variety)
 
     tools = [
         search_tech_cards,
         {"type": "web_search_20260209", "name": "web_search", "max_uses": 5},
     ]
 
-    token = _agent_ctx.set({"db": db, "variety": variety or report_ctx.get("variety")})
+    token = _agent_ctx.set({"db": db, "variety": variety})
     tool_calls = 0
     try:
         messages: List[Dict[str, Any]] = [{"role": "user", "content": user_msg}]
@@ -218,7 +262,7 @@ def _run_anthropic(db, report_ctx, deviations, variety) -> Dict[str, Any]:
             runner = client.beta.messages.tool_runner(
                 model=settings.ai_model,
                 max_tokens=settings.ai_max_tokens * 4,
-                system=_AGENT_SYSTEM_PROMPT,
+                system=system_prompt,
                 tools=tools,
                 messages=messages,
             )
