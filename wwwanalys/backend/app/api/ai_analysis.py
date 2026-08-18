@@ -129,6 +129,54 @@ def analyze_report(
     }
 
 
+@router.post("/reports/{report_id}/agent")
+def agent_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Агентный разбор отчёта на харнессе Tool Runner: модель сама решает, что искать —
+    во внутренних техкартах (RAG) и во внешних источниках (веб-поиск) — и даёт
+    рекомендации по отклонениям. Нужна подключённая модель (ANTHROPIC_API_KEY)."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+
+    report = crud_report.get_report(db, report_id=report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Отчёт не найден")
+
+    ctx = ai_analysis.build_report_context(db, report)
+    deviations = ai_analysis.compute_deviations(ctx["values"])
+    if not deviations:
+        return {
+            "deviations_count": 0,
+            "model_configured": True,
+            "text": "Все показатели в пределах норм — отклонений не обнаружено.",
+            "deviations": [],
+        }
+
+    from app.services import ai_agent
+    try:
+        result = ai_agent.run_brewing_agent(db, ctx, deviations, variety=ctx.get("variety"))
+    except Exception as e:
+        logger.exception("Агентный разбор отчёта %s не удался", report_id)
+        raise HTTPException(status_code=502, detail=f"Ошибка агента: {e}")
+
+    if not result.get("model_configured"):
+        raise HTTPException(
+            status_code=409,
+            detail="Модель не подключена. Задайте ANTHROPIC_API_KEY, чтобы включить агента с внешними источниками.",
+        )
+
+    return {
+        "deviations_count": len(deviations),
+        "model_configured": True,
+        "tool_calls": result.get("tool_calls", 0),
+        "text": result.get("text", ""),
+        "deviations": deviations,
+    }
+
+
 def _retrieve_knowledge(db: Session, ctx: dict, deviations: list) -> list:
     """Найти релевантные фрагменты техкарты сорта под текущие отклонения."""
     try:
