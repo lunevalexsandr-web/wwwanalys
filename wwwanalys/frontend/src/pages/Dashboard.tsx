@@ -44,6 +44,9 @@ const Dashboard: React.FC = () => {
   // AI-разбор отклонений (эксперт-пивовар) — дополнительный модуль
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiResult, setAiResult] = useState<any | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentResult, setAgentResult] = useState<any | null>(null);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -539,6 +542,9 @@ const Dashboard: React.FC = () => {
       setAiResult(null);
       setAiError(null);
       setAiLoading(false);
+      setAgentResult(null);
+      setAgentError(null);
+      setAgentLoading(false);
       setShowViewModal(true);
     } catch (error) {
       console.error('Error fetching report:', error);
@@ -559,6 +565,22 @@ const Dashboard: React.FC = () => {
       setAiError(detail);
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleAgent = async () => {
+    if (!viewReport) return;
+    setAgentLoading(true);
+    setAgentError(null);
+    setAgentResult(null);
+    try {
+      const response = await api.post(`/api/ai/reports/${viewReport.id}/agent`);
+      setAgentResult(response.data);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || 'Не удалось выполнить разбор агентом';
+      setAgentError(detail);
+    } finally {
+      setAgentLoading(false);
     }
   };
 
@@ -1205,19 +1227,48 @@ const Dashboard: React.FC = () => {
                 <hr />
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <h6 className="mb-0">🍺 Разбор ИИ-эксперта</h6>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleAiAnalyze}
-                    disabled={aiLoading}
-                  >
-                    {aiLoading ? (
-                      <><Spinner animation="border" size="sm" className="me-2" />Анализирую…</>
-                    ) : (
-                      'Разобрать отклонения'
-                    )}
-                  </Button>
+                  <div className="d-flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleAiAnalyze}
+                      disabled={aiLoading || agentLoading}
+                    >
+                      {aiLoading ? (
+                        <><Spinner animation="border" size="sm" className="me-2" />Анализирую…</>
+                      ) : (
+                        'Разобрать отклонения'
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={handleAgent}
+                      disabled={aiLoading || agentLoading}
+                      title="Агент сам ищет причины в техкартах (RAG) и во внешних источниках (веб)"
+                    >
+                      {agentLoading ? (
+                        <><Spinner animation="border" size="sm" className="me-2" />Агент работает…</>
+                      ) : (
+                        '🤖 Агент (техкарты + веб)'
+                      )}
+                    </Button>
+                  </div>
                 </div>
+
+                {agentError && <Alert variant="warning">{agentError}</Alert>}
+
+                {agentResult && (
+                  <Alert variant="light" className="border">
+                    <div className="fw-semibold mb-1">
+                      🤖 Разбор агента
+                      {agentResult.tool_calls != null && (
+                        <span className="small text-muted ms-2">вызовов инструментов: {agentResult.tool_calls}</span>
+                      )}
+                    </div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{agentResult.text}</div>
+                  </Alert>
+                )}
 
                 {aiError && <Alert variant="danger">{aiError}</Alert>}
 
