@@ -39,6 +39,40 @@ _AGENT_SYSTEM_PROMPT = (
 )
 
 
+def _rag_search(db, query: str, variety: Optional[str]) -> str:
+    """Общий поиск по базе техкарт (RAG). Используется обоими движками агента."""
+    if db is None or not query:
+        return "База техкарт недоступна."
+    try:
+        from app.services.rag import search_chunks
+        hits = search_chunks(db, query, variety=variety, limit=5)
+    except Exception as e:
+        logger.warning("RAG-поиск в агенте не удался: %s", e)
+        return "Поиск по техкартам временно недоступен."
+    if not hits:
+        return "В базе техкарт ничего не найдено по этому запросу."
+    return "\n\n".join(
+        f"[{h.get('title') or 'Техкарта'}]\n{(h.get('content') or '')[:1200]}"
+        for h in hits
+    )
+
+
+def _build_user_msg(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]],
+                    variety: Optional[str]) -> str:
+    payload = {
+        "batch_number": report_ctx.get("batch_number"),
+        "variety": variety or report_ctx.get("variety"),
+        "container": report_ctx.get("container"),
+        "deviations": deviations,
+    }
+    return (
+        "Разбери отклонения показателей этой партии и дай рекомендации. "
+        "Сначала ищи причины в техкартах (search_tech_cards), при необходимости "
+        "опирайся на внешние источники. Данные (JSON):\n"
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+    )
+
+
 def _build_rag_tool():
     """Создать инструмент RAG (декоратор beta_tool) с доступом к БД через contextvar."""
     from anthropic import beta_tool
@@ -90,30 +124,82 @@ def run_brewing_agent(
     deviations: List[Dict[str, Any]],
     variety: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Запустить агента-эксперта на харнессе Tool Runner.
+    """Запустить агента-эксперта. Провайдер выбирается по наличию ключа:
+    OpenRouter (OpenAI-совместимый) → иначе Anthropic Tool Runner.
 
     Возвращает {"model_configured": bool, "text": str|None, "tool_calls": int}.
     """
-    if not settings.anthropic_api_key:
-        return {"model_configured": False, "text": None, "tool_calls": 0}
+    variety = variety or report_ctx.get("variety")
+    if settings.openrouter_api_key:
+        return _run_openrouter(db, report_ctx, deviations, variety)
+    if settings.anthropic_api_key:
+        return _run_anthropic(db, report_ctx, deviations, variety)
+    return {"model_configured": False, "text": None, "tool_calls": 0}
 
+
+def _run_openrouter(db, report_ctx, deviations, variety) -> Dict[str, Any]:
+    """Агент через OpenRouter (OpenAI SDK): function-calling для RAG + веб-плагин."""
+    from openai import OpenAI
+
+    client = OpenAI(base_url=settings.openrouter_base_url, api_key=settings.openrouter_api_key)
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "search_tech_cards",
+            "description": "Поиск во внутренней базе технологических карт (RAG). "
+                           "Возвращает выдержки из регламентов предприятия.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "запрос на русском"}},
+                "required": ["query"],
+            },
+        },
+    }]
+    messages: List[Dict[str, Any]] = [
+        {"role": "system", "content": _AGENT_SYSTEM_PROMPT},
+        {"role": "user", "content": _build_user_msg(report_ctx, deviations, variety)},
+    ]
+    tool_calls = 0
+    last_text = ""
+    for _ in range(6):
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=messages,
+            tools=tools,
+            max_tokens=settings.ai_max_tokens * 4,
+            extra_body={"plugins": [{"id": "web", "max_results": 5}]},  # внешние источники
+        )
+        msg = resp.choices[0].message
+        last_text = (msg.content or "").strip()
+        if getattr(msg, "tool_calls", None):
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [{
+                    "id": tc.id, "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                } for tc in msg.tool_calls],
+            })
+            for tc in msg.tool_calls:
+                tool_calls += 1
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                result = _rag_search(db, args.get("query", ""), variety)
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+            continue
+        break
+    return {"model_configured": True, "text": last_text, "tool_calls": tool_calls}
+
+
+def _run_anthropic(db, report_ctx, deviations, variety) -> Dict[str, Any]:
+    """Запустить агента-эксперта на харнессе Anthropic Tool Runner (RAG + web_search)."""
     from anthropic import Anthropic
 
     client = Anthropic(api_key=settings.anthropic_api_key)
     search_tech_cards = _build_rag_tool()
-
-    payload = {
-        "batch_number": report_ctx.get("batch_number"),
-        "variety": variety or report_ctx.get("variety"),
-        "container": report_ctx.get("container"),
-        "deviations": deviations,
-    }
-    user_msg = (
-        "Разбери отклонения показателей этой партии и дай рекомендации. "
-        "Сначала ищи причины в техкартах (search_tech_cards), при необходимости "
-        "уточняй внешними источниками (web_search). Данные (JSON):\n"
-        + json.dumps(payload, ensure_ascii=False, indent=2)
-    )
+    user_msg = _build_user_msg(report_ctx, deviations, variety)
 
     tools = [
         search_tech_cards,

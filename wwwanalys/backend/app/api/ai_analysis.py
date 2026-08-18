@@ -165,7 +165,7 @@ def agent_report(
     if not result.get("model_configured"):
         raise HTTPException(
             status_code=409,
-            detail="Модель не подключена. Задайте ANTHROPIC_API_KEY, чтобы включить агента с внешними источниками.",
+            detail="Модель не подключена. Задайте OPENROUTER_API_KEY (или ANTHROPIC_API_KEY), чтобы включить агента с внешними источниками.",
         )
 
     return {

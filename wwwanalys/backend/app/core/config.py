@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     ai_max_tokens: int = 2000
     # Ключи/адреса провайдеров (заполняются, когда выбрана конкретная модель)
     anthropic_api_key: str = ""
+    # OpenRouter (OpenAI-совместимый шлюз ко многим моделям, включая Claude).
+    #   Если задан openrouter_api_key — агент идёт через OpenRouter (function-calling
+    #   для RAG + встроенный веб-плагин для внешних источников).
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "anthropic/claude-opus-4-8"
 
     # RAG / база знаний техкарт (загрузка из файлов, вектор-готовое хранилище).
     #   rag_embedding_provider: "none" пока модель не выбрана (поиск идёт по FTS);
