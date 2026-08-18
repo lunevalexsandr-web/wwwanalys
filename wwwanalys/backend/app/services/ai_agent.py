@@ -300,6 +300,10 @@ _CHAT_SYSTEM_PROMPT = (
     "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
     "get_report_deviations (по номеру партии), search_tech_cards (внутренние техкарты, "
     "приоритетный источник), плюс внешние источники при необходимости.\n\n"
+    "ВАЖНО: все вопросы — про лабораторные анализы и производство пива этого предприятия, "
+    "а НЕ про новости или мировые события. «Что произошло за день/период» = какие анализы "
+    "и отклонения были — вызывай get_deviations_by_date/get_period_summary. Никогда не "
+    "отвечай новостями.\n"
     "Правила: числа по отклонениям бери только из инструментов, не выдумывай. На вопрос "
     "«что произошло за день/период» — вызови инструмент и перечисли отклонения (партия, "
     "показатель, значение, норма) + краткий вывод. На просьбу помочь с отклонением — "
@@ -432,10 +436,11 @@ def _chat_openrouter(db, system_prompt, history) -> Dict[str, Any]:
             messages.append({"role": m["role"], "content": m["content"]})
     last_text = ""
     for _ in range(8):
+        # Без авто-веб-плагина: чат отвечает по данным анализов и техкартам,
+        # чтобы вопрос «что произошло за день» не подменялся новостями из веба.
         resp = client.chat.completions.create(
             model=settings.openrouter_model, messages=messages, tools=tools,
             max_tokens=settings.ai_max_tokens * 4,
-            extra_body={"plugins": [{"id": "web", "max_results": 5}]},
         )
         msg = resp.choices[0].message
         last_text = (msg.content or "").strip()
