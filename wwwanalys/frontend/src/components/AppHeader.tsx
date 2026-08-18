@@ -49,6 +49,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               >
                 Аналитика
               </Link>
+              <Link
+                to="/agent"
+                className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                🤖 Агент
+              </Link>
               {showAdminLink && user?.is_admin && (
                 <Link
                   to="/admin"

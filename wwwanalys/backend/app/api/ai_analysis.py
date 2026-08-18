@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -133,6 +133,36 @@ def analyze_report(
         "summary": result.get("summary", ""),
         "deviations": result.get("deviations", []),
     }
+
+
+@router.post("/chat")
+def agent_chat(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Чат с агентом: он сам смотрит анализы (за дату/период/партию), техкарты и внешние
+    источники и отвечает. Тело: {message: str, history: [{role, content}]}."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    message = (payload.get("message") or "").strip()
+    history = payload.get("history") or []
+    if not message:
+        raise HTTPException(status_code=400, detail="Пустой вопрос")
+    history = [m for m in history if isinstance(m, dict)] + [{"role": "user", "content": message}]
+
+    from app.services import ai_agent
+    try:
+        result = ai_agent.run_chat_agent(db, history)
+    except Exception as e:
+        logger.exception("Чат-агент не удался")
+        raise HTTPException(status_code=502, detail=f"Ошибка агента: {e}")
+    if not result.get("model_configured"):
+        raise HTTPException(
+            status_code=409,
+            detail="Модель не подключена. Задайте OPENROUTER_API_KEY (или ANTHROPIC_API_KEY).",
+        )
+    return {"text": result.get("text", "")}
 
 
 @router.post("/reports/{report_id}/agent")

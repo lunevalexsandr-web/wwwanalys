@@ -289,3 +289,195 @@ def _run_anthropic(db, system_prompt: str, user_msg: str, variety) -> Dict[str, 
         }
     finally:
         _agent_ctx.reset(token)
+
+
+# ==================== Чат с агентом (вопрос-ответ по данным) ====================
+
+_CHAT_SYSTEM_PROMPT = (
+    "Ты — ассистент лаборатории и эксперт-пивовар. Отвечаешь на вопросы технолога "
+    "по данным анализов и помогаешь с отклонениями.\n"
+    "Сегодняшняя дата: {today}. «вчера», «сегодня», «за неделю» считай от неё.\n\n"
+    "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
+    "get_report_deviations (по номеру партии), search_tech_cards (внутренние техкарты, "
+    "приоритетный источник), плюс внешние источники при необходимости.\n\n"
+    "Правила: числа по отклонениям бери только из инструментов, не выдумывай. На вопрос "
+    "«что произошло за день/период» — вызови инструмент и перечисли отклонения (партия, "
+    "показатель, значение, норма) + краткий вывод. На просьбу помочь с отклонением — "
+    "предложи вероятные причины и корректирующие действия по техкартам. Отвечай на русском."
+)
+
+
+def _tool_deviations_by_date(db, args) -> str:
+    from datetime import date
+    from app.services import ai_analysis
+    d = (args or {}).get("date")
+    try:
+        dd = date.fromisoformat(str(d))
+    except Exception:
+        return "Нужна дата в формате YYYY-MM-DD."
+    a = ai_analysis.build_period_analytics(db, date_from=dd, date_to=dd)
+    return json.dumps({
+        "дата": str(dd),
+        "отчётов": a.get("reports_count"),
+        "отчётов_с_отклонением": a.get("reports_with_deviations"),
+        "отклонений": a.get("deviations_count"),
+        "отклонения": (a.get("deviations") or [])[:100],
+    }, ensure_ascii=False, default=str)
+
+
+def _tool_period_summary(db, args) -> str:
+    from datetime import date
+    from app.services import ai_analysis
+    a = args or {}
+    try:
+        df = date.fromisoformat(str(a.get("date_from")))
+        dt = date.fromisoformat(str(a.get("date_to")))
+    except Exception:
+        return "Нужны date_from и date_to (YYYY-MM-DD)."
+    an = ai_analysis.build_period_analytics(db, date_from=df, date_to=dt)
+    return json.dumps({
+        "период": {"с": str(df), "по": str(dt)},
+        "отчётов": an.get("reports_count"),
+        "отчётов_с_отклонением": an.get("reports_with_deviations"),
+        "отклонений": an.get("deviations_count"),
+        "доля_%": an.get("deviation_rate"),
+        "топ_показателей": an.get("top_indicators"),
+        "по_шаблонам": an.get("by_template"),
+        "примеры_отклонений": (an.get("deviations") or [])[:60],
+    }, ensure_ascii=False, default=str)
+
+
+def _tool_report_deviations(db, args) -> str:
+    from app.models import ProcessLog
+    from app.crud import report as crud_report
+    from app.services import ai_analysis
+    batch = (args or {}).get("batch_number")
+    if not batch:
+        return "Нужен batch_number (номер партии)."
+    logs = db.query(ProcessLog).filter(ProcessLog.batch_number == str(batch)).all()
+    if not logs:
+        return "Отчётов с такой партией не найдено."
+    out = []
+    for pl in logs:
+        rep = crud_report.get_report(db, report_id=pl.id)
+        ctx = ai_analysis.build_report_context(db, rep)
+        devs = ai_analysis.compute_deviations(ctx["values"])
+        out.append({
+            "report_id": pl.id,
+            "template": ctx.get("template_name"),
+            "variety": ctx.get("variety"),
+            "container": ctx.get("container"),
+            "deviations": devs,
+        })
+    return json.dumps(out, ensure_ascii=False, default=str)
+
+
+_CHAT_TOOL_DEFS = [
+    {"name": "get_deviations_by_date",
+     "description": "Отклонения показателей за конкретный день по всем отчётам.",
+     "params": {"type": "object", "properties": {"date": {"type": "string", "description": "дата YYYY-MM-DD"}}, "required": ["date"]}},
+    {"name": "get_period_summary",
+     "description": "Сводка отклонений за период (агрегаты + топ показателей/шаблонов).",
+     "params": {"type": "object", "properties": {"date_from": {"type": "string"}, "date_to": {"type": "string"}}, "required": ["date_from", "date_to"]}},
+    {"name": "get_report_deviations",
+     "description": "Отклонения по конкретной партии (номер партии).",
+     "params": {"type": "object", "properties": {"batch_number": {"type": "string"}}, "required": ["batch_number"]}},
+    {"name": "search_tech_cards",
+     "description": "Поиск во внутренней базе технологических карт (RAG).",
+     "params": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
+]
+
+_CHAT_EXEC = {
+    "get_deviations_by_date": _tool_deviations_by_date,
+    "get_period_summary": _tool_period_summary,
+    "get_report_deviations": _tool_report_deviations,
+    "search_tech_cards": lambda db, a: _rag_search(db, (a or {}).get("query", ""), None),
+}
+
+
+def _exec_chat_tool(db, name, args) -> str:
+    fn = _CHAT_EXEC.get(name)
+    if not fn:
+        return "Неизвестный инструмент: " + str(name)
+    try:
+        return fn(db, args)
+    except Exception as e:
+        logger.warning("Инструмент %s упал: %s", name, e)
+        return "Ошибка инструмента " + str(name) + ": " + str(e)
+
+
+def run_chat_agent(db, history: List[Dict[str, str]]) -> Dict[str, Any]:
+    """Чат с агентом. history — список {role: user|assistant, content}."""
+    import datetime
+    today = datetime.date.today().isoformat()
+    system_prompt = _CHAT_SYSTEM_PROMPT.format(today=today)
+    if settings.openrouter_api_key:
+        return _chat_openrouter(db, system_prompt, history)
+    if settings.anthropic_api_key:
+        return _chat_anthropic(db, system_prompt, history)
+    return {"model_configured": False, "text": None}
+
+
+def _chat_openrouter(db, system_prompt, history) -> Dict[str, Any]:
+    from openai import OpenAI
+    client = OpenAI(base_url=settings.openrouter_base_url, api_key=settings.openrouter_api_key)
+    tools = [{"type": "function", "function": {"name": d["name"], "description": d["description"], "parameters": d["params"]}}
+             for d in _CHAT_TOOL_DEFS]
+    messages = [{"role": "system", "content": system_prompt}]
+    for m in history:
+        if m.get("role") in ("user", "assistant") and m.get("content"):
+            messages.append({"role": m["role"], "content": m["content"]})
+    last_text = ""
+    for _ in range(8):
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model, messages=messages, tools=tools,
+            max_tokens=settings.ai_max_tokens * 4,
+            extra_body={"plugins": [{"id": "web", "max_results": 5}]},
+        )
+        msg = resp.choices[0].message
+        last_text = (msg.content or "").strip()
+        if getattr(msg, "tool_calls", None):
+            messages.append({
+                "role": "assistant", "content": msg.content or "",
+                "tool_calls": [{"id": tc.id, "type": "function",
+                                "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                               for tc in msg.tool_calls],
+            })
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                messages.append({"role": "tool", "tool_call_id": tc.id,
+                                 "content": _exec_chat_tool(db, tc.function.name, args)})
+            continue
+        break
+    return {"model_configured": True, "text": last_text}
+
+
+def _chat_anthropic(db, system_prompt, history) -> Dict[str, Any]:
+    from anthropic import Anthropic
+    client = Anthropic(api_key=settings.anthropic_api_key)
+    tools = [{"name": d["name"], "description": d["description"], "input_schema": d["params"]}
+             for d in _CHAT_TOOL_DEFS]
+    tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 5})
+    messages = [{"role": m["role"], "content": m["content"]}
+                for m in history if m.get("role") in ("user", "assistant") and m.get("content")]
+    resp = None
+    for _ in range(8):
+        resp = client.messages.create(
+            model=settings.ai_model, max_tokens=settings.ai_max_tokens * 4,
+            system=system_prompt, tools=tools, messages=messages,
+        )
+        if resp.stop_reason in ("tool_use", "pause_turn"):
+            messages.append({"role": "assistant", "content": resp.content})
+            results = []
+            for block in resp.content:
+                if getattr(block, "type", None) == "tool_use" and block.name in _CHAT_EXEC:
+                    results.append({"type": "tool_result", "tool_use_id": block.id,
+                                    "content": _exec_chat_tool(db, block.name, dict(block.input))})
+            if results:
+                messages.append({"role": "user", "content": results})
+            continue
+        break
+    return {"model_configured": True, "text": _extract_text(resp) if resp else ""}
