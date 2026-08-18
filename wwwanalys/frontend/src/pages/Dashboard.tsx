@@ -412,9 +412,12 @@ const Dashboard: React.FC = () => {
   const handleIndicatorValueChange = (indicatorId: number, value: string, day?: number) => {
     setIndicatorValues(prev => {
       const updated = [...prev];
-      const index = updated.findIndex(
-        (v: any) => v.indicator_id === indicatorId && (v.day ?? undefined) === (day ?? undefined)
-      );
+      // Одиночный показатель (day===undefined): у сохранённого значения день может
+      // быть 0/null (особенно у импортированных из 1С) — ищем по id и обновляем на
+      // месте, чтобы правка применялась, а не создавала дубль.
+      const index = day === undefined
+        ? updated.findIndex((v: any) => v.indicator_id === indicatorId)
+        : updated.findIndex((v: any) => v.indicator_id === indicatorId && (v.day ?? undefined) === day);
 
       const allIndicators = selectedTemplate ? getAllIndicators(selectedTemplate) : [];
       const indicator = allIndicators.find(ind => ind.id === indicatorId);
