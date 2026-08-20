@@ -1,105 +1,118 @@
-/** Справочники, загруженные из 1С (для проверки): Сорта и Объекты отбора. */
+/** Справочники, загруженные из 1С: Сорта, Объекты отбора, Санитарные мероприятия. */
 import React, { useEffect, useState } from 'react';
-import { Card, CardBody, Table, Spinner, Alert, Form, Row, Col, Badge } from 'react-bootstrap';
+import { Table, Spinner, Alert, Form, Badge, Tabs, Tab, InputGroup } from 'react-bootstrap';
 import AppHeader from '../components/AppHeader';
 import api from '../api/axios';
 
-interface Ref { id: number; name: string; external_id: string | null; is_active?: boolean; }
+interface Ref { id: number; name: string; external_id: string | null; }
 
-const RefTable: React.FC<{ title: string; url: string; params?: any }> = ({ title, url, params }) => {
+const SearchBar: React.FC<{ value: string; onChange: (v: string) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => (
+  <InputGroup size="sm" style={{ maxWidth: 320 }}>
+    <InputGroup.Text className="bg-white text-muted">🔍</InputGroup.Text>
+    <Form.Control placeholder={placeholder || 'Поиск по названию…'} value={value} onChange={(e) => onChange(e.target.value)} />
+    {value && (
+      <InputGroup.Text role="button" className="bg-white text-muted" onClick={() => onChange('')}>✕</InputGroup.Text>
+    )}
+  </InputGroup>
+);
+
+const emptyBox = (text: string) => (
+  <div className="text-center text-muted py-5">
+    <div style={{ fontSize: 32, opacity: 0.4 }}>📭</div>
+    <div className="mt-2">{text}</div>
+  </div>
+);
+
+/** Простой справочник: наименование + GUID. */
+const SimpleRef: React.FC<{ url: string; params?: any }> = ({ url, params }) => {
   const [items, setItems] = useState<Ref[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    api.get(url, { params })
-      .then((r) => setItems(r.data || []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+    setLoading(true);
+    api.get(url, { params }).then((r) => setItems(r.data || [])).catch(() => setItems([])).finally(() => setLoading(false));
   }, [url]);
 
-  const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = items.filter((i) => (i.name || '').toLowerCase().includes(search.toLowerCase()));
+
+  if (loading) return <div className="text-center py-5"><Spinner animation="border" variant="primary" /></div>;
+  if (items.length === 0) return emptyBox('Пусто. Загрузите справочник из 1С (Админ → «Интеграция с 1С»).');
 
   return (
-    <Card className="mb-4">
-      <CardBody>
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h6 className="mb-0">{title} <Badge bg="secondary">{items.length}</Badge></h6>
-          <Form.Control
-            size="sm" style={{ maxWidth: 260 }} placeholder="Поиск…"
-            value={search} onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {loading ? (
-          <div className="text-center py-4"><Spinner animation="border" /></div>
-        ) : items.length === 0 ? (
-          <Alert variant="info" className="mb-0">Пусто. Загрузите справочник из 1С (вкладка «Интеграция»).</Alert>
-        ) : (
-          <div style={{ maxHeight: 460, overflowY: 'auto' }}>
-            <Table striped hover size="sm">
-              <thead><tr><th style={{ width: 60 }}>#</th><th>Наименование</th><th>GUID (1С)</th></tr></thead>
-              <tbody>
-                {filtered.map((i, idx) => (
-                  <tr key={i.id}>
-                    <td className="text-muted">{idx + 1}</td>
-                    <td>{i.name}</td>
-                    <td className="text-muted small font-monospace">{i.external_id || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-        )}
-      </CardBody>
-    </Card>
+    <>
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <span className="text-muted small">Найдено: <strong>{filtered.length}</strong> из {items.length}</span>
+        <SearchBar value={search} onChange={setSearch} />
+      </div>
+      <div className="border rounded" style={{ maxHeight: '62vh', overflowY: 'auto' }}>
+        <Table hover size="sm" className="mb-0 align-middle">
+          <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+            <tr><th style={{ width: 56 }} className="text-muted">#</th><th>Наименование</th><th className="text-muted">GUID (1С)</th></tr>
+          </thead>
+          <tbody>
+            {filtered.map((i, idx) => (
+              <tr key={i.id}>
+                <td className="text-muted">{idx + 1}</td>
+                <td className="fw-medium">{i.name}</td>
+                <td><code className="small text-muted">{i.external_id || '—'}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+    </>
   );
 };
 
-const SanitationMeasuresTable: React.FC = () => {
+/** Санитарные мероприятия с частотой. */
+const SanitationMeasures: React.FC = () => {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    api.get('/api/external/1c/sanitation-measures')
-      .then((r) => setItems(r.data || []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+    api.get('/api/external/1c/sanitation-measures').then((r) => setItems(r.data || [])).catch(() => setItems([])).finally(() => setLoading(false));
   }, []);
 
   const filtered = items.filter((i) => (i.name || '').toLowerCase().includes(search.toLowerCase()));
 
+  if (loading) return <div className="text-center py-5"><Spinner animation="border" variant="primary" /></div>;
+  if (items.length === 0) return emptyBox('Пусто. Загрузите санитарию из 1С (Админ → «Интеграция с 1С»).');
+
   return (
-    <Card className="mb-4"><CardBody>
+    <>
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h6 className="mb-0">Санитарные мероприятия (справочник) <Badge bg="secondary">{items.length}</Badge></h6>
-        <Form.Control size="sm" style={{ maxWidth: 260 }} placeholder="Поиск…"
-          value={search} onChange={(e) => setSearch(e.target.value)} />
+        <span className="text-muted small">Найдено: <strong>{filtered.length}</strong> из {items.length}</span>
+        <SearchBar value={search} onChange={setSearch} placeholder="Поиск по мероприятию…" />
       </div>
-      {loading ? (
-        <div className="text-center py-4"><Spinner animation="border" /></div>
-      ) : items.length === 0 ? (
-        <Alert variant="info" className="mb-0">Пусто. Загрузите санитарию из 1С (вкладка «Интеграция»).</Alert>
-      ) : (
-        <div style={{ maxHeight: 460, overflowY: 'auto' }}>
-          <Table striped hover size="sm">
-            <thead><tr><th style={{ width: 50 }}>#</th><th>Мероприятие</th><th>Частота</th><th>Интервал, ч</th><th>Длит., мин</th><th>Подразделение</th></tr></thead>
-            <tbody>
-              {filtered.map((i, idx) => (
-                <tr key={idx}>
-                  <td className="text-muted">{idx + 1}</td>
-                  <td>{i.name}</td>
-                  <td>{i.frequency || '—'}</td>
-                  <td>{i.interval_hours ?? '—'}</td>
-                  <td>{i.duration_min ?? '—'}</td>
-                  <td className="small">{i.department || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </div>
-      )}
-    </CardBody></Card>
+      <div className="border rounded" style={{ maxHeight: '62vh', overflowY: 'auto' }}>
+        <Table hover size="sm" className="mb-0 align-middle">
+          <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+            <tr>
+              <th style={{ width: 56 }} className="text-muted">#</th>
+              <th>Мероприятие</th>
+              <th style={{ width: 170 }}>Частота</th>
+              <th style={{ width: 90 }} className="text-end">Интервал</th>
+              <th style={{ width: 90 }} className="text-end">Длит.</th>
+              <th>Подразделение</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((i, idx) => (
+              <tr key={idx}>
+                <td className="text-muted">{idx + 1}</td>
+                <td className="fw-medium">{i.name}</td>
+                <td>{i.frequency ? <Badge bg="info" className="fw-normal">{i.frequency}</Badge> : <span className="text-muted">—</span>}</td>
+                <td className="text-end text-muted small">{i.interval_hours ? `${i.interval_hours} ч` : '—'}</td>
+                <td className="text-end text-muted small">{i.duration_min ? `${i.duration_min} мин` : '—'}</td>
+                <td className="small">{i.department || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+    </>
   );
 };
 
@@ -107,18 +120,25 @@ const ReferenceData: React.FC = () => {
   return (
     <div className="min-h-screen bg-light">
       <AppHeader showAdminLink showDashboardLink />
-      <div className="container-fluid py-4" style={{ maxWidth: 1100 }}>
-        <h3 className="mb-1">Справочники из 1С</h3>
-        <p className="text-muted">Данные, загруженные по OData. Наполняются на вкладке «Интеграция с 1С».</p>
-        <Row>
-          <Col md={6}>
-            <RefTable title="Сорта" url="/api/varieties" params={{ active_only: true }} />
-          </Col>
-          <Col md={6}>
-            <RefTable title="Объекты отбора" url="/api/analysis-objects" />
-          </Col>
-        </Row>
-        <SanitationMeasuresTable />
+      <div className="container-fluid py-4" style={{ maxWidth: 1150 }}>
+        <div className="mb-4">
+          <h3 className="mb-1 d-flex align-items-center gap-2">📚 Справочники</h3>
+          <p className="text-muted mb-0">Данные, загруженные из 1С по OData. Наполняются на вкладке «Интеграция с 1С» в админ-панели.</p>
+        </div>
+
+        <div className="bg-white border rounded-3 shadow-sm p-3 p-md-4">
+          <Tabs defaultActiveKey="varieties" className="mb-3">
+            <Tab eventKey="varieties" title={<span>🍺 Сорта</span>}>
+              <div className="pt-3"><SimpleRef url="/api/varieties" params={{ active_only: true }} /></div>
+            </Tab>
+            <Tab eventKey="objects" title={<span>🎯 Объекты отбора</span>}>
+              <div className="pt-3"><SimpleRef url="/api/analysis-objects" /></div>
+            </Tab>
+            <Tab eventKey="sanitation" title={<span>🧼 Санитарные мероприятия</span>}>
+              <div className="pt-3"><SanitationMeasures /></div>
+            </Tab>
+          </Tabs>
+        </div>
       </div>
     </div>
   );
