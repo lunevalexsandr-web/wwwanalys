@@ -21,6 +21,8 @@ class SanitationRecord(Base):
 
     measure_key = Column(String)                    # GUID вида мероприятия
     measure_name = Column(String)                   # название мероприятия
+    measure_frequency = Column(String)              # частота (напр. «1 раз в 7 дней»)
+    measure_interval_hours = Column(Integer)        # интервал в часах (0 = не задан)
     line_key = Column(String)                       # GUID линии розлива
     line_name = Column(String)                      # название линии
     department_key = Column(String)                 # GUID подразделения
@@ -29,4 +31,18 @@ class SanitationRecord(Base):
     responsible_name = Column(String)               # ФИО ответственного
 
     comment = Column(Text)                          # комментарий
+    imported_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SanitationMeasure(Base):
+    """Справочник санитарных мероприятий с частотой проведения (Catalog__СанитарныеМероприятия)."""
+    __tablename__ = "sanitation_measures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String, unique=True, index=True)   # Ref_Key
+    name = Column(String)                                    # Description
+    frequency = Column(String)                               # УсловияНаступленияМероприятия
+    interval_hours = Column(Integer)                         # ИнтервалВЧасах (0 = не задан)
+    duration_min = Column(Integer)                           # ДлительностьМероприятия
+    department_name = Column(String)                         # ответственное подразделение
     imported_at = Column(DateTime, default=datetime.utcnow)

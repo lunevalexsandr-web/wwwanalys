@@ -2019,7 +2019,7 @@ async def import_odata_sanitation_from_1c(
     названия через справочники. Идемпотентно по external_id (хэш составного ключа).
     """
     import hashlib
-    from app.models import SanitationRecord
+    from app.models import SanitationRecord, SanitationMeasure
 
     service = OneCIntegrationService(config)
     reg = endpoint or f"{base_prefix}/InformationRegister__ОтчетПоСменеСанитарныеМероприятия"
@@ -2038,8 +2038,40 @@ async def import_odata_sanitation_from_1c(
             logger.warning("Справочник %s не загрузился: %s", catalog, e)
             return {}
 
+    def _int(v):
+        try:
+            return int(float(str(v)))
+        except Exception:
+            return None
+
     try:
-        measures = await _name_map("Catalog__СанитарныеМероприятия")
+        # Справочник мероприятий с частотой — грузим полностью, пишем в SanitationMeasure,
+        # строим карту GUID → {name, frequency, interval}.
+        measures: Dict[str, Dict[str, Any]] = {}
+        try:
+            mrows = await service._fetch_list(
+                f"{base_prefix}/Catalog__СанитарныеМероприятия",
+                params={"$format": "json"}, key="value")
+            for m in mrows:
+                if m.get("IsFolder"):
+                    continue
+                rk = str(m.get("Ref_Key")).lower()
+                name = (m.get("Description") or "").strip()
+                freq = (m.get("УсловияНаступленияМероприятия") or "").strip()
+                ih = _int(m.get("ИнтервалВЧасах"))
+                measures[rk] = {"name": name, "frequency": freq, "interval_hours": ih}
+                ex = db.query(SanitationMeasure).filter(SanitationMeasure.external_id == rk).first()
+                data = dict(name=name, frequency=freq, interval_hours=ih,
+                            duration_min=_int(m.get("ДлительностьМероприятия")))
+                if ex:
+                    for k, v in data.items():
+                        setattr(ex, k, v)
+                else:
+                    db.add(SanitationMeasure(external_id=rk, **data))
+            db.commit()
+        except Exception as e:
+            logger.warning("Справочник мероприятий не загрузился: %s", e)
+
         lines = await _name_map("Catalog__ЛинияРозлива")
         depts = await _name_map("Catalog_СтруктураПредприятия")
         persons = await _name_map("Catalog_Сотрудники")
@@ -2077,10 +2109,13 @@ async def import_odata_sanitation_from_1c(
                     except Exception:
                         return None
 
+                minfo = measures.get(mk or "", {}) if isinstance(measures.get(mk or ""), dict) else {}
                 fields = dict(
                     period=_dt(period), shift=shift,
                     start_time=_dt(r.get("ВремяНачала")), end_time=_dt(r.get("ВремяОкончания")),
-                    measure_key=mk, measure_name=measures.get(mk or "", ""),
+                    measure_key=mk, measure_name=minfo.get("name", ""),
+                    measure_frequency=minfo.get("frequency", ""),
+                    measure_interval_hours=minfo.get("interval_hours"),
                     line_key=lk, line_name=lines.get(lk or "", ""),
                     department_key=dk, department_name=depts.get(dk or "", ""),
                     responsible_key=rk, responsible_name=persons.get(rk or "", ""),

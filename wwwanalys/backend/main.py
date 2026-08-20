@@ -85,6 +85,13 @@ def ensure_indicator_columns(engine):
             ADD COLUMN IF NOT EXISTS storage_endpoint VARCHAR(512)
             """
         ))
+        conn.execute(text(
+            """
+            ALTER TABLE sanitation_records
+            ADD COLUMN IF NOT EXISTS measure_frequency VARCHAR,
+            ADD COLUMN IF NOT EXISTS measure_interval_hours INTEGER
+            """
+        ))
         conn.commit()
 
 try:

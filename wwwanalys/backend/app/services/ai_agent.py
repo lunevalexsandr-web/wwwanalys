@@ -340,9 +340,11 @@ _CHAT_SYSTEM_PROMPT = (
     "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
     "get_report_deviations (по номеру партии), get_sanitation (санитарные мероприятия/мойки "
     "за период и по линии), search_tech_cards (внутренние техкарты, приоритетный источник), "
-    "плюс внешние источники при необходимости. Цеха розлива: КЕГ, Стекло, Стекло_2. "
-    "При отклонениях в розливе (особенно микробиология — ОМЧ, смывы, стойкость) обязательно "
-    "сверяйся с санитарией через get_sanitation по нужной линии/дате.\n\n"
+    "get_sanitation_schedule (справочник мероприятий с ТРЕБУЕМОЙ частотой), плюс внешние "
+    "источники при необходимости. Цеха розлива: КЕГ, Стекло, Стекло_2. При отклонениях в "
+    "розливе (особенно микробиология — ОМЧ, смывы, стойкость) обязательно сверяйся с санитарией: "
+    "get_sanitation (что и когда реально делали) и, при необходимости, get_sanitation_schedule "
+    "(как часто ДОЛЖНЫ были делать) — и оцени, не нарушена ли периодичность (просрочка/пропуск).\n\n"
     "ВАЖНО: все вопросы — про лабораторные анализы и производство пива этого предприятия, "
     "а НЕ про новости или мировые события. «Что произошло за день/период» = какие анализы "
     "и отклонения были — вызывай get_deviations_by_date/get_period_summary. Никогда не "
@@ -441,6 +443,7 @@ def _tool_sanitation(db, args) -> str:
         out.append({
             "дата": r.period.isoformat() if r.period else None,
             "смена": r.shift, "мероприятие": r.measure_name, "линия": r.line_name,
+            "частота": r.measure_frequency or None,
             "подразделение": r.department_name, "ответственный": r.responsible_name,
             "начало": r.start_time.strftime("%H:%M") if r.start_time else None,
             "окончание": r.end_time.strftime("%H:%M") if r.end_time else None,
@@ -451,7 +454,33 @@ def _tool_sanitation(db, args) -> str:
     return json.dumps(out[:150], ensure_ascii=False, default=str)
 
 
+def _tool_sanitation_schedule(db, args) -> str:
+    """Справочник санитарных мероприятий с требуемой частотой (для проверки соблюдения)."""
+    from app.models import SanitationMeasure
+    q = db.query(SanitationMeasure).order_by(SanitationMeasure.name)
+    term = ((args or {}).get("query") or "").strip().lower()
+    out = []
+    for m in q.limit(500).all():
+        if term and term not in (m.name or "").lower():
+            continue
+        out.append({
+            "мероприятие": m.name,
+            "частота": m.frequency or None,
+            "интервал_часов": m.interval_hours,
+            "длительность_мин": m.duration_min,
+            "подразделение": m.department_name,
+        })
+    if not out:
+        return "Справочник мероприятий пуст или ничего не найдено (импортируйте санитарию)."
+    return json.dumps(out[:200], ensure_ascii=False, default=str)
+
+
 _CHAT_TOOL_DEFS = [
+    {"name": "get_sanitation_schedule",
+     "description": "Справочник санитарных мероприятий с ТРЕБУЕМОЙ частотой/периодичностью "
+                    "(как часто мероприятие должно проводиться). Для проверки, соблюдается ли график.",
+     "params": {"type": "object", "properties": {
+         "query": {"type": "string", "description": "фильтр по названию мероприятия (необязательно)"}}}},
     {"name": "get_sanitation",
      "description": "Санитарные мероприятия (мойка/обработка/CIP) за период, опционально по линии розлива. "
                     "Используй, чтобы связать микробиологические отклонения (ОМЧ, смывы) с санобработкой.",
@@ -476,6 +505,7 @@ _CHAT_TOOL_DEFS = [
 
 _CHAT_EXEC = {
     "get_sanitation": _tool_sanitation,
+    "get_sanitation_schedule": _tool_sanitation_schedule,
     "get_deviations_by_date": _tool_deviations_by_date,
     "get_period_summary": _tool_period_summary,
     "get_report_deviations": _tool_report_deviations,
