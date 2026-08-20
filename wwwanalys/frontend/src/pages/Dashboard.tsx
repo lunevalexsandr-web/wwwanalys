@@ -337,14 +337,19 @@ const Dashboard: React.FC = () => {
     }
   }, [templates]);
 
-  const fetchReports = async () => {
+  const fetchReports = async (overrides?: { onlyDeviations?: boolean; templateId?: number | null; dateFrom?: string; dateTo?: string }) => {
+    // Значения фильтров: явные overrides имеют приоритет над state (обход устаревшего замыкания)
+    const onlyDev = overrides?.onlyDeviations ?? filterOnlyDeviations;
+    const tpl = overrides && 'templateId' in overrides ? overrides.templateId : filterTemplateId;
+    const df = overrides && 'dateFrom' in overrides ? overrides.dateFrom : filterDateFrom;
+    const dt = overrides && 'dateTo' in overrides ? overrides.dateTo : filterDateTo;
     setIsLoadingHistory(true);
     try {
       const params = new URLSearchParams();
-      if (filterTemplateId) params.append('template_id', filterTemplateId.toString());
-      if (filterDateFrom) params.append('date_from', filterDateFrom);
-      if (filterDateTo) params.append('date_to', filterDateTo);
-      if (filterOnlyDeviations) params.append('only_deviations', 'true');
+      if (tpl) params.append('template_id', tpl.toString());
+      if (df) params.append('date_from', df);
+      if (dt) params.append('date_to', dt);
+      if (onlyDev) params.append('only_deviations', 'true');
       
       const response = await api.get(`/api/reports/filtered/list?${params.toString()}`);
       setReports(response.data);
@@ -653,7 +658,7 @@ const Dashboard: React.FC = () => {
     setFilterDateFrom('');
     setFilterDateTo('');
     setFilterOnlyDeviations(false);
-    setTimeout(fetchReports, 0);
+    fetchReports({ templateId: null, dateFrom: '', dateTo: '', onlyDeviations: false });
   };
 
   const getTemplateName = (templateId: number) => {
@@ -1087,7 +1092,7 @@ const Dashboard: React.FC = () => {
                             id="filter-only-deviations"
                             label="⚠ Только с отклонениями"
                             checked={filterOnlyDeviations}
-                            onChange={(e) => { setFilterOnlyDeviations(e.target.checked); setTimeout(fetchReports, 0); }}
+                            onChange={(e) => { setFilterOnlyDeviations(e.target.checked); fetchReports({ onlyDeviations: e.target.checked }); }}
                           />
                         </div>
                       </CardBody>
