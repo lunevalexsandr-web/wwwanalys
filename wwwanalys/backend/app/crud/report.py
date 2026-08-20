@@ -141,19 +141,26 @@ def get_reports_by_user(db: Session, user_id: int):
     return db.query(ProcessLog).filter(ProcessLog.created_by == user_id).all()
 
 def get_reports_filtered(
-    db: Session, 
-    user_id: int, 
-    template_id: int = None, 
-    date_from: date = None, 
+    db: Session,
+    user_id: int,
+    template_id: int = None,
+    date_from: date = None,
     date_to: date = None,
-    skip: int = 0, 
-    limit: int = 100
+    skip: int = 0,
+    limit: int = 100,
+    only_deviations: bool = False
 ):
-    """Получить отчеты пользователя с фильтрацией по шаблону и дате"""
+    """Получить отчеты пользователя с фильтрацией по шаблону, дате и наличию отклонений"""
     query = db.query(ProcessLog).filter(ProcessLog.created_by == user_id)
-    
+
     if template_id:
         query = query.filter(ProcessLog.analysis_type_id == template_id)
+
+    if only_deviations:
+        sub = db.query(IndicatorValue.process_log_id).filter(
+            IndicatorValue.is_normal == False
+        ).distinct()
+        query = query.filter(ProcessLog.id.in_(sub))
     
     if date_from:
         query = query.filter(ProcessLog.started_at >= datetime.combine(date_from, datetime.min.time()))

@@ -34,6 +34,7 @@ const Dashboard: React.FC = () => {
   const [filterTemplateId, setFilterTemplateId] = useState<number | null>(null);
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterOnlyDeviations, setFilterOnlyDeviations] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
   // View report state
@@ -343,6 +344,7 @@ const Dashboard: React.FC = () => {
       if (filterTemplateId) params.append('template_id', filterTemplateId.toString());
       if (filterDateFrom) params.append('date_from', filterDateFrom);
       if (filterDateTo) params.append('date_to', filterDateTo);
+      if (filterOnlyDeviations) params.append('only_deviations', 'true');
       
       const response = await api.get(`/api/reports/filtered/list?${params.toString()}`);
       setReports(response.data);
@@ -650,6 +652,7 @@ const Dashboard: React.FC = () => {
     setFilterTemplateId(null);
     setFilterDateFrom('');
     setFilterDateTo('');
+    setFilterOnlyDeviations(false);
     setTimeout(fetchReports, 0);
   };
 
@@ -1072,13 +1075,20 @@ const Dashboard: React.FC = () => {
                             />
                           </div>
                         </div>
-                        <div className="mt-3 d-flex gap-2">
+                        <div className="mt-3 d-flex gap-3 align-items-center flex-wrap">
                           <Button variant="primary" onClick={handleFilterApply}>
                             Применить
                           </Button>
                           <Button variant="secondary" onClick={handleFilterReset}>
                             Сбросить
                           </Button>
+                          <Form.Check
+                            type="switch"
+                            id="filter-only-deviations"
+                            label="⚠ Только с отклонениями"
+                            checked={filterOnlyDeviations}
+                            onChange={(e) => { setFilterOnlyDeviations(e.target.checked); setTimeout(fetchReports, 0); }}
+                          />
                         </div>
                       </CardBody>
                     </Card>

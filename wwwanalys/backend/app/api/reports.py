@@ -109,12 +109,13 @@ def get_reports_filtered(
     template_id: Optional[int] = Query(None, description="Filter by template ID"),
     date_from: Optional[date] = Query(None, description="Start date (format: YYYY-MM-DD)"),
     date_to: Optional[date] = Query(None, description="End date (format: YYYY-MM-DD)"),
+    only_deviations: bool = Query(False, description="Только отчёты с отклонениями"),
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get reports with filtering by template and date (for all authenticated users)."""
+    """Get reports with filtering by template, date and deviations (for all authenticated users)."""
     reports = crud_report.get_reports_filtered(
         db,
         user_id=current_user.id,
@@ -122,7 +123,8 @@ def get_reports_filtered(
         date_from=date_from,
         date_to=date_to,
         skip=skip,
-        limit=limit
+        limit=limit,
+        only_deviations=only_deviations
     )
     # Число отклонений на отчёт — одним агрегатным запросом (для подсветки в истории)
     from app.models import IndicatorValue
