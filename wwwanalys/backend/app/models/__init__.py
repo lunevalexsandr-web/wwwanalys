@@ -12,6 +12,7 @@ from .integration_config import IntegrationConfig
 from .variety import Variety
 from .template_norm import TemplateNorm
 from .analysis_object import AnalysisObject
+from .sanitation import SanitationRecord
 
 __all__ = [
     "User",
@@ -30,5 +31,6 @@ __all__ = [
     "IntegrationConfig",
     "Variety",
     "TemplateNorm",
-    "AnalysisObject"
+    "AnalysisObject",
+    "SanitationRecord"
 ]

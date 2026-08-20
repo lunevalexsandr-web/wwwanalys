@@ -261,6 +261,59 @@ async def import_results_from_1c_odata(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
+# --- Санитарные мероприятия (РегистрСведений) ---
+
+class OneCODataSanitationImportRequest(BaseModel):
+    connection: OneCConnectionConfig
+    date_from: str  # YYYY-MM-DD
+    date_to: str    # YYYY-MM-DD
+
+
+@router.post("/1c/import-sanitation-odata")
+async def import_sanitation_from_1c_odata(
+    request: OneCODataSanitationImportRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key)
+):
+    """Импортировать санитарные мероприятия за период из 1С (OData регистр сведений)."""
+    from app.services.external_integration import import_odata_sanitation_from_1c
+    saved_config = crud_integration.get_by_name(db, INTEGRATION_NAME)
+    config = _build_service_config(request.connection, saved_config)
+    config.timeout = 180
+    try:
+        result = await import_odata_sanitation_from_1c(
+            db=db, config=config, date_from=request.date_from, date_to=request.date_to,
+        )
+        return {"status": "success" if not result["errors"] else "partial", **result}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
+
+
+@router.get("/1c/sanitation")
+async def list_sanitation(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Список санитарных мероприятий (для интерфейса/проверки)."""
+    from app.models import SanitationRecord
+    q = db.query(SanitationRecord)
+    if date_from:
+        q = q.filter(SanitationRecord.period >= f"{date_from} 00:00:00")
+    if date_to:
+        q = q.filter(SanitationRecord.period <= f"{date_to} 23:59:59")
+    rows = q.order_by(SanitationRecord.period.desc()).limit(1000).all()
+    return [{
+        "period": r.period.isoformat() if r.period else None,
+        "shift": r.shift, "measure": r.measure_name, "line": r.line_name,
+        "department": r.department_name, "responsible": r.responsible_name,
+        "start_time": r.start_time.isoformat() if r.start_time else None,
+        "end_time": r.end_time.isoformat() if r.end_time else None,
+        "comment": r.comment,
+    } for r in rows]
+
+
 # --- Ёмкости/танки из справочника Склады ---
 
 class OneCODataStorageImportRequest(BaseModel):

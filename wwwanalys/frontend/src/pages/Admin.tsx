@@ -84,6 +84,8 @@ const Admin: React.FC = () => {
   const [c1CStorageEndpoint, setC1CStorageEndpoint] = useState('/erp_24/odata/standard.odata/Catalog_Склады');
   const [c1CResFrom, setC1CResFrom] = useState('');
   const [c1CResTo, setC1CResTo] = useState('');
+  const [c1CSanFrom, setC1CSanFrom] = useState('');
+  const [c1CSanTo, setC1CSanTo] = useState('');
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -649,6 +651,25 @@ const Admin: React.FC = () => {
       }
     } catch (error: any) {
       showToast(error.response?.data?.detail || 'Ошибка загрузки вариантов значений', 'danger');
+    } finally {
+      setIs1CImporting(false);
+    }
+  };
+
+  const handleImportSanitationFrom1C = async () => {
+    if (!c1CBaseUrl.trim()) { showToast('Введите URL сервера 1С', 'warning'); return; }
+    if (!c1CSanFrom || !c1CSanTo) { showToast('Укажите период (с/по)', 'warning'); return; }
+    setIs1CImporting(true);
+    try {
+      const response = await api.post('/api/external/1c/import-sanitation-odata', {
+        connection: { base_url: c1CBaseUrl, username: c1CUsername || undefined, password: c1CPassword || undefined },
+        date_from: c1CSanFrom,
+        date_to: c1CSanTo,
+      });
+      const r = response.data;
+      showToast(`Санитария: получено ${r.total}, создано ${r.created}, обновлено ${r.updated}`, r.status === 'success' ? 'success' : 'warning');
+    } catch (error: any) {
+      showToast(error.response?.data?.detail || 'Ошибка импорта санитарии', 'danger');
     } finally {
       setIs1CImporting(false);
     }
@@ -1526,6 +1547,18 @@ const Admin: React.FC = () => {
                 </Button>
               </div>
               <Form.Text className="text-muted">Документы «УстановкаАнализовСерии» → отчёты приложения (идемпотентно)</Form.Text>
+            </Form.Group>
+            <Form.Group className="mb-2">
+              <Form.Label className="mb-1">Санитарные мероприятия за период</Form.Label>
+              <div className="d-flex gap-2 align-items-center">
+                <Form.Control size="sm" type="date" value={c1CSanFrom} onChange={(e) => setC1CSanFrom(e.target.value)} />
+                <span className="text-muted">—</span>
+                <Form.Control size="sm" type="date" value={c1CSanTo} onChange={(e) => setC1CSanTo(e.target.value)} />
+                <Button variant="success" size="sm" style={{ whiteSpace: 'nowrap' }} onClick={handleImportSanitationFrom1C} disabled={is1CImporting}>
+                  {is1CImporting ? <Spinner as="span" animation="border" size="sm" /> : 'Загрузить'}
+                </Button>
+              </div>
+              <Form.Text className="text-muted">Регистр «ОтчётПоСменеСанитарныеМероприятия» → мойки/обработки (для Агента)</Form.Text>
             </Form.Group>
 
             {import1CResult && (

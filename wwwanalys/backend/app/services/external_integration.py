@@ -2003,3 +2003,104 @@ async def import_odata_results_from_1c(
     finally:
         await service.close()
     return r
+
+
+async def import_odata_sanitation_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    date_from: str,
+    date_to: str,
+    endpoint: Optional[str] = None,
+    base_prefix: str = "/erp_24/odata/standard.odata",
+) -> Dict[str, Any]:
+    """Импорт санитарных мероприятий из РегистрСведений _ОтчётПоСменеСанитарныеМероприятия.
+
+    Ключи 1С (мероприятие/линия/подразделение/ответственный) расшифровываются в
+    названия через справочники. Идемпотентно по external_id (хэш составного ключа).
+    """
+    import hashlib
+    from app.models import SanitationRecord
+
+    service = OneCIntegrationService(config)
+    reg = endpoint or f"{base_prefix}/InformationRegister__ОтчетПоСменеСанитарныеМероприятия"
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "skipped": 0,
+        "errors": [], "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    async def _name_map(catalog: str) -> Dict[str, str]:
+        try:
+            rows = await service._fetch_list(
+                f"{base_prefix}/{catalog}",
+                params={"$format": "json", "$select": "Ref_Key,Description"}, key="value")
+            return {str(r.get("Ref_Key")).lower(): (r.get("Description") or "").strip() for r in rows}
+        except Exception as e:
+            logger.warning("Справочник %s не загрузился: %s", catalog, e)
+            return {}
+
+    try:
+        measures = await _name_map("Catalog__СанитарныеМероприятия")
+        lines = await _name_map("Catalog__ЛинияРозлива")
+        depts = await _name_map("Catalog_СтруктураПредприятия")
+        persons = await _name_map("Catalog_Сотрудники")
+        # ответственный может быть физлицом — дополняем карту
+        for k, v in (await _name_map("Catalog_ФизическиеЛица")).items():
+            persons.setdefault(k, v)
+
+        # выборка регистра за период (фолбэк — полная выборка с фильтром в Python)
+        flt = f"Period ge datetime'{date_from}T00:00:00' and Period le datetime'{date_to}T23:59:59'"
+        try:
+            rows = await service._fetch_list(reg, params={"$format": "json", "$filter": flt}, key="value")
+        except Exception:
+            all_rows = await service._fetch_list(reg, params={"$format": "json"}, key="value")
+            rows = [r for r in all_rows if date_from <= str(r.get("Period", ""))[:10] <= date_to]
+
+        result["total"] = len(rows)
+
+        def g(key):
+            return None if (not key or key == ZERO_GUID) else str(key).lower()
+
+        for r in rows:
+            try:
+                period = r.get("Period")
+                shift = str(r.get("НомерСмены") or "").strip()
+                lk = g(r.get("ЛинияРозлива_Key"))
+                dk = g(r.get("Подразделение_Key"))
+                mk = g(r.get("СанитарноеМероприятие_Key"))
+                rk = g(r.get("Ответственный_Key"))
+                raw_key = f"{period}|{shift}|{lk}|{r.get('ВремяНачала')}|{r.get('ВремяОкончания')}|{dk}|{mk}"
+                ext_id = hashlib.md5(raw_key.encode("utf-8")).hexdigest()
+
+                def _dt(v):
+                    try:
+                        return datetime.fromisoformat(str(v)) if v else None
+                    except Exception:
+                        return None
+
+                fields = dict(
+                    period=_dt(period), shift=shift,
+                    start_time=_dt(r.get("ВремяНачала")), end_time=_dt(r.get("ВремяОкончания")),
+                    measure_key=mk, measure_name=measures.get(mk or "", ""),
+                    line_key=lk, line_name=lines.get(lk or "", ""),
+                    department_key=dk, department_name=depts.get(dk or "", ""),
+                    responsible_key=rk, responsible_name=persons.get(rk or "", ""),
+                    comment=(r.get("Комментарий") or "").strip(),
+                )
+
+                existing = db.query(SanitationRecord).filter(SanitationRecord.external_id == ext_id).first()
+                if existing:
+                    for k, v in fields.items():
+                        setattr(existing, k, v)
+                    result["updated"] += 1
+                else:
+                    db.add(SanitationRecord(external_id=ext_id, **fields))
+                    result["created"] += 1
+            except Exception as e:
+                result["errors"].append({"error": str(e)})
+
+        db.commit()
+        logger.info("Санитария: получено %s, создано %s, обновлено %s",
+                    result["total"], result["created"], result["updated"])
+    finally:
+        await service.close()
+    return result

@@ -298,8 +298,10 @@ _CHAT_SYSTEM_PROMPT = (
     "по данным анализов и помогаешь с отклонениями.\n"
     "Сегодняшняя дата: {today}. «вчера», «сегодня», «за неделю» считай от неё.\n\n"
     "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
-    "get_report_deviations (по номеру партии), search_tech_cards (внутренние техкарты, "
-    "приоритетный источник), плюс внешние источники при необходимости.\n\n"
+    "get_report_deviations (по номеру партии), get_sanitation (санитарные мероприятия/мойки "
+    "за период и по линии), search_tech_cards (внутренние техкарты, приоритетный источник), "
+    "плюс внешние источники при необходимости. Для микробиологических отклонений (ОМЧ, смывы) "
+    "сопоставляй их с санобработкой через get_sanitation.\n\n"
     "ВАЖНО: все вопросы — про лабораторные анализы и производство пива этого предприятия, "
     "а НЕ про новости или мировые события. «Что произошло за день/период» = какие анализы "
     "и отклонения были — вызывай get_deviations_by_date/get_period_summary. Никогда не "
@@ -381,7 +383,42 @@ def _tool_report_deviations(db, args) -> str:
     return json.dumps(out, ensure_ascii=False, default=str)
 
 
+def _tool_sanitation(db, args) -> str:
+    from app.models import SanitationRecord
+    a = args or {}
+    q = db.query(SanitationRecord)
+    if a.get("date_from"):
+        q = q.filter(SanitationRecord.period >= f"{a['date_from']} 00:00:00")
+    if a.get("date_to"):
+        q = q.filter(SanitationRecord.period <= f"{a['date_to']} 23:59:59")
+    line = (a.get("line") or "").strip().lower()
+    rows = q.order_by(SanitationRecord.period.desc()).limit(300).all()
+    out = []
+    for r in rows:
+        if line and line not in (r.line_name or "").lower():
+            continue
+        out.append({
+            "дата": r.period.isoformat() if r.period else None,
+            "смена": r.shift, "мероприятие": r.measure_name, "линия": r.line_name,
+            "подразделение": r.department_name, "ответственный": r.responsible_name,
+            "начало": r.start_time.strftime("%H:%M") if r.start_time else None,
+            "окончание": r.end_time.strftime("%H:%M") if r.end_time else None,
+            "комментарий": r.comment,
+        })
+    if not out:
+        return "Санитарных мероприятий за этот период не найдено (либо данные ещё не импортированы)."
+    return json.dumps(out[:150], ensure_ascii=False, default=str)
+
+
 _CHAT_TOOL_DEFS = [
+    {"name": "get_sanitation",
+     "description": "Санитарные мероприятия (мойка/обработка/CIP) за период, опционально по линии розлива. "
+                    "Используй, чтобы связать микробиологические отклонения (ОМЧ, смывы) с санобработкой.",
+     "params": {"type": "object", "properties": {
+         "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+         "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+         "line": {"type": "string", "description": "фильтр по названию линии (необязательно)"}},
+      "required": ["date_from", "date_to"]}},
     {"name": "get_deviations_by_date",
      "description": "Отклонения показателей за конкретный день по всем отчётам.",
      "params": {"type": "object", "properties": {"date": {"type": "string", "description": "дата YYYY-MM-DD"}}, "required": ["date"]}},
@@ -397,6 +434,7 @@ _CHAT_TOOL_DEFS = [
 ]
 
 _CHAT_EXEC = {
+    "get_sanitation": _tool_sanitation,
     "get_deviations_by_date": _tool_deviations_by_date,
     "get_period_summary": _tool_period_summary,
     "get_report_deviations": _tool_report_deviations,
