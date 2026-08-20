@@ -16,6 +16,7 @@ const ReportsAnalytics: React.FC = () => {
   const [aiText, setAiText] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const [sanitation, setSanitation] = useState<any[]>([]);
 
   const load = async () => {
     setLoading(true); setAiText(null); setAiMsg(null);
@@ -25,6 +26,10 @@ const ReportsAnalytics: React.FC = () => {
     } catch (e: any) {
       setData(null); setAiMsg(e?.response?.data?.detail || 'Ошибка загрузки аналитики');
     } finally { setLoading(false); }
+    try {
+      const s = await api.get('/api/external/1c/sanitation', { params: { date_from: dateFrom || undefined, date_to: dateTo || undefined } });
+      setSanitation(s.data || []);
+    } catch { setSanitation([]); }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
@@ -150,6 +155,32 @@ const ReportsAnalytics: React.FC = () => {
                   ))}</tbody>
                 </Table>
               </div>
+            </CardBody></Card>
+
+            <Card className="mb-4"><CardBody>
+              <h6>Санитарные мероприятия за период <Badge bg="secondary">{sanitation.length}</Badge></h6>
+              {sanitation.length === 0 ? (
+                <div className="text-muted small">Нет данных за период (или не импортированы: Админ → Интеграция → «Санитарные мероприятия»).</div>
+              ) : (
+                <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                  <Table size="sm" striped bordered>
+                    <thead style={{ position: 'sticky', top: 0 }}><tr>
+                      <th>Дата</th><th>См.</th><th>Мероприятие</th><th>Линия</th><th>Подразделение</th><th>Ответственный</th><th>Коммент.</th>
+                    </tr></thead>
+                    <tbody>{sanitation.map((s: any, i: number) => (
+                      <tr key={i}>
+                        <td>{(s.period || '').slice(0, 10)}</td>
+                        <td>{s.shift}</td>
+                        <td>{s.measure}</td>
+                        <td>{s.line || '—'}</td>
+                        <td className="small">{s.department || '—'}</td>
+                        <td className="small">{s.responsible || '—'}</td>
+                        <td className="small">{s.comment || ''}</td>
+                      </tr>
+                    ))}</tbody>
+                  </Table>
+                </div>
+              )}
             </CardBody></Card>
           </>
         )}

@@ -61,12 +61,29 @@ def _rag_search(db, query: str, variety: Optional[str]) -> str:
     )
 
 
+def _container_to_line(container: Optional[str]) -> Optional[str]:
+    """Тара отчёта → ключевое слово линии розлива для фильтра санитарии."""
+    if not container:
+        return None
+    c = container.strip().lower().replace(" ", "")
+    if "кег" in c:
+        return "КЕГ"
+    if "стекло2" in c or "стекло_2" in c:
+        return "Krones"   # линия розлива Стекло_2
+    if "стекло" in c:
+        return "PALI"     # линия розлива Стекло
+    if "пэт" in c or "pet" in c:
+        return "ПЭТ"
+    return None
+
+
 def _build_user_msg(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]],
                     variety: Optional[str]) -> str:
     payload = {
         "batch_number": report_ctx.get("batch_number"),
         "variety": variety or report_ctx.get("variety"),
         "container": report_ctx.get("container"),
+        "линия_розлива_для_санитарии": _container_to_line(report_ctx.get("container")),
         "date": report_ctx.get("date"),
         "deviations": deviations,
     }
@@ -74,8 +91,9 @@ def _build_user_msg(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]
         "Разбери отклонения показателей этой партии и дай рекомендации. "
         "Сначала ищи причины в техкартах (search_tech_cards). Если тара/цех — розлив "
         "(КЕГ / Стекло / Стекло_2) и есть микробиологические отклонения (ОМЧ, смывы, "
-        "стойкость), обязательно вызови get_sanitation за дату отчёта по этой линии и учти "
-        "санобработку в причинах/рекомендациях. При необходимости — внешние источники. "
+        "стойкость), обязательно вызови get_sanitation за дату отчёта, передав line = значение "
+        "поля «линия_розлива_для_санитарии», и учти санобработку (в т.ч. соблюдение частоты) в "
+        "причинах/рекомендациях. При необходимости — внешние источники. "
         "Данные (JSON):\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )

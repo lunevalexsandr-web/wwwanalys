@@ -289,6 +289,20 @@ async def import_sanitation_from_1c_odata(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OData import failed: {str(e)}")
 
 
+@router.get("/1c/sanitation-measures")
+async def list_sanitation_measures(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Справочник санитарных мероприятий с частотой (для раздела «Справочники»)."""
+    from app.models import SanitationMeasure
+    rows = db.query(SanitationMeasure).order_by(SanitationMeasure.name).all()
+    return [{
+        "name": m.name, "frequency": m.frequency, "interval_hours": m.interval_hours,
+        "duration_min": m.duration_min, "department": m.department_name,
+    } for m in rows]
+
+
 @router.get("/1c/sanitation")
 async def list_sanitation(
     date_from: Optional[str] = Query(None),
