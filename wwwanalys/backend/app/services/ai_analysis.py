@@ -67,9 +67,12 @@ def build_report_context(db: Session, report: ProcessLog) -> Dict[str, Any]:
             "norm_text": norm_text,
             "is_normal": getattr(v, "is_normal", None),
         })
+    _d = getattr(report, "started_at", None)
     return {
         "batch_number": report.batch_number,
         "variety": getattr(report, "variety", None),
+        "container": getattr(report, "container", None),
+        "date": _d.date().isoformat() if _d else None,
         "template_name": template.name if template else None,
         "values": values,
     }

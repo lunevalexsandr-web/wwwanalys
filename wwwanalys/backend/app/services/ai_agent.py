@@ -29,6 +29,10 @@ _AGENT_SYSTEM_PROMPT = (
     "Инструменты:\n"
     "• search_tech_cards — сначала ищи причины и регламентные требования во "
     "внутренней базе технологических карт предприятия (приоритетный источник).\n"
+    "• get_sanitation — санитарные мероприятия (мойки/обработки/CIP) за дату по линии "
+    "розлива. Цеха розлива: КЕГ, Стекло, Стекло_2. При отклонениях в розливе "
+    "(особенно микробиология — ОМЧ, смывы, стойкость) ОБЯЗАТЕЛЬНО сверяйся с санитарией: "
+    "была ли обработка линии, когда, какая, нет ли пропуска/неисправности.\n"
     "• web_search — затем, при необходимости, уточняй общими знаниями пивоварения "
     "из внешних источников (публикации, стандарты).\n\n"
     "Правила: числовые факты по отклонениям даны в запросе — не изменяй их и не "
@@ -63,12 +67,16 @@ def _build_user_msg(report_ctx: Dict[str, Any], deviations: List[Dict[str, Any]]
         "batch_number": report_ctx.get("batch_number"),
         "variety": variety or report_ctx.get("variety"),
         "container": report_ctx.get("container"),
+        "date": report_ctx.get("date"),
         "deviations": deviations,
     }
     return (
         "Разбери отклонения показателей этой партии и дай рекомендации. "
-        "Сначала ищи причины в техкартах (search_tech_cards), при необходимости "
-        "опирайся на внешние источники. Данные (JSON):\n"
+        "Сначала ищи причины в техкартах (search_tech_cards). Если тара/цех — розлив "
+        "(КЕГ / Стекло / Стекло_2) и есть микробиологические отклонения (ОМЧ, смывы, "
+        "стойкость), обязательно вызови get_sanitation за дату отчёта по этой линии и учти "
+        "санобработку в причинах/рекомендациях. При необходимости — внешние источники. "
+        "Данные (JSON):\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )
 
@@ -141,6 +149,28 @@ def _build_rag_tool():
     return search_tech_cards
 
 
+def _build_sanitation_tool():
+    from anthropic import beta_tool
+
+    @beta_tool
+    def get_sanitation(date_from: str, date_to: str, line: str = "") -> str:
+        """Санитарные мероприятия (мойка/обработка/CIP) за период по линии розлива
+        (КЕГ / Стекло / Стекло_2). Для микробиологических отклонений в розливе.
+
+        Args:
+            date_from: начало периода YYYY-MM-DD.
+            date_to: конец периода YYYY-MM-DD.
+            line: фильтр по названию линии (необязательно).
+        """
+        ctx = _agent_ctx.get({})
+        db = ctx.get("db")
+        if db is None:
+            return "Данные санитарии недоступны."
+        return _tool_sanitation(db, {"date_from": date_from, "date_to": date_to, "line": line})
+
+    return get_sanitation
+
+
 def _extract_text(message) -> str:
     if message is None:
         return ""
@@ -187,19 +217,24 @@ def _run_openrouter(db, system_prompt: str, user_msg: str, variety) -> Dict[str,
     from openai import OpenAI
 
     client = OpenAI(base_url=settings.openrouter_base_url, api_key=settings.openrouter_api_key)
-    tools = [{
-        "type": "function",
-        "function": {
+    tools = [
+        {"type": "function", "function": {
             "name": "search_tech_cards",
             "description": "Поиск во внутренней базе технологических карт (RAG). "
                            "Возвращает выдержки из регламентов предприятия.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string", "description": "запрос на русском"}},
-                "required": ["query"],
-            },
-        },
-    }]
+            "parameters": {"type": "object",
+                           "properties": {"query": {"type": "string", "description": "запрос на русском"}},
+                           "required": ["query"]}}},
+        {"type": "function", "function": {
+            "name": "get_sanitation",
+            "description": "Санитарные мероприятия (мойка/обработка/CIP) за период по линии розлива "
+                           "(КЕГ/Стекло/Стекло_2). Для микробиологических отклонений в розливе.",
+            "parameters": {"type": "object", "properties": {
+                "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+                "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+                "line": {"type": "string", "description": "фильтр по линии (необязательно)"}},
+                "required": ["date_from", "date_to"]}}},
+    ]
     messages: List[Dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
@@ -231,7 +266,10 @@ def _run_openrouter(db, system_prompt: str, user_msg: str, variety) -> Dict[str,
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = _rag_search(db, args.get("query", ""), variety)
+                if tc.function.name == "get_sanitation":
+                    result = _tool_sanitation(db, args)
+                else:
+                    result = _rag_search(db, args.get("query", ""), variety)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
             continue
         break
@@ -244,9 +282,11 @@ def _run_anthropic(db, system_prompt: str, user_msg: str, variety) -> Dict[str, 
 
     client = Anthropic(api_key=settings.anthropic_api_key)
     search_tech_cards = _build_rag_tool()
+    get_sanitation = _build_sanitation_tool()
 
     tools = [
         search_tech_cards,
+        get_sanitation,
         {"type": "web_search_20260209", "name": "web_search", "max_uses": 5},
     ]
 
@@ -300,8 +340,9 @@ _CHAT_SYSTEM_PROMPT = (
     "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
     "get_report_deviations (по номеру партии), get_sanitation (санитарные мероприятия/мойки "
     "за период и по линии), search_tech_cards (внутренние техкарты, приоритетный источник), "
-    "плюс внешние источники при необходимости. Для микробиологических отклонений (ОМЧ, смывы) "
-    "сопоставляй их с санобработкой через get_sanitation.\n\n"
+    "плюс внешние источники при необходимости. Цеха розлива: КЕГ, Стекло, Стекло_2. "
+    "При отклонениях в розливе (особенно микробиология — ОМЧ, смывы, стойкость) обязательно "
+    "сверяйся с санитарией через get_sanitation по нужной линии/дате.\n\n"
     "ВАЖНО: все вопросы — про лабораторные анализы и производство пива этого предприятия, "
     "а НЕ про новости или мировые события. «Что произошло за день/период» = какие анализы "
     "и отклонения были — вызывай get_deviations_by_date/get_period_summary. Никогда не "
