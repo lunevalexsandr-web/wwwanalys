@@ -60,7 +60,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                   to="/admin"
                   className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
                 >
-                  Админ-панель
+                  ⚙️ Настройки
                 </Link>
               )}
               {user?.is_admin && (

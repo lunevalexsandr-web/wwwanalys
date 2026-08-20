@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Table, Spinner, Alert, Form, Badge, Tabs, Tab, InputGroup } from 'react-bootstrap';
 import AppHeader from '../components/AppHeader';
 import api from '../api/axios';
+import Admin from './Admin';
 
 interface Ref { id: number; name: string; external_id: string | null; }
 
@@ -127,7 +128,13 @@ const ReferenceData: React.FC = () => {
         </div>
 
         <div className="bg-white border rounded-3 shadow-sm p-3 p-md-4">
-          <Tabs defaultActiveKey="varieties" className="mb-3">
+          <Tabs defaultActiveKey="varieties" className="mb-3" mountOnEnter unmountOnExit>
+            <Tab eventKey="templates" title={<span>📋 Шаблоны</span>}>
+              <div className="pt-2"><Admin mode="templates" embedded /></div>
+            </Tab>
+            <Tab eventKey="library" title={<span>📈 Показатели</span>}>
+              <div className="pt-2"><Admin mode="library" embedded /></div>
+            </Tab>
             <Tab eventKey="varieties" title={<span>🍺 Сорта</span>}>
               <div className="pt-3"><SimpleRef url="/api/varieties" params={{ active_only: true }} /></div>
             </Tab>

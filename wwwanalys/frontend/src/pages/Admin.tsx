@@ -10,8 +10,16 @@ import { useToast } from '../hooks/useToast';
 import api from '../api/axios';
 import type { AnalysisType, User as UserType, IndicatorLibrary, LibraryIndicatorRef, PresetListItem, Preset } from '../types';
 
-const Admin: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('templates');
+const Admin: React.FC<{ mode?: 'settings' | 'templates' | 'library'; embedded?: boolean }> = ({ mode = 'settings', embedded = false }) => {
+  const VISIBLE: Record<string, string[]> = {
+    settings: ['integrations', 'users', 'presets'],
+    templates: ['templates'],
+    library: ['library'],
+  };
+  const show = (k: string) => (VISIBLE[mode] || []).includes(k);
+  const [activeTab, setActiveTab] = useState(
+    mode === 'library' ? 'library' : mode === 'settings' ? 'integrations' : 'templates'
+  );
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -862,19 +870,22 @@ const Admin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader showDashboardLink />
-      <main className="app-main py-6">
-        <div className="container-fluid">
-          <div className="page-wrapper">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-text-primary mb-1">Администрирование</h1>
-              <p className="text-text-secondary text-sm">Управление шаблонами, справочником показателей и пользователями</p>
-            </div>
+    <div className={embedded ? '' : 'min-h-screen bg-background'}>
+      {!embedded && <AppHeader showDashboardLink />}
+      {embedded && <style>{`.admin-embedded > .nav { display: none !important; }`}</style>}
+      <main className={embedded ? '' : 'app-main py-6'}>
+        <div className={embedded ? '' : 'container-fluid'}>
+          <div className={embedded ? '' : 'page-wrapper'}>
+            {!embedded && (
+              <div className="mb-6">
+                <h1 className="text-2xl font-bold text-text-primary mb-1">⚙️ Настройки</h1>
+                <p className="text-text-secondary text-sm">Интеграция с 1С, пользователи, пресеты</p>
+              </div>
+            )}
 
-            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} className="mb-6">
+            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'templates')} mountOnEnter unmountOnExit className={embedded ? 'admin-embedded mb-6' : 'mb-6'}>
               {/* Templates Tab */}
-              <Tab eventKey="templates" title={<span>Шаблоны анализа</span>}>
+              <Tab eventKey="templates" tabClassName={show('templates') ? '' : 'd-none'} title={<span>Шаблоны анализа</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center">
                     <CardTitle className="h5 mb-0">Управление шаблонами</CardTitle>
@@ -930,7 +941,7 @@ const Admin: React.FC = () => {
               </Tab>
 
               {/* Presets Tab */}
-              <Tab eventKey="presets" title={<span>Пресеты</span>}>
+              <Tab eventKey="presets" tabClassName={show('presets') ? '' : 'd-none'} title={<span>Пресеты</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border">
                     <CardTitle className="h5 mb-0">Предустановленные наборы показателей</CardTitle>
@@ -972,7 +983,7 @@ const Admin: React.FC = () => {
               </Tab>
 
               {/* Indicators Library Tab */}
-              <Tab eventKey="library" title={<span>Справочник показателей</span>}>
+              <Tab eventKey="library" tabClassName={show('library') ? '' : 'd-none'} title={<span>Справочник показателей</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <CardTitle className="h5 mb-0">Справочник показателей</CardTitle>
@@ -1063,7 +1074,7 @@ const Admin: React.FC = () => {
               </Tab>
 
               {/* Users Tab */}
-              <Tab eventKey="users" title={<span>Пользователи</span>}>
+              <Tab eventKey="users" tabClassName={show('users') ? '' : 'd-none'} title={<span>Пользователи</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center">
                     <CardTitle className="h5 mb-0">Управление пользователями</CardTitle>
@@ -1115,7 +1126,7 @@ const Admin: React.FC = () => {
               </Tab>
 
               {/* Integrations Tab */}
-              <Tab eventKey="integrations" title={<span>Интеграции</span>}>
+              <Tab eventKey="integrations" tabClassName={show('integrations') ? '' : 'd-none'} title={<span>Интеграция с 1С</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border">
                     <CardTitle className="h5 mb-0">Внешние интеграции</CardTitle>
