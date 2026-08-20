@@ -1108,8 +1108,15 @@ const Dashboard: React.FC = () => {
                             </thead>
                             <tbody>
                               {reports.map((report) => (
-                                <tr key={report.id}>
-                                  <td><strong>{report.batch_number}</strong></td>
+                                <tr key={report.id} className={report.deviations_count > 0 ? 'table-warning' : ''}>
+                                  <td>
+                                    <strong>{report.batch_number}</strong>
+                                    {report.deviations_count > 0 && (
+                                      <Badge bg="danger" className="ms-2" title="Есть отклонения">
+                                        ⚠ {report.deviations_count}
+                                      </Badge>
+                                    )}
+                                  </td>
                                   <td>{getTemplateName(report.analysis_type_id)}</td>
                                   <td>{new Date(report.started_at).toLocaleString('ru-RU')}</td>
                                   <td>

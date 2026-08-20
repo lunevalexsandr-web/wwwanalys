@@ -45,6 +45,7 @@ class Report(BaseModel):
     notes: Optional[str] = None
     values: List[IndicatorValueReport] = []
     created_by: Optional[int] = None
+    deviations_count: Optional[int] = None
 
     class Config:
         from_attributes = True

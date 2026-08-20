@@ -116,7 +116,7 @@ def get_reports_filtered(
 ):
     """Get reports with filtering by template and date (for all authenticated users)."""
     reports = crud_report.get_reports_filtered(
-        db, 
+        db,
         user_id=current_user.id,
         template_id=template_id,
         date_from=date_from,
@@ -124,6 +124,19 @@ def get_reports_filtered(
         skip=skip,
         limit=limit
     )
+    # Число отклонений на отчёт — одним агрегатным запросом (для подсветки в истории)
+    from app.models import IndicatorValue
+    from sqlalchemy import func
+    ids = [r.id for r in reports]
+    counts = {}
+    if ids:
+        rows = (db.query(IndicatorValue.process_log_id,
+                         func.count().filter(IndicatorValue.is_normal == False))
+                .filter(IndicatorValue.process_log_id.in_(ids))
+                .group_by(IndicatorValue.process_log_id).all())
+        counts = {pid: c for pid, c in rows}
+    for r in reports:
+        r.deviations_count = counts.get(r.id, 0)
     return reports
 
 
