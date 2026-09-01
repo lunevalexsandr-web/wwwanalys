@@ -14,6 +14,7 @@ from .template_norm import TemplateNorm
 from .analysis_object import AnalysisObject
 from .sanitation import SanitationRecord, SanitationMeasure
 from .digest import DigestSchedule, DailyDigest
+from .analysis_plan_1c import AnalysisPlanEntry
 
 __all__ = [
     "User",
@@ -36,5 +37,6 @@ __all__ = [
     "SanitationRecord",
     "SanitationMeasure",
     "DigestSchedule",
-    "DailyDigest"
+    "DailyDigest",
+    "AnalysisPlanEntry"
 ]

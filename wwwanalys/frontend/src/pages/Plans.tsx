@@ -38,10 +38,73 @@ const Plans: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
 
+  // План из 1С
+  const [plan1c, setPlan1c] = useState<any>(null);
+  const [plan1cPending, setPlan1cPending] = useState(false);
+  const [plan1cLoading, setPlan1cLoading] = useState(false);
+  const [plan1cImporting, setPlan1cImporting] = useState(false);
+
   useEffect(() => {
     fetchTemplates();
     fetchPlansForDate(today);
   }, []);
+
+  const [plan1cAutoDone, setPlan1cAutoDone] = useState<Set<string>>(new Set());
+
+  const fetchPlan1c = async (d: string, pending: boolean): Promise<any> => {
+    setPlan1cLoading(true);
+    try {
+      const r = await api.get('/api/plans/from-1c', { params: { date: d, only_pending: pending } });
+      setPlan1c(r.data);
+      return r.data;
+    } catch (e: any) {
+      showToast(e?.response?.data?.detail || 'Ошибка загрузки плана из 1С', 'danger');
+      return null;
+    } finally { setPlan1cLoading(false); }
+  };
+
+  const importPlan1c = async (silent = false) => {
+    setPlan1cImporting(true);
+    try {
+      const r = await api.post('/api/plans/import-1c', {});
+      if (!silent) showToast(`Импортировано: получено ${r.data.total}, создано ${r.data.created}, обновлено ${r.data.updated}`, 'success');
+      await fetchPlan1c(selectedDate, plan1cPending);
+    } catch (e: any) {
+      showToast(e?.response?.data?.detail || 'Ошибка импорта из 1С', 'danger');
+    } finally { setPlan1cImporting(false); }
+  };
+
+  // Создать наш План на выбранную дату и загрузить в него задачи из 1С.
+  const buildPlanFrom1c = async () => {
+    setPlan1cImporting(true);
+    try {
+      const r = await api.post('/api/plans/build-from-1c', { date: selectedDate });
+      const d = r.data;
+      showToast(
+        `План из 1С сформирован: задач ${d.items}` +
+        (d.skipped_no_template ? `, пропущено без шаблона ${d.skipped_no_template}` : ''),
+        'success'
+      );
+      setActiveTab('today');
+      fetchPlansForDate(selectedDate);
+    } catch (e: any) {
+      showToast(e?.response?.data?.detail || 'Ошибка формирования плана из 1С', 'danger');
+    } finally { setPlan1cImporting(false); }
+  };
+
+  // Открыли вкладку: показываем данные; если за дату их ещё нет — тянем из 1С автоматически (один раз).
+  const loadPlan1c = async () => {
+    const data = await fetchPlan1c(selectedDate, plan1cPending);
+    if (data && data.total === 0 && !plan1cAutoDone.has(selectedDate) && !plan1cImporting) {
+      setPlan1cAutoDone(prev => new Set(prev).add(selectedDate));
+      await importPlan1c(true);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'from1c') loadPlan1c();
+    // eslint-disable-next-line
+  }, [activeTab, selectedDate, plan1cPending]);
 
   const fetchTemplates = async () => {
     try {
@@ -312,6 +375,11 @@ const Plans: React.FC = () => {
                     Новый план
                   </Button>
                 )}
+                {isAdmin && (
+                  <Button variant="success" onClick={buildPlanFrom1c} disabled={plan1cImporting}>
+                    {plan1cImporting ? <><Spinner size="sm" animation="border" className="me-2" />Загрузка…</> : '📥 Новый план из 1С'}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -448,6 +516,66 @@ const Plans: React.FC = () => {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </Tab>
+
+              <Tab eventKey="from1c" title={<span>📋 План из 1С</span>}>
+                <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
+                  <Form.Check
+                    type="switch" id="plan1c-pending" label="Только не выполненные"
+                    checked={plan1cPending} onChange={(e) => setPlan1cPending(e.target.checked)}
+                  />
+                  <div className="ms-auto d-flex gap-2">
+                    <Button variant="outline-secondary" size="sm" onClick={() => fetchPlan1c(selectedDate, plan1cPending)} disabled={plan1cLoading}>
+                      🔄 Обновить
+                    </Button>
+                    {isAdmin && (
+                      <Button variant="primary" size="sm" onClick={() => importPlan1c(false)} disabled={plan1cImporting}>
+                        {plan1cImporting ? <><Spinner size="sm" animation="border" className="me-2" />Импорт…</> : '⬇ Импорт из 1С'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {plan1c && (
+                  <div className="d-flex gap-2 mb-3">
+                    <Badge bg="primary">Всего: {plan1c.total}</Badge>
+                    <Badge bg="success">Выполнено: {plan1c.done}</Badge>
+                    <Badge bg="warning">Ожидают: {plan1c.pending}</Badge>
+                  </div>
+                )}
+
+                {plan1cLoading ? (
+                  <div className="text-center py-4"><Spinner animation="border" /><p className="text-muted mt-2">Загрузка…</p></div>
+                ) : !plan1c || plan1c.items.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted mt-2">На {new Date(selectedDate).toLocaleDateString('ru-RU')} плана из 1С нет.</p>
+                    {isAdmin && <Button variant="primary" size="sm" onClick={() => importPlan1c(false)} disabled={plan1cImporting}>Импортировать из 1С</Button>}
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+                    <Table size="sm" striped bordered hover className="mb-0">
+                      <thead><tr>
+                        <th>Смена</th><th>Объект контроля</th><th>Типовой анализ</th>
+                        <th>Партия</th><th>Сорт</th><th>Периодичность</th><th>Статус</th>
+                      </tr></thead>
+                      <tbody>{plan1c.items.map((it: any) => (
+                        <tr key={it.id} className={it.done ? 'table-success' : ''}>
+                          <td className="small">{it.shift_date}{it.shift_no ? ` · см.${it.shift_no}` : ''}</td>
+                          <td>{it.control_object || '—'}</td>
+                          <td className="small">{it.analysis_type || '—'}</td>
+                          <td>{it.batch_number || '—'}</td>
+                          <td>{it.variety || '—'}</td>
+                          <td className="small text-muted">{it.periodicity || '—'}</td>
+                          <td>
+                            {it.done
+                              ? <Badge bg="success">Выполнен</Badge>
+                              : <Badge bg="warning">Ожидает</Badge>}
+                          </td>
+                        </tr>
+                      ))}</tbody>
+                    </Table>
                   </div>
                 )}
               </Tab>

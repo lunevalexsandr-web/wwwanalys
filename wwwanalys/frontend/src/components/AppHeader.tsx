@@ -61,6 +61,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               >
                 📅 Сводка
               </Link>
+              <Link
+                to="/sanitation-plan"
+                className="text-decoration-none text-sub hover:text-brand px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                🧼 План
+              </Link>
               {showAdminLink && user?.is_admin && (
                 <Link
                   to="/admin"

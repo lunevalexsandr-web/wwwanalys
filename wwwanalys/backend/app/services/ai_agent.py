@@ -104,9 +104,13 @@ _PERIOD_AGENT_SYSTEM_PROMPT = (
     "показателей за период по всем отчётам и даёшь рекомендации по улучшению.\n\n"
     "Инструменты: search_tech_cards — ищи причины и регламенты во внутренней базе "
     "техкарт (приоритет); при необходимости опирайся на внешние источники.\n\n"
-    "Числа в сводке даны как факты — не изменяй их. Дай: общую картину качества за "
-    "период, топ проблемных показателей и вероятные системные причины, конкретные "
-    "корректирующие действия, и краткое резюме. Отвечай на русском, структурно."
+    "ВАЖНО: перечень отклонений по партиям, ёмкостям и показателям уже выводится "
+    "ОТДЕЛЬНОЙ ТАБЛИЦЕЙ в сводке — НЕ перечисляй его повторно и НЕ делай раздел "
+    "«Топ проблемных показателей». Вместо этого дай: (1) краткую общую картину "
+    "качества за период; (2) вероятные СИСТЕМНЫЕ причины (сгруппируй по типу проблемы "
+    "— микробиология/ОМЧ, мутность, горечь/цвет, брожение и т.п.), опираясь на "
+    "техкарты; (3) конкретные корректирующие действия; (4) краткое резюме. "
+    "Числа не изменяй. Отвечай на русском, структурно и без воды."
 )
 
 
@@ -356,8 +360,14 @@ _CHAT_SYSTEM_PROMPT = (
     "по данным анализов и помогаешь с отклонениями.\n"
     "Сегодняшняя дата: {today}. «вчера», «сегодня», «за неделю» считай от неё.\n\n"
     "Инструменты: get_deviations_by_date (за день), get_period_summary (за период), "
-    "get_report_deviations (по номеру партии), get_sanitation (санитарные мероприятия/мойки "
-    "за период и по линии), search_tech_cards (внутренние техкарты, приоритетный источник), "
+    "get_report_deviations (по номеру партии), get_release_status (допуск/недопуск партий за "
+    "день и ПО КАКИМ показателям недопуск — используй на вопросы про допуск/недопуск), "
+    "get_sanitation (санитарные мероприятия/мойки "
+    "за период и по линии), get_sanitation_compliance (какие мойки ПРОСРОЧЕНЫ/не выполнены "
+    "по графику на дату + ближайшие плановые — используй на вопросы про график/просрочку санитарии), "
+    "get_sanitation_plan (ПЛАН мойок на сегодня: просроченные + плановые — на вопросы «предложи "
+    "план мероприятий на сегодня», «что помыть сегодня»), "
+    "search_tech_cards (внутренние техкарты, приоритетный источник), "
     "get_sanitation_schedule (справочник мероприятий с ТРЕБУЕМОЙ частотой), плюс внешние "
     "источники при необходимости. Цеха розлива: КЕГ, Стекло, Стекло_2. При отклонениях в "
     "розливе (особенно микробиология — ОМЧ, смывы, стойкость) обязательно сверяйся с санитарией: "
@@ -444,6 +454,32 @@ def _tool_report_deviations(db, args) -> str:
     return json.dumps(out, ensure_ascii=False, default=str)
 
 
+def _tool_release_status(db, args) -> str:
+    """Допуск/недопуск партий за день по показателю «Допуск к розливу»; для недопущенных —
+    ПО КАКИМ показателям (все, если несколько)."""
+    from datetime import date
+    from app.services.daily_digest import compute_released
+    d = (args or {}).get("date")
+    try:
+        dd = date.fromisoformat(str(d))
+    except Exception:
+        return "Нужна дата в формате YYYY-MM-DD."
+    released, not_released = compute_released(db, dd)
+    def _reasons(b):
+        rs = b.get("reasons") or []
+        if not rs:
+            return f"отметка «{b.get('value')}» без зафиксированных отклонений по показателям"
+        return "; ".join(
+            f"{r['indicator']}={r.get('value')}{(' ' + r['unit']) if r.get('unit') else ''} (норма {r.get('norm')})"
+            for r in rs)
+    return json.dumps({
+        "дата": str(dd),
+        "допущено": [{"партия": b.get("batch"), "сорт": b.get("variety"), "тара": b.get("container")} for b in released],
+        "не_допущено": [{"партия": b.get("batch"), "сорт": b.get("variety"), "тара": b.get("container"),
+                         "по_каким_показателям": _reasons(b)} for b in not_released],
+    }, ensure_ascii=False, default=str)
+
+
 def _tool_sanitation(db, args) -> str:
     from app.models import SanitationRecord
     a = args or {}
@@ -470,6 +506,53 @@ def _tool_sanitation(db, args) -> str:
     if not out:
         return "Санитарных мероприятий за этот период не найдено (либо данные ещё не импортированы)."
     return json.dumps(out[:150], ensure_ascii=False, default=str)
+
+
+def _tool_sanitation_compliance(db, args) -> str:
+    """Проверка соблюдения графика санитарии: какие мероприятия просрочены/не выполнены
+    на указанную дату (исходя из их периодичности и даты последнего выполнения)."""
+    from datetime import date
+    from app.services.sanitation_planner import compute_sanitation_compliance
+    d = (args or {}).get("as_of")
+    as_of = None
+    if d:
+        try:
+            as_of = date.fromisoformat(str(d))
+        except Exception:
+            as_of = None
+    res = compute_sanitation_compliance(db, as_of)
+    return json.dumps({
+        "на_дату": res["as_of"],
+        "просрочено_всего": len(res["overdue"]),
+        "просроченные": res["overdue"][:80],
+        "ближайшие_плановые": res["planned"][:20],
+    }, ensure_ascii=False, default=str)
+
+
+def _tool_sanitation_plan(db, args) -> str:
+    """План санитарных мероприятий на день: что нужно сделать сегодня
+    (просроченные + плановые на дату)."""
+    from datetime import date
+    from app.services.sanitation_planner import plan_for_day
+    a = args or {}
+    as_of = None
+    if a.get("as_of"):
+        try:
+            as_of = date.fromisoformat(str(a["as_of"]))
+        except Exception:
+            as_of = None
+    horizon = a.get("horizon_days")
+    try:
+        horizon = int(horizon)
+    except Exception:
+        horizon = 0
+    res = plan_for_day(db, as_of, horizon_days=max(0, horizon))
+    if not res["план"]:
+        return json.dumps({"на_дату": res["as_of"], "план_пуст": True,
+                           "комментарий": "На сегодня просроченных и плановых мероприятий нет."},
+                          ensure_ascii=False)
+    return json.dumps({"на_дату": res["as_of"], "всего": res["всего"], "план": res["план"][:120]},
+                      ensure_ascii=False, default=str)
 
 
 def _tool_sanitation_schedule(db, args) -> str:
@@ -499,6 +582,20 @@ _CHAT_TOOL_DEFS = [
                     "(как часто мероприятие должно проводиться). Для проверки, соблюдается ли график.",
      "params": {"type": "object", "properties": {
          "query": {"type": "string", "description": "фильтр по названию мероприятия (необязательно)"}}}},
+    {"name": "get_sanitation_compliance",
+     "description": "Проверка графика санитарии: какие мероприятия ПРОСРОЧЕНЫ/не выполнены на дату "
+                    "(по их периодичности и дате последнего выполнения) + ближайшие плановые. "
+                    "Используй на вопросы «какие мойки просрочены», «что по санитарии не выполнено», "
+                    "«когда следующая мойка».",
+     "params": {"type": "object", "properties": {
+         "as_of": {"type": "string", "description": "дата YYYY-MM-DD (по умолчанию сегодня, МСК)"}}}},
+    {"name": "get_sanitation_plan",
+     "description": "ПЛАН санитарных мероприятий на день: что нужно сделать сегодня — просроченные "
+                    "(в первую очередь) + плановые по графику на дату. Используй на вопросы "
+                    "«предложи план мероприятий на сегодня», «что помыть сегодня», «план санитарии».",
+     "params": {"type": "object", "properties": {
+         "as_of": {"type": "string", "description": "дата YYYY-MM-DD (по умолчанию сегодня, МСК)"},
+         "horizon_days": {"type": "integer", "description": "включить плановые на ближайшие N дней вперёд (0 = только сегодня)"}}}},
     {"name": "get_sanitation",
      "description": "Санитарные мероприятия (мойка/обработка/CIP) за период, опционально по линии розлива. "
                     "Используй, чтобы связать микробиологические отклонения (ОМЧ, смывы) с санобработкой.",
@@ -516,6 +613,11 @@ _CHAT_TOOL_DEFS = [
     {"name": "get_report_deviations",
      "description": "Отклонения по конкретной партии (номер партии).",
      "params": {"type": "object", "properties": {"batch_number": {"type": "string"}}, "required": ["batch_number"]}},
+    {"name": "get_release_status",
+     "description": "Допуск/недопуск партий за день (по показателю «Допуск к розливу»). "
+                    "Для недопущенных возвращает, ПО КАКИМ показателям недопуск (все, если несколько). "
+                    "Используй на вопросы вида «по каким показателям не допуск», «что не допущено за день».",
+     "params": {"type": "object", "properties": {"date": {"type": "string", "description": "дата YYYY-MM-DD"}}, "required": ["date"]}},
     {"name": "search_tech_cards",
      "description": "Поиск во внутренней базе технологических карт (RAG).",
      "params": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
@@ -524,9 +626,12 @@ _CHAT_TOOL_DEFS = [
 _CHAT_EXEC = {
     "get_sanitation": _tool_sanitation,
     "get_sanitation_schedule": _tool_sanitation_schedule,
+    "get_sanitation_compliance": _tool_sanitation_compliance,
+    "get_sanitation_plan": _tool_sanitation_plan,
     "get_deviations_by_date": _tool_deviations_by_date,
     "get_period_summary": _tool_period_summary,
     "get_report_deviations": _tool_report_deviations,
+    "get_release_status": _tool_release_status,
     "search_tech_cards": lambda db, a: _rag_search(db, (a or {}).get("query", ""), None),
 }
 

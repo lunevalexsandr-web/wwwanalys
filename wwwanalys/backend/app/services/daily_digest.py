@@ -14,6 +14,15 @@ def msk_now():
     return datetime.utcnow() + MSK_OFFSET
 
 
+def agents_enabled(db) -> bool:
+    """Главный рубильник всех агентов (по умолчанию включены)."""
+    try:
+        s = get_or_create_schedule(db)
+        return bool(getattr(s, "agents_enabled", True))
+    except Exception:
+        return True
+
+
 def get_or_create_schedule(db):
     from app.models import DigestSchedule
     s = db.query(DigestSchedule).first()
@@ -69,6 +78,59 @@ def compute_released(db, target_date):
     return list(released.values()), list(not_released.values())
 
 
+def compute_deviation_rows(db, target_date):
+    """Все отклонения показателей за день по отчётам: партия, сорт, ёмкость (танк из
+    показателей), показатель, значение, норма, направление."""
+    from sqlalchemy import func
+    from app.models import ProcessLog
+    from app.crud import report as crud_report
+    from app.services import ai_analysis
+
+    logs = db.query(ProcessLog).filter(func.date(ProcessLog.started_at) == target_date).all()
+    rows = []
+    for pl in logs:
+        rep = crud_report.get_report(db, report_id=pl.id)
+        if not rep:
+            continue
+        ctx = ai_analysis.build_report_context(db, rep)
+        devs = ai_analysis.compute_deviations(ctx["values"])
+        if not devs:
+            continue
+        # ёмкость: показатель с «танк/ёмк/емк/цкт» в названии
+        tank = None
+        for val in ctx["values"]:
+            nm = (val.get("name") or "").lower()
+            if any(k in nm for k in ("танк", "ёмк", "емк", "цкт", "бак")):
+                tank = val.get("value") if val.get("value") is not None else val.get("text_value")
+                if tank not in (None, ""):
+                    break
+        emkost = (str(tank) if tank not in (None, "") else None) or pl.container
+        # Метка партии: нормальный номер (есть цифра, без времени) — как есть;
+        # иначе сорт + ёмкость; в крайнем случае #id.
+        b = (pl.batch_number or "").strip()
+        good_batch = bool(b) and any(c.isdigit() for c in b) and ":" not in b and len(b) <= 14
+        if good_batch:
+            batch_label = b
+        else:
+            parts = [p for p in [pl.variety, emkost] if p]
+            batch_label = " · ".join(parts) if parts else f"#{pl.id}"
+        for d in devs:
+            dir_txt = {"below": "ниже нормы", "above": "выше нормы"}.get(d.get("direction"), "не соответствует")
+            rows.append({
+                "партия": batch_label,
+                "сорт": pl.variety,
+                "ёмкость": emkost,
+                "цех": pl.container,
+                "показатель": d["indicator"],
+                "значение": d.get("value"),
+                "ед": d.get("unit", ""),
+                "норма": d.get("norm"),
+                "направление": dir_txt,
+                "отклонение_пр": d.get("deviation_pct"),
+            })
+    return rows
+
+
 async def run_daily_digest(db, target_date=None, triggered="manual"):
     """Сформировать сводку за день. Возвращает объект DailyDigest."""
     from app.crud import integration_config as ci
@@ -82,23 +144,28 @@ async def run_daily_digest(db, target_date=None, triggered="manual"):
         today_msk = msk_now().date()
         target_date = (today_msk - timedelta(days=1)) if sched.day_mode == "yesterday" else today_msk
     df = target_date.isoformat()
+    # Импорт всегда захватывает последние 3 дня (целевой день + 2 предыдущих),
+    # чтобы не было пробелов в данных и в проверке просрочки санитарии.
+    import_from = (target_date - timedelta(days=2)).isoformat()
+    import_to = df
     status, err, import_info = "ok", None, {}
 
     cfg = ci.get_by_name(db, "1c")
     urow = db.query(User).order_by(User.id).first()
     uid = urow.id if urow else 1
 
+    import_info["window"] = {"from": import_from, "to": import_to}
     if cfg:
         conf = ExternalSystemConfig(base_url=cfg.base_url, username=cfg.username,
                                     password=cfg.password, verify=False, timeout=180)
         try:
-            r = await import_odata_results_from_1c(db, conf, df, df, user_id=uid)
+            r = await import_odata_results_from_1c(db, conf, import_from, import_to, user_id=uid)
             import_info["results"] = {k: r.get(k) for k in ("documents", "reports_created", "reports_updated", "values")}
         except Exception as e:
             status = "partial"; err = f"результаты: {e}"
             logger.warning("Сводка: импорт результатов не удался: %s", e)
         try:
-            s = await import_odata_sanitation_from_1c(db, conf, df, df)
+            s = await import_odata_sanitation_from_1c(db, conf, import_from, import_to)
             import_info["sanitation"] = {k: s.get(k) for k in ("total", "created", "updated")}
         except Exception as e:
             status = "partial"; err = (err + "; " if err else "") + f"санитария: {e}"
@@ -121,6 +188,21 @@ async def run_daily_digest(db, target_date=None, triggered="manual"):
 
     released, not_released = compute_released(db, target_date)
 
+    # Все отклонения показателей за день (партия, сорт, ёмкость, показатель, отклонение)
+    try:
+        deviation_rows = compute_deviation_rows(db, target_date)
+    except Exception as e:
+        deviation_rows = []
+        logger.warning("Сводка: список отклонений не собран: %s", e)
+
+    # Санитария: просроченные/невыполненные мероприятия на дату сводки
+    sanitation_overdue = []
+    try:
+        from app.services.sanitation_planner import compute_sanitation_compliance
+        sanitation_overdue = compute_sanitation_compliance(db, target_date).get("overdue", [])
+    except Exception as e:
+        logger.warning("Сводка: планировщик санитарии не сработал: %s", e)
+
     dig = db.query(DailyDigest).filter(DailyDigest.digest_date == target_date).first()
     if not dig:
         dig = DailyDigest(digest_date=target_date)
@@ -134,6 +216,9 @@ async def run_daily_digest(db, target_date=None, triggered="manual"):
     dig.not_released_count = len(not_released)
     dig.released_batches = json.dumps(released, ensure_ascii=False)
     dig.not_released_batches = json.dumps(not_released, ensure_ascii=False)
+    dig.sanitation_overdue_count = len(sanitation_overdue)
+    dig.sanitation_overdue = json.dumps(sanitation_overdue, ensure_ascii=False)
+    dig.deviation_rows = json.dumps(deviation_rows, ensure_ascii=False)
     dig.summary = summary
     dig.status = status
     dig.error = err
@@ -174,7 +259,7 @@ def _scheduler_loop():
             db = SessionLocal()
             try:
                 sched = get_or_create_schedule(db)
-                if sched.enabled and sched.run_time:
+                if getattr(sched, "agents_enabled", True) and sched.enabled and sched.run_time:
                     now = msk_now()  # московское время
                     try:
                         hh, mm = [int(x) for x in str(sched.run_time).split(":")]

@@ -18,6 +18,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _require_agents(db: Session):
+    """Проверка главного рубильника: если агенты выключены — 403."""
+    from app.services.daily_digest import agents_enabled
+    if not agents_enabled(db):
+        raise HTTPException(status_code=403, detail="Агенты остановлены администратором (⚙️ Настройки → Агенты).")
+
+
+@router.get("/agents/settings")
+def agents_settings_get(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.services.daily_digest import agents_enabled
+    return {"agents_enabled": agents_enabled(db), "ai_module": settings.ai_enabled}
+
+
+@router.put("/agents/settings")
+def agents_settings_update(payload: dict = Body(...), db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_active_user)):
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Только администратор может управлять агентами.")
+    from app.services.daily_digest import get_or_create_schedule
+    s = get_or_create_schedule(db)
+    if "agents_enabled" in payload:
+        s.agents_enabled = bool(payload["agents_enabled"])
+        db.commit(); db.refresh(s)
+    return {"agents_enabled": bool(getattr(s, "agents_enabled", True))}
+
+
 @router.get("/analytics/summary")
 def analytics_summary(
     date_from: Optional[date] = Query(None),
@@ -42,6 +68,7 @@ def analytics_analyze(
     """Нарратив-отчёт эксперта по отклонениям за период (нужна подключённая модель)."""
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    _require_agents(db)
     analytics = ai_analysis.build_period_analytics(db, date_from=date_from, date_to=date_to, template_id=template_id)
     from app.services import ai_agent
     try:
@@ -88,6 +115,7 @@ def analyze_report(
     """
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    _require_agents(db)
 
     report = crud_report.get_report(db, report_id=report_id)
     if not report:
@@ -145,6 +173,7 @@ def agent_chat(
     источники и отвечает. Тело: {message: str, history: [{role, content}]}."""
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    _require_agents(db)
     message = (payload.get("message") or "").strip()
     history = payload.get("history") or []
     if not message:
@@ -176,6 +205,7 @@ def agent_report(
     рекомендации по отклонениям. Нужна подключённая модель (ANTHROPIC_API_KEY)."""
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    _require_agents(db)
 
     report = crud_report.get_report(db, report_id=report_id)
     if not report:
@@ -242,6 +272,9 @@ def _digest_dict(d):
         "not_released_count": d.not_released_count,
         "released_batches": json.loads(d.released_batches or "[]"),
         "not_released_batches": json.loads(d.not_released_batches or "[]"),
+        "sanitation_overdue_count": getattr(d, "sanitation_overdue_count", 0) or 0,
+        "sanitation_overdue": json.loads(getattr(d, "sanitation_overdue", None) or "[]"),
+        "deviation_rows": json.loads(getattr(d, "deviation_rows", None) or "[]"),
         "summary": d.summary,
         "status": d.status,
         "error": d.error,
@@ -276,6 +309,7 @@ async def digest_run(payload: dict = Body(default={}), db: Session = Depends(get
     """Сформировать сводку сейчас (по умолчанию за настроенный день)."""
     if not settings.ai_enabled:
         raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    _require_agents(db)
     from app.services.daily_digest import run_daily_digest
     td = None
     if payload and payload.get("date"):
@@ -309,6 +343,27 @@ def digest_list(limit: int = 30, db: Session = Depends(get_db),
         "released_count": d.released_count, "not_released_count": d.not_released_count,
         "status": d.status, "triggered_by": d.triggered_by,
     } for d in rows]
+
+
+@router.get("/sanitation/plan")
+def sanitation_plan(
+    as_of: Optional[date] = Query(None),
+    horizon_days: int = Query(0, ge=0, le=30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """План санитарных мероприятий на день: просроченные + плановые на дату."""
+    from app.services.sanitation_planner import plan_for_day, compute_sanitation_compliance
+    comp = compute_sanitation_compliance(db, as_of)
+    plan = plan_for_day(db, as_of, horizon_days=max(0, horizon_days))
+    return {
+        "as_of": plan["as_of"],
+        "plan": plan["план"],
+        "total": plan["всего"],
+        "overdue_count": len(comp["overdue"]),
+        "planned_count": len(comp["planned"]),
+        "event_based_count": len(comp["event_based"]),
+    }
 
 
 def _retrieve_knowledge(db: Session, ctx: dict, deviations: list) -> list:

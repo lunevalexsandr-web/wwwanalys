@@ -12,14 +12,18 @@ import type { AnalysisType, User as UserType, IndicatorLibrary, LibraryIndicator
 
 const Admin: React.FC<{ mode?: 'settings' | 'templates' | 'library'; embedded?: boolean }> = ({ mode = 'settings', embedded = false }) => {
   const VISIBLE: Record<string, string[]> = {
-    settings: ['integrations', 'users', 'presets'],
+    settings: ['agents', 'integrations', 'users', 'presets'],
     templates: ['templates'],
     library: ['library'],
   };
   const show = (k: string) => (VISIBLE[mode] || []).includes(k);
   const [activeTab, setActiveTab] = useState(
-    mode === 'library' ? 'library' : mode === 'settings' ? 'integrations' : 'templates'
+    mode === 'library' ? 'library' : mode === 'settings' ? 'agents' : 'templates'
   );
+  // Управление агентами (главный рубильник + расписание дежурного агента)
+  const [agentsEnabled, setAgentsEnabled] = useState(true);
+  const [sched, setSched] = useState<any>(null);
+  const [agentSaving, setAgentSaving] = useState(false);
   const [templates, setTemplates] = useState<AnalysisType[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,7 +114,40 @@ const Admin: React.FC<{ mode?: 'settings' | 'templates' | 'library'; embedded?: 
     fetchUsers();
     fetchLibraryIndicators();
     fetchPresets();
+    fetchAgentSettings();
   }, []);
+
+  const fetchAgentSettings = async () => {
+    try {
+      const [g, s] = await Promise.all([
+        api.get('/api/ai/agents/settings'),
+        api.get('/api/ai/digest/schedule'),
+      ]);
+      setAgentsEnabled(!!g.data?.agents_enabled);
+      setSched(s.data);
+    } catch (e) { /* модуль AI может быть выключен */ }
+  };
+
+  const saveAgentsEnabled = async (val: boolean) => {
+    setAgentSaving(true);
+    try {
+      const r = await api.put('/api/ai/agents/settings', { agents_enabled: val });
+      setAgentsEnabled(!!r.data?.agents_enabled);
+      showToast(val ? 'Агенты включены' : 'Все агенты остановлены', val ? 'success' : 'warning');
+    } catch (e) {
+      showToast('Ошибка сохранения', 'danger');
+    } finally { setAgentSaving(false); }
+  };
+
+  const saveSchedule = async (patch: any) => {
+    setAgentSaving(true);
+    try {
+      const r = await api.put('/api/ai/digest/schedule', { ...sched, ...patch });
+      setSched(r.data);
+    } catch (e) {
+      showToast('Ошибка сохранения расписания', 'danger');
+    } finally { setAgentSaving(false); }
+  };
 
   const fetchTemplates = async () => {
     setIsLoading(true);
@@ -1126,6 +1163,64 @@ const Admin: React.FC<{ mode?: 'settings' | 'templates' | 'library'; embedded?: 
               </Tab>
 
               {/* Integrations Tab */}
+              <Tab eventKey="agents" tabClassName={show('agents') ? '' : 'd-none'} title={<span>🤖 Агенты</span>}>
+                <Card className="border-0 shadow-md">
+                  <CardHeader className="bg-white border-b border-border d-flex justify-content-between align-items-center">
+                    <CardTitle className="h5 mb-0">Управление агентами</CardTitle>
+                    <Badge bg={agentsEnabled ? 'success' : 'danger'}>{agentsEnabled ? 'Все агенты включены' : 'Все агенты остановлены'}</Badge>
+                  </CardHeader>
+                  <CardBody className="p-6">
+                    {/* Главный рубильник */}
+                    <div className="p-4 border border-border rounded-xl mb-4" style={{ background: agentsEnabled ? undefined : '#fff5f5' }}>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h5 className="mb-1">Главный рубильник</h5>
+                          <p className="text-sm text-text-muted mb-0">
+                            Один переключатель для всех агентов: чат, разбор отчётов и периода,
+                            дежурный агент (сводка), планировщик санитарии. При выключении все
+                            функции агентов недоступны.
+                          </p>
+                        </div>
+                        <Form.Check type="switch" id="agents-master" style={{ transform: 'scale(1.6)' }}
+                          checked={agentsEnabled} disabled={agentSaving}
+                          onChange={(e) => saveAgentsEnabled(e.target.checked)} />
+                      </div>
+                    </div>
+
+                    {/* Расписание дежурного агента (сводка) */}
+                    <div className="p-4 border border-border rounded-xl">
+                      <h5 className="mb-3">Дежурный агент — ежедневная сводка</h5>
+                      <Row className="g-3 align-items-end">
+                        <Col md="auto">
+                          <Form.Check type="switch" id="digest-enabled"
+                            label={sched?.enabled ? 'Автозапуск включён' : 'Автозапуск выключен'}
+                            checked={!!sched?.enabled} disabled={agentSaving || !agentsEnabled}
+                            onChange={(e) => saveSchedule({ enabled: e.target.checked })} />
+                        </Col>
+                        <Col md={3}>
+                          <Form.Label className="small text-muted mb-1">Время запуска (МСК)</Form.Label>
+                          <Form.Control type="time" value={sched?.run_time || '07:00'} disabled={agentSaving || !agentsEnabled}
+                            onChange={(e) => setSched({ ...sched, run_time: e.target.value })}
+                            onBlur={(e) => saveSchedule({ run_time: e.target.value })} />
+                        </Col>
+                        <Col md={3}>
+                          <Form.Label className="small text-muted mb-1">За какой день</Form.Label>
+                          <Form.Select value={sched?.day_mode || 'yesterday'} disabled={agentSaving || !agentsEnabled}
+                            onChange={(e) => saveSchedule({ day_mode: e.target.value })}>
+                            <option value="yesterday">за вчера</option>
+                            <option value="today">за сегодня</option>
+                          </Form.Select>
+                        </Col>
+                      </Row>
+                      <div className="small text-muted mt-3">
+                        Последний запуск: {sched?.last_run_at ? new Date(sched.last_run_at).toLocaleString('ru-RU') : '—'}
+                        {sched?.last_status ? ` · статус: ${sched.last_status}` : ''}
+                      </div>
+                      {!agentsEnabled && <Alert variant="warning" className="mt-3 mb-0 py-2 small">Агенты остановлены главным рубильником — расписание не выполняется.</Alert>}
+                    </div>
+                  </CardBody>
+                </Card>
+              </Tab>
               <Tab eventKey="integrations" tabClassName={show('integrations') ? '' : 'd-none'} title={<span>Интеграция с 1С</span>}>
                 <Card className="border-0 shadow-md">
                   <CardHeader className="bg-white border-b border-border">

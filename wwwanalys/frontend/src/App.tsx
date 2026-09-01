@@ -10,6 +10,7 @@ import ReferenceData from './pages/ReferenceData';
 import ReportsAnalytics from './pages/ReportsAnalytics';
 import AgentChat from './pages/AgentChat';
 import DailyDigest from './pages/DailyDigest';
+import SanitationPlan from './pages/SanitationPlan';
 import './App.css';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
@@ -146,6 +147,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DailyDigest />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sanitation-plan"
+            element={
+              <ProtectedRoute>
+                <SanitationPlan />
               </ProtectedRoute>
             }
           />

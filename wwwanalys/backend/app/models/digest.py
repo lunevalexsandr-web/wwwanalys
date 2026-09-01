@@ -8,7 +8,8 @@ class DigestSchedule(Base):
     __tablename__ = "digest_schedule"
 
     id = Column(Integer, primary_key=True, index=True)
-    enabled = Column(Boolean, default=False)          # включён ли автозапуск
+    agents_enabled = Column(Boolean, default=True)    # ГЛАВНЫЙ рубильник всех агентов
+    enabled = Column(Boolean, default=False)          # включён ли автозапуск сводки
     run_time = Column(String, default="07:00")        # время запуска HH:MM (по времени сервера)
     day_mode = Column(String, default="yesterday")    # yesterday | today
     last_run_date = Column(Date)                       # дата последнего авто-запуска
@@ -34,6 +35,9 @@ class DailyDigest(Base):
 
     released_batches = Column(Text)                   # JSON: [{batch, variety, value}]
     not_released_batches = Column(Text)               # JSON
+    sanitation_overdue_count = Column(Integer, default=0)  # просроченных сан. мероприятий
+    sanitation_overdue = Column(Text)                 # JSON: просроченные/невыполненные мероприятия
+    deviation_rows = Column(Text)                     # JSON: отклонения (партия, сорт, ёмкость, показатель, отклонение)
     summary = Column(Text)                            # разбор агента (что исправить)
     status = Column(String)                           # ok | partial | error
     error = Column(Text)

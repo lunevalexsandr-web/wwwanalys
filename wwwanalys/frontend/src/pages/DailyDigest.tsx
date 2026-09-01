@@ -9,8 +9,10 @@ const DailyDigest: React.FC = () => {
   const [digest, setDigest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; variant: string } | null>(null);
+  const [chat, setChat] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -28,16 +30,6 @@ const DailyDigest: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
-  const saveSchedule = async (patch: any) => {
-    setSaving(true);
-    try {
-      const r = await api.put('/api/ai/digest/schedule', { ...sched, ...patch });
-      setSched(r.data);
-    } catch (e: any) {
-      setMsg({ text: e?.response?.data?.detail || 'Ошибка сохранения', variant: 'danger' });
-    } finally { setSaving(false); }
-  };
-
   const runNow = async () => {
     setRunning(true); setMsg(null);
     try {
@@ -48,6 +40,45 @@ const DailyDigest: React.FC = () => {
     } catch (e: any) {
       setMsg({ text: e?.response?.data?.detail || 'Ошибка формирования сводки', variant: 'danger' });
     } finally { setRunning(false); }
+  };
+
+  // Контекст сводки для агента: дата + итоги + недопущенные с причинами
+  const buildContext = () => {
+    if (!digest) return '';
+    const nr = (digest.not_released_batches || []).map((b: any) => {
+      const why = b.reasons?.length ? b.reasons.map((r: any) => `${r.indicator} ${r.value ?? ''}${r.unit ? ' ' + r.unit : ''} (норма ${r.norm ?? '—'})`).join(', ') : `отметка «${b.value}»`;
+      return `${b.batch}${b.variety ? ' [' + b.variety + ']' : ''}: ${why}`;
+    }).join('; ');
+    const rel = (digest.released_batches || []).map((b: any) => `${b.batch}${b.variety ? ' [' + b.variety + ']' : ''}`).join(', ');
+    const dev = (digest.deviation_rows || []).slice(0, 40).map((d: any) =>
+      `${d['партия']}${d['сорт'] ? ' [' + d['сорт'] + ']' : ''}${d['ёмкость'] ? ' ёмк.' + d['ёмкость'] : ''}: ${d['показатель']} ${d['значение']}${d['ед'] ? ' ' + d['ед'] : ''} (норма ${d['норма'] || '—'}, ${d['направление']})`).join('; ');
+    const san = (digest.sanitation_overdue || []).slice(0, 15).map((s: any) =>
+      `${s['мероприятие']} (${s['статус'] === 'ни разу не выполнялось' ? 'ни разу' : 'просрочка ' + s['просрочка_дн'] + ' дн'})`).join('; ');
+    return `Ты отвечаешь по ежедневной сводке за ${digest.digest_date} (МСК). Итоги дня: отчётов ${digest.reports_count}, с отклонением ${digest.reports_with_deviations}, всего отклонений ${digest.deviations_count}, допущено партий ${digest.released_count}, не допущено ${digest.not_released_count}, санитария просрочена ${digest.sanitation_overdue_count || 0}.` +
+      (rel ? ` Допущенные: ${rel}.` : '') +
+      (nr ? ` Не допущенные и причины: ${nr}.` : '') +
+      (dev ? ` Отклонения (партия/сорт/ёмкость/показатель/норма): ${dev}.` : '') +
+      (san ? ` Просроченная санитария: ${san}.` : '') +
+      ` При необходимости уточняй детали инструментами за дату ${digest.digest_date} (в т.ч. get_sanitation_compliance). Отвечай кратко и по делу на русском.`;
+  };
+
+  const sendChat = async () => {
+    const q = chatInput.trim();
+    if (!q || chatLoading) return;
+    const next = [...chat, { role: 'user' as const, content: q }];
+    setChat(next);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const seed = [
+        { role: 'user' as const, content: buildContext() },
+        { role: 'assistant' as const, content: 'Готов отвечать по этой сводке.' },
+      ];
+      const r = await api.post('/api/ai/chat', { message: q, history: [...seed, ...chat] });
+      setChat([...next, { role: 'assistant', content: r.data?.text || '(пустой ответ)' }]);
+    } catch (e: any) {
+      setChat([...next, { role: 'assistant', content: `⚠ ${e?.response?.data?.detail || 'Ошибка агента'}` }]);
+    } finally { setChatLoading(false); }
   };
 
   const batchTable = (rows: any[], variant: string) => (
@@ -99,41 +130,19 @@ const DailyDigest: React.FC = () => {
 
         {loading ? <div className="text-center py-5"><Spinner animation="border" variant="primary" /></div> : (
           <>
-            {/* Настройки расписания */}
+            {/* Панель формирования (настройки расписания — в разделе «Настройки» → «Агенты») */}
             <Card className="mb-4"><CardBody>
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h6 className="mb-0">Автозапуск агента</h6>
-                <Badge bg={sched?.enabled ? 'success' : 'secondary'}>{sched?.enabled ? 'Работает' : 'Остановлен'}</Badge>
-              </div>
-              <Row className="g-3 align-items-end">
-                <Col md="auto">
-                  <Form.Check type="switch" id="digest-enabled" label={sched?.enabled ? 'Агент включён' : 'Агент выключен'}
-                    checked={!!sched?.enabled} disabled={saving}
-                    onChange={(e) => saveSchedule({ enabled: e.target.checked })} />
-                </Col>
-                <Col md={3}>
-                  <Form.Label className="small text-muted mb-1">Время запуска (МСК)</Form.Label>
-                  <Form.Control type="time" value={sched?.run_time || '07:00'} disabled={saving}
-                    onChange={(e) => setSched({ ...sched, run_time: e.target.value })}
-                    onBlur={(e) => saveSchedule({ run_time: e.target.value })} />
-                </Col>
-                <Col md={3}>
-                  <Form.Label className="small text-muted mb-1">За какой день</Form.Label>
-                  <Form.Select value={sched?.day_mode || 'yesterday'} disabled={saving}
-                    onChange={(e) => saveSchedule({ day_mode: e.target.value })}>
-                    <option value="yesterday">за вчера</option>
-                    <option value="today">за сегодня</option>
-                  </Form.Select>
-                </Col>
-                <Col md="auto">
-                  <Button variant="primary" onClick={runNow} disabled={running}>
-                    {running ? <><Spinner size="sm" animation="border" className="me-2" />Формирую…</> : '▶ Сформировать сейчас'}
-                  </Button>
-                </Col>
-              </Row>
-              <div className="small text-muted mt-2">
-                Последний запуск: {sched?.last_run_at ? new Date(sched.last_run_at).toLocaleString('ru-RU') : '—'}
-                {sched?.last_status ? ` · статус: ${sched.last_status}` : ''}
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h6 className="mb-1">Ежедневная сводка</h6>
+                  <div className="small text-muted">
+                    Автозапуск и расписание — в разделе «⚙️ Настройки» → «🤖 Агенты».
+                    {sched?.last_run_at ? ` Последний запуск: ${new Date(sched.last_run_at).toLocaleString('ru-RU')}.` : ''}
+                  </div>
+                </div>
+                <Button variant="primary" onClick={runNow} disabled={running}>
+                  {running ? <><Spinner size="sm" animation="border" className="me-2" />Формирую…</> : '▶ Сформировать сейчас'}
+                </Button>
               </div>
             </CardBody></Card>
 
@@ -149,10 +158,43 @@ const DailyDigest: React.FC = () => {
                 </div>
                 {digest.error && <Alert variant="warning" className="py-2">Замечания импорта: {digest.error}</Alert>}
 
+                {/* 1. Отклонения в отчётах — партия, сорт, ёмкость, показатель, отклонение */}
+                <Card className="mb-4 border-danger">
+                  <CardBody>
+                    <h6 className="text-danger">⚠ Отклонения в отчётах{' '}
+                      <Badge bg={digest.deviation_rows?.length ? 'danger' : 'success'}>{digest.deviation_rows?.length || 0}</Badge>
+                    </h6>
+                    {digest.deviation_rows?.length ? (
+                      <div style={{ maxHeight: 460, overflowY: 'auto' }}>
+                        <Table size="sm" striped bordered className="mb-0">
+                          <thead><tr>
+                            <th>Партия</th><th>Сорт</th><th>Ёмкость</th><th>Цех</th>
+                            <th>Показатель</th><th>Значение</th><th>Норма</th><th>Отклонение</th>
+                          </tr></thead>
+                          <tbody>{digest.deviation_rows.map((d: any, i: number) => (
+                            <tr key={i}>
+                              <td><strong>{d['партия']}</strong></td>
+                              <td>{d['сорт'] || '—'}</td>
+                              <td>{d['ёмкость'] || '—'}</td>
+                              <td className="small text-muted">{d['цех'] || '—'}</td>
+                              <td>{d['показатель']}</td>
+                              <td><Badge bg="danger">{d['значение']}{d['ед'] ? ` ${d['ед']}` : ''}</Badge></td>
+                              <td className="small">{d['норма'] || '—'}</td>
+                              <td className="small">
+                                {d['направление']}{d['отклонение_пр'] != null ? ` (${d['отклонение_пр']}%)` : ''}
+                              </td>
+                            </tr>
+                          ))}</tbody>
+                        </Table>
+                      </div>
+                    ) : <div className="text-muted small">Отклонений в отчётах за день нет ✅</div>}
+                  </CardBody>
+                </Card>
+
                 <Row className="g-3 mb-4">
-                  {[['Отчётов', digest.reports_count, 'primary'], ['С отклонением', digest.reports_with_deviations, 'danger'],
-                    ['Отклонений', digest.deviations_count, 'danger'], ['Допущено партий', digest.released_count, 'success'],
-                    ['Не допущено', digest.not_released_count, 'warning']].map(([l, v, c]: any, i) => (
+                  {[['Допущено партий', digest.released_count, 'success'],
+                    ['Не допущено', digest.not_released_count, 'warning'],
+                    ['Санитария просрочена', digest.sanitation_overdue_count || 0, (digest.sanitation_overdue_count ? 'danger' : 'success')]].map(([l, v, c]: any, i) => (
                     <Col key={i}><Card className="text-center"><CardBody>
                       <div className="h3 mb-0"><Badge bg={c}>{v}</Badge></div>
                       <small className="text-muted">{l}</small>
@@ -183,6 +225,76 @@ const DailyDigest: React.FC = () => {
                     </CardBody></Card>
                   </Col>
                 </Row>
+
+                {/* Санитария: просроченные / невыполненные мероприятия */}
+                <Card className="mb-4">
+                  <CardBody>
+                    <h6 className="text-danger">🧼 Санитария — просрочено / не выполнено{' '}
+                      <Badge bg={digest.sanitation_overdue_count ? 'danger' : 'success'}>{digest.sanitation_overdue_count || 0}</Badge>
+                    </h6>
+                    {digest.sanitation_overdue?.length ? (
+                      <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                        <Table size="sm" striped bordered className="mb-0">
+                          <thead><tr>
+                            <th>Мероприятие</th><th>Периодичность</th><th>Подразделение</th>
+                            <th>Последнее</th><th>Срок</th><th>Просрочка</th>
+                          </tr></thead>
+                          <tbody>{digest.sanitation_overdue.map((s: any, i: number) => (
+                            <tr key={i}>
+                              <td>{s['мероприятие']}</td>
+                              <td className="small text-muted">{s['частота'] || '—'}</td>
+                              <td className="small">{s['подразделение'] || '—'}</td>
+                              <td className="small">{s['последнее'] || '—'}</td>
+                              <td className="small">{s['след_срок'] || '—'}</td>
+                              <td>
+                                {s['статус'] === 'ни разу не выполнялось'
+                                  ? <Badge bg="dark">ни разу</Badge>
+                                  : <Badge bg="danger">{s['просрочка_дн']} дн</Badge>}
+                              </td>
+                            </tr>
+                          ))}</tbody>
+                        </Table>
+                      </div>
+                    ) : <div className="text-muted small">Просроченных мероприятий нет — график санитарии соблюдается ✅</div>}
+                  </CardBody>
+                </Card>
+
+                {/* Чат с агентом по итогам сводки */}
+                <Card className="mb-4 border-info">
+                  <CardBody>
+                    <h6 className="mb-3">💬 Спросить агента по сводке за {digest.digest_date}</h6>
+                    <div style={{ maxHeight: 340, overflowY: 'auto' }} className="mb-3">
+                      {chat.length === 0 ? (
+                        <div className="text-muted small">
+                          Задайте вопрос по этой сводке. Например: «Почему не допущено Янтарное?»,
+                          «Что срочно исправить?», «Есть ли связь с санитарией в цехе розлива?»
+                        </div>
+                      ) : chat.map((m, i) => (
+                        <div key={i} className={`mb-2 d-flex ${m.role === 'user' ? 'justify-content-end' : 'justify-content-start'}`}>
+                          <div className={`px-3 py-2 rounded ${m.role === 'user' ? 'bg-primary text-white' : 'bg-light border'}`}
+                            style={{ maxWidth: '85%', whiteSpace: 'pre-wrap' }}>
+                            {m.content}
+                          </div>
+                        </div>
+                      ))}
+                      {chatLoading && <div className="text-muted small"><Spinner size="sm" animation="border" className="me-2" />Агент думает…</div>}
+                    </div>
+                    <div className="d-flex gap-2">
+                      <Form.Control
+                        as="textarea" rows={1} value={chatInput} placeholder="Ваш вопрос по сводке…"
+                        disabled={chatLoading}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                      />
+                      <Button variant="info" className="text-white" onClick={sendChat} disabled={chatLoading || !chatInput.trim()}>
+                        Отправить
+                      </Button>
+                      {chat.length > 0 && (
+                        <Button variant="outline-secondary" onClick={() => setChat([])} disabled={chatLoading}>Очистить</Button>
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
               </>
             )}
           </>

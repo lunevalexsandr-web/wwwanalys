@@ -92,6 +92,20 @@ def ensure_indicator_columns(engine):
             ADD COLUMN IF NOT EXISTS measure_interval_hours INTEGER
             """
         ))
+        conn.execute(text(
+            """
+            ALTER TABLE daily_digests
+            ADD COLUMN IF NOT EXISTS sanitation_overdue_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS sanitation_overdue TEXT,
+            ADD COLUMN IF NOT EXISTS deviation_rows TEXT
+            """
+        ))
+        conn.execute(text(
+            """
+            ALTER TABLE digest_schedule
+            ADD COLUMN IF NOT EXISTS agents_enabled BOOLEAN DEFAULT TRUE
+            """
+        ))
         conn.commit()
 
 try:

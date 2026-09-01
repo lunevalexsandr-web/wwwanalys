@@ -186,6 +186,158 @@ def get_plans_by_range(
     return [AnalysisPlanSchema.model_validate(_format_plan_for_response(p, db)) for p in plans]
 
 
+# ==================== План анализов из 1С ====================
+
+def _plan1c_dict(e):
+    return {
+        "id": e.id,
+        "shift_date": e.shift_date.isoformat() if e.shift_date else None,
+        "shift_no": e.shift_no,
+        "control_object": e.control_object_name,
+        "periodicity": e.periodicity,
+        "analysis_type": e.analysis_type_name,
+        "batch_number": e.batch_number,
+        "variety": e.variety,
+        "status": e.status,
+        "done": e.done,
+    }
+
+
+@router.get("/from-1c")
+def get_plan_1c(
+    date: Optional[date] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    only_pending: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """План анализов из 1С за день (date) или период (date_from..date_to).
+    only_pending=true — только не выполненные (ожидают обработки)."""
+    from app.models import AnalysisPlanEntry
+    q = db.query(AnalysisPlanEntry)
+    if date:
+        q = q.filter(AnalysisPlanEntry.shift_date == date)
+    else:
+        if date_from:
+            q = q.filter(AnalysisPlanEntry.shift_date >= date_from)
+        if date_to:
+            q = q.filter(AnalysisPlanEntry.shift_date <= date_to)
+    if only_pending:
+        q = q.filter(AnalysisPlanEntry.done == False)  # noqa: E712
+    rows = q.order_by(AnalysisPlanEntry.shift_date, AnalysisPlanEntry.control_object_name).limit(2000).all()
+    total = len(rows)
+    done = sum(1 for r in rows if r.done)
+    return {
+        "total": total, "done": done, "pending": total - done,
+        "items": [_plan1c_dict(r) for r in rows],
+    }
+
+
+@router.post("/import-1c")
+async def import_plan_1c(
+    payload: dict = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Импорт плана анализов из 1С за период (по умолчанию последние 3 дня + 30 вперёд)."""
+    from datetime import timedelta
+    from app.services.daily_digest import msk_now
+    from app.crud import integration_config as ci
+    from app.services.external_integration import (
+        ExternalSystemConfig, import_odata_analysis_plan_from_1c)
+    payload = payload or {}
+    today = msk_now().date()
+    try:
+        df = date.fromisoformat(payload["date_from"]) if payload.get("date_from") else today - timedelta(days=3)
+        dt = date.fromisoformat(payload["date_to"]) if payload.get("date_to") else today + timedelta(days=30)
+    except Exception:
+        df, dt = today - timedelta(days=3), today + timedelta(days=30)
+    cfg = ci.get_by_name(db, "1c")
+    if not cfg:
+        raise HTTPException(status_code=400, detail="Нет сохранённой конфигурации 1С")
+    conf = ExternalSystemConfig(base_url=cfg.base_url, username=cfg.username,
+                                password=cfg.password, verify=False, timeout=180)
+    try:
+        res = await import_odata_analysis_plan_from_1c(db, conf, df.isoformat(), dt.isoformat())
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ошибка импорта плана из 1С: {e}")
+    return {"date_from": df.isoformat(), "date_to": dt.isoformat(), **res}
+
+
+@router.post("/build-from-1c")
+async def build_plan_from_1c(
+    payload: dict = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Сформировать наш План на дату из плана 1С.
+
+    Каждая запись 1С, чей типовой анализ соответствует нашему шаблону (по GUID),
+    становится задачей плана (шаблон + партия + статус выполнения). Идемпотентно:
+    план с именем «План из 1С» на эту дату пересобирается.
+    """
+    from datetime import date as _date, timedelta
+    from app.models import AnalysisPlanEntry, AnalysisPlan as APModel, PlanItem as PIModel, AnalysisType
+    from app.services.daily_digest import msk_now
+    payload = payload or {}
+    try:
+        d = _date.fromisoformat(payload["date"]) if payload.get("date") else msk_now().date()
+    except Exception:
+        d = msk_now().date()
+
+    # если записей 1С за дату нет — тянем из 1С (окно вокруг даты)
+    have = db.query(AnalysisPlanEntry).filter(AnalysisPlanEntry.shift_date == d).count()
+    if not have:
+        from app.crud import integration_config as ci
+        from app.services.external_integration import (
+            ExternalSystemConfig, import_odata_analysis_plan_from_1c)
+        cfg = ci.get_by_name(db, "1c")
+        if cfg:
+            conf = ExternalSystemConfig(base_url=cfg.base_url, username=cfg.username,
+                                        password=cfg.password, verify=False, timeout=180)
+            try:
+                await import_odata_analysis_plan_from_1c(
+                    db, conf, (d - timedelta(days=3)).isoformat(), (d + timedelta(days=30)).isoformat())
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f"Ошибка импорта плана из 1С: {e}")
+
+    entries = db.query(AnalysisPlanEntry).filter(AnalysisPlanEntry.shift_date == d).all()
+    tpl_by_guid = {str(t.external_id).lower(): t for t in db.query(AnalysisType).all() if t.external_id}
+
+    # найти/создать план «План из 1С» на дату
+    plan = (db.query(APModel)
+            .filter(APModel.plan_date == d, APModel.name == "План из 1С").first())
+    if plan:
+        db.query(PIModel).filter(PIModel.plan_id == plan.id).delete()
+    else:
+        plan = APModel(name="План из 1С", description="Автоматически загружен из 1С",
+                       plan_date=d, created_by=current_user.id)
+        db.add(plan); db.flush()
+
+    matched, skipped, order = 0, 0, 0
+    seen = set()
+    for e in entries:
+        tpl = tpl_by_guid.get((e.analysis_type_key or "").lower())
+        if not tpl:
+            skipped += 1
+            continue
+        key = (tpl.id, (e.batch_number or "").strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        db.add(PIModel(plan_id=plan.id, template_id=tpl.id,
+                       batch_number=(e.batch_number or "").strip() or None,
+                       sort_order=order, is_completed=bool(e.done)))
+        order += 1; matched += 1
+
+    plan.is_completed = matched > 0 and all(
+        pi.is_completed for pi in db.query(PIModel).filter(PIModel.plan_id == plan.id).all())
+    db.commit()
+    return {"date": d.isoformat(), "plan_id": plan.id, "items": matched,
+            "skipped_no_template": skipped, "entries_total": len(entries)}
+
+
 @router.post("/", response_model=AnalysisPlan)
 def create_plan(
     plan: AnalysisPlanCreate,

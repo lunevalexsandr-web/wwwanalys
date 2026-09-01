@@ -2139,3 +2139,115 @@ async def import_odata_sanitation_from_1c(
     finally:
         await service.close()
     return result
+
+
+async def import_odata_analysis_plan_from_1c(
+    db: Session,
+    config: "ExternalSystemConfig",
+    date_from: str,
+    date_to: str,
+    base_prefix: str = "/erp_24/odata/standard.odata",
+) -> Dict[str, Any]:
+    """Импорт плана лабораторных анализов из РегистрСведений _ПланированиеЛабораторныхАнализов.
+
+    Объект контроля (справочник) → название + типовой анализ + периодичность;
+    серия → партия, номенклатура → сорт. Статус выполнения ведёт 1С.
+    Идемпотентно по external_id (хэш составного ключа). date_from/date_to — 'YYYY-MM-DD'.
+    """
+    import hashlib
+    from app.models import AnalysisPlanEntry
+
+    service = OneCIntegrationService(config)
+    reg = f"{base_prefix}/InformationRegister__ПланированиеЛабораторныхАнализов"
+    result: Dict[str, Any] = {
+        "total": 0, "created": 0, "updated": 0, "errors": [],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    async def _name_map(catalog: str, extra: Optional[str] = None) -> Dict[str, Any]:
+        sel = "Ref_Key,Description" + (f",{extra}" if extra else "")
+        try:
+            rows = await service._fetch_list(
+                f"{base_prefix}/{catalog}", params={"$format": "json", "$select": sel}, key="value")
+            if extra:
+                return {str(r.get("Ref_Key")).lower(): r for r in rows}
+            return {str(r.get("Ref_Key")).lower(): (r.get("Description") or "").strip() for r in rows}
+        except Exception as e:
+            logger.warning("Справочник %s не загрузился: %s", catalog, e)
+            return {}
+
+    try:
+        # объекты контроля: key → {name, тип анализа, периодичность, номенклатура}
+        objs = await _name_map("Catalog__ОбъектыКонтроляДляПланированияАнализов",
+                               extra="ТиповойАнализ_Key,Периодичность,Номенклатура_Key")
+        # типовые анализы (шаблоны) — из имеющихся в БД + справочника 1С
+        tpl_names = await _name_map("Catalog__ТиповыеАнализыСерий")
+        series_names = await _name_map("Catalog_СерииНоменклатуры")
+        nomen_names = await _name_map("Catalog_Номенклатура")
+
+        flt = (f"ДатаСмены ge datetime'{date_from}T00:00:00' and "
+               f"ДатаСмены le datetime'{date_to}T23:59:59'")
+        rows = await service._fetch_list(reg, params={"$format": "json", "$filter": flt}, key="value")
+        result["total"] = len(rows)
+
+        def g(key):
+            return None if (not key or key == ZERO_GUID) else str(key).lower()
+
+        def _dt(v):
+            try:
+                return datetime.fromisoformat(str(v)) if v else None
+            except Exception:
+                return None
+
+        for r in rows:
+            try:
+                ok = g(r.get("ОбъектКонтроля_Key"))
+                sk = g(r.get("Серия_Key"))
+                nk = g(r.get("Номенклатура_Key"))
+                dk = g(r.get("ДокументАнализа_Key"))
+                shift_date = str(r.get("ДатаСмены") or "")[:10]
+                shift_no = str(r.get("НомерСмены") or "").strip()
+                status = (r.get("СтатусАнализа") or "").strip()
+
+                obj = objs.get(ok or "", {}) if isinstance(objs.get(ok or ""), dict) else {}
+                at_key = g(obj.get("ТиповойАнализ_Key"))
+                nomen_key = nk or g(obj.get("Номенклатура_Key"))
+
+                raw_key = f"{ok}|{sk}|{shift_date}|{shift_no}|{r.get('Period')}"
+                ext_id = hashlib.md5(raw_key.encode("utf-8")).hexdigest()
+
+                fields = dict(
+                    period=_dt(r.get("Period")),
+                    shift_date=(datetime.fromisoformat(shift_date).date() if shift_date else None),
+                    shift_no=shift_no,
+                    control_object_key=ok,
+                    control_object_name=(obj.get("Description") or "").strip() if obj else "",
+                    periodicity=(obj.get("Периодичность") or "").strip() if obj else "",
+                    analysis_type_key=at_key,
+                    analysis_type_name=tpl_names.get(at_key or "", ""),
+                    series_key=sk,
+                    batch_number=series_names.get(sk or "", ""),
+                    nomenclature_key=nomen_key,
+                    variety=nomen_names.get(nomen_key or "", ""),
+                    status=status,
+                    done=(status == "Обработан") or bool(dk),
+                    analysis_doc_key=dk,
+                )
+
+                existing = db.query(AnalysisPlanEntry).filter(AnalysisPlanEntry.external_id == ext_id).first()
+                if existing:
+                    for k, v in fields.items():
+                        setattr(existing, k, v)
+                    result["updated"] += 1
+                else:
+                    db.add(AnalysisPlanEntry(external_id=ext_id, **fields))
+                    result["created"] += 1
+            except Exception as e:
+                result["errors"].append({"error": str(e)})
+
+        db.commit()
+        logger.info("План анализов: получено %s, создано %s, обновлено %s",
+                    result["total"], result["created"], result["updated"])
+    finally:
+        await service.close()
+    return result

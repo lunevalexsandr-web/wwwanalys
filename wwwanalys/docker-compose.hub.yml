@@ -23,7 +23,7 @@ services:
       retries: 5
 
   backend:
-    image: las84/wwwanalys-backend:v7.2.0
+    image: las84/wwwanalys-backend:v7.3.0
     environment:
       DATABASE_URL: postgresql://wwwanalys_user:wwwanalys_password@db:5432/wwwanalys
       SECRET_KEY: ${SECRET_KEY:-change-me-to-a-secret-key}
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: las84/wwwanalys-frontend:v7.2.0
+    image: las84/wwwanalys-frontend:v7.3.0
     ports:
       - "80:80"
     depends_on:
