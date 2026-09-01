@@ -13,6 +13,7 @@ from .variety import Variety
 from .template_norm import TemplateNorm
 from .analysis_object import AnalysisObject
 from .sanitation import SanitationRecord, SanitationMeasure
+from .digest import DigestSchedule, DailyDigest
 
 __all__ = [
     "User",
@@ -33,5 +34,7 @@ __all__ = [
     "TemplateNorm",
     "AnalysisObject",
     "SanitationRecord",
-    "SanitationMeasure"
+    "SanitationMeasure",
+    "DigestSchedule",
+    "DailyDigest"
 ]

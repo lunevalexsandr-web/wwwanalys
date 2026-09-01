@@ -142,6 +142,14 @@ if settings.ai_enabled:
     except Exception as e:
         print(f"AI assistant module disabled (load error): {e}")
 
+    # Планировщик ежедневной сводки «дежурного агента»
+    try:
+        from app.services.daily_digest import start_scheduler
+        start_scheduler()
+        print("Daily digest scheduler started")
+    except Exception as e:
+        print(f"Daily digest scheduler disabled (load error): {e}")
+
     # База знаний техкарт (RAG). Отдельный try/except: если pgvector недоступен,
     # это не должно мешать ни ядру, ни остальному AI-модулю.
     try:

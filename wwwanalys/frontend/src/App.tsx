@@ -9,6 +9,7 @@ import TechCards from './pages/TechCards';
 import ReferenceData from './pages/ReferenceData';
 import ReportsAnalytics from './pages/ReportsAnalytics';
 import AgentChat from './pages/AgentChat';
+import DailyDigest from './pages/DailyDigest';
 import './App.css';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ 
@@ -137,6 +138,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <AgentChat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/digest"
+            element={
+              <ProtectedRoute>
+                <DailyDigest />
               </ProtectedRoute>
             }
           />

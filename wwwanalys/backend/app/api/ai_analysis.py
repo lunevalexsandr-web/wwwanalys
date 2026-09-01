@@ -213,6 +213,104 @@ def agent_report(
     }
 
 
+# ==================== Ежедневная сводка «дежурного агента» ====================
+
+def _schedule_dict(s):
+    return {
+        "enabled": s.enabled,
+        "run_time": s.run_time,
+        "day_mode": s.day_mode,
+        "last_run_date": s.last_run_date.isoformat() if s.last_run_date else None,
+        "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
+        "last_status": s.last_status,
+    }
+
+
+def _digest_dict(d):
+    import json
+    if not d:
+        return None
+    return {
+        "id": d.id,
+        "digest_date": d.digest_date.isoformat() if d.digest_date else None,
+        "created_at": d.created_at.isoformat() if d.created_at else None,
+        "triggered_by": d.triggered_by,
+        "reports_count": d.reports_count,
+        "deviations_count": d.deviations_count,
+        "reports_with_deviations": d.reports_with_deviations,
+        "released_count": d.released_count,
+        "not_released_count": d.not_released_count,
+        "released_batches": json.loads(d.released_batches or "[]"),
+        "not_released_batches": json.loads(d.not_released_batches or "[]"),
+        "summary": d.summary,
+        "status": d.status,
+        "error": d.error,
+        "import_info": json.loads(d.import_info or "{}"),
+    }
+
+
+@router.get("/digest/schedule")
+def digest_schedule_get(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.services.daily_digest import get_or_create_schedule
+    return _schedule_dict(get_or_create_schedule(db))
+
+
+@router.put("/digest/schedule")
+def digest_schedule_update(payload: dict = Body(...), db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_active_user)):
+    from app.services.daily_digest import get_or_create_schedule
+    s = get_or_create_schedule(db)
+    if "enabled" in payload:
+        s.enabled = bool(payload["enabled"])
+    if payload.get("run_time"):
+        s.run_time = str(payload["run_time"])[:5]
+    if payload.get("day_mode") in ("yesterday", "today"):
+        s.day_mode = payload["day_mode"]
+    db.commit(); db.refresh(s)
+    return _schedule_dict(s)
+
+
+@router.post("/digest/run")
+async def digest_run(payload: dict = Body(default={}), db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_active_user)):
+    """Сформировать сводку сейчас (по умолчанию за настроенный день)."""
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=404, detail="Модуль AI-ассистента отключён")
+    from app.services.daily_digest import run_daily_digest
+    td = None
+    if payload and payload.get("date"):
+        try:
+            td = date.fromisoformat(payload["date"])
+        except Exception:
+            td = None
+    try:
+        dig = await run_daily_digest(db, target_date=td, triggered="manual")
+    except Exception as e:
+        logger.exception("Формирование сводки не удалось")
+        raise HTTPException(status_code=502, detail=f"Ошибка формирования сводки: {e}")
+    return _digest_dict(dig)
+
+
+@router.get("/digest/latest")
+def digest_latest(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.models import DailyDigest
+    d = db.query(DailyDigest).order_by(DailyDigest.digest_date.desc()).first()
+    return _digest_dict(d)
+
+
+@router.get("/digest/list")
+def digest_list(limit: int = 30, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_active_user)):
+    from app.models import DailyDigest
+    rows = db.query(DailyDigest).order_by(DailyDigest.digest_date.desc()).limit(limit).all()
+    return [{
+        "id": d.id, "digest_date": d.digest_date.isoformat() if d.digest_date else None,
+        "reports_count": d.reports_count, "deviations_count": d.deviations_count,
+        "released_count": d.released_count, "not_released_count": d.not_released_count,
+        "status": d.status, "triggered_by": d.triggered_by,
+    } for d in rows]
+
+
 def _retrieve_knowledge(db: Session, ctx: dict, deviations: list) -> list:
     """Найти релевантные фрагменты техкарты сорта под текущие отклонения."""
     try:
