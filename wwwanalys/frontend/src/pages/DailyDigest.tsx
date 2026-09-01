@@ -62,6 +62,34 @@ const DailyDigest: React.FC = () => {
     </div>
   );
 
+  const notReleasedTable = (rows: any[]) => (
+    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+      <Table size="sm" striped bordered className="mb-0">
+        <thead><tr><th>Партия</th><th>Сорт</th><th>По каким показателям</th></tr></thead>
+        <tbody>{rows.map((b, i) => (
+          <tr key={i}>
+            <td><strong>{b.batch}</strong></td>
+            <td>{b.variety || '—'}</td>
+            <td>
+              {b.reasons?.length ? (
+                <div className="d-flex flex-column gap-1">
+                  {b.reasons.map((r: any, j: number) => (
+                    <span key={j}>
+                      <Badge bg="danger" className="me-1 fw-normal">{r.indicator}</Badge>
+                      <span className="small text-muted">{r.value}{r.unit ? ` ${r.unit}` : ''}{r.norm ? ` · норма ${r.norm}` : ''}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="small text-muted">отметка «{b.value}» без зафиксированных отклонений по показателям</span>
+              )}
+            </td>
+          </tr>
+        ))}</tbody>
+      </Table>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-light">
       <AppHeader showAdminLink showDashboardLink />
@@ -140,17 +168,17 @@ const DailyDigest: React.FC = () => {
                 )}
 
                 <Row>
-                  <Col md={6}>
+                  <Col md={5}>
                     <Card className="mb-4"><CardBody>
                       <h6 className="text-success">✅ Допущенные партии <Badge bg="success">{digest.released_count}</Badge></h6>
                       {digest.released_batches?.length ? batchTable(digest.released_batches, 'success')
                         : <div className="text-muted small">Нет</div>}
                     </CardBody></Card>
                   </Col>
-                  <Col md={6}>
+                  <Col md={7}>
                     <Card className="mb-4"><CardBody>
                       <h6 className="text-warning">⛔ Не допущенные партии <Badge bg="warning">{digest.not_released_count}</Badge></h6>
-                      {digest.not_released_batches?.length ? batchTable(digest.not_released_batches, 'warning')
+                      {digest.not_released_batches?.length ? notReleasedTable(digest.not_released_batches)
                         : <div className="text-muted small">Нет</div>}
                     </CardBody></Card>
                   </Col>

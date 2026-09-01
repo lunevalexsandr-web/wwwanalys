@@ -46,6 +46,26 @@ def compute_released(db, target_date):
             not_released.pop(key, None)
         elif key not in released:
             not_released[key] = item
+
+    # Причина недопуска: по каким показателям отклонения (все, если их несколько)
+    from app.crud import report as crud_report
+    from app.services import ai_analysis
+    for item in not_released.values():
+        reasons = []
+        try:
+            rep = crud_report.get_report(db, report_id=item["report_id"])
+            if rep:
+                ctx = ai_analysis.build_report_context(db, rep)
+                for d in ai_analysis.compute_deviations(ctx["values"]):
+                    reasons.append({
+                        "indicator": d["indicator"],
+                        "value": d.get("value"),
+                        "unit": d.get("unit", ""),
+                        "norm": d.get("norm"),
+                    })
+        except Exception:
+            pass
+        item["reasons"] = reasons
     return list(released.values()), list(not_released.values())
 
 
