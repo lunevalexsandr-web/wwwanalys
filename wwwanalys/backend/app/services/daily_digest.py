@@ -22,20 +22,23 @@ def compute_released(db, target_date):
     """Допущенные / недопущенные партии за день по показателю «Допуск к розливу» = «Допуск»."""
     from sqlalchemy import func
     from app.models import ProcessLog, IndicatorValue, IndicatorLibrary
-    rows = (db.query(ProcessLog.batch_number, ProcessLog.variety, IndicatorValue.text_value)
+    rows = (db.query(ProcessLog.id, ProcessLog.batch_number, ProcessLog.variety,
+                     ProcessLog.container, IndicatorValue.text_value)
             .join(IndicatorValue, IndicatorValue.process_log_id == ProcessLog.id)
             .join(IndicatorLibrary, IndicatorLibrary.id == IndicatorValue.indicator_id)
             .filter(func.date(ProcessLog.started_at) == target_date,
                     IndicatorLibrary.name.ilike("%допуск%"))
             .all())
     released, not_released = {}, {}
-    for batch, variety, val in rows:
+    for rid, batch, variety, container, val in rows:
         v = (val or "").strip().lower()
-        item = {"batch": batch, "variety": variety, "value": val}
+        key = batch if (batch or "").strip() else f"#{rid}"
+        item = {"batch": batch or f"#{rid}", "variety": variety, "container": container, "value": val, "report_id": rid}
         if v == "допуск":
-            released[batch] = item
-        else:
-            not_released[batch] = item
+            released[key] = item
+            not_released.pop(key, None)
+        elif key not in released:
+            not_released[key] = item
     return list(released.values()), list(not_released.values())
 
 
