@@ -84,7 +84,7 @@ const DailyDigest: React.FC = () => {
                     onChange={(e) => saveSchedule({ enabled: e.target.checked })} />
                 </Col>
                 <Col md={3}>
-                  <Form.Label className="small text-muted mb-1">Время запуска (время сервера, UTC)</Form.Label>
+                  <Form.Label className="small text-muted mb-1">Время запуска (МСК)</Form.Label>
                   <Form.Control type="time" value={sched?.run_time || '07:00'} disabled={saving}
                     onChange={(e) => setSched({ ...sched, run_time: e.target.value })}
                     onBlur={(e) => saveSchedule({ run_time: e.target.value })} />

@@ -6,6 +6,13 @@ from datetime import date, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Московское время (UTC+3, без перехода на летнее время)
+MSK_OFFSET = timedelta(hours=3)
+
+
+def msk_now():
+    return datetime.utcnow() + MSK_OFFSET
+
 
 def get_or_create_schedule(db):
     from app.models import DigestSchedule
@@ -52,7 +59,8 @@ async def run_daily_digest(db, target_date=None, triggered="manual"):
 
     sched = get_or_create_schedule(db)
     if target_date is None:
-        target_date = (date.today() - timedelta(days=1)) if sched.day_mode == "yesterday" else date.today()
+        today_msk = msk_now().date()
+        target_date = (today_msk - timedelta(days=1)) if sched.day_mode == "yesterday" else today_msk
     df = target_date.isoformat()
     status, err, import_info = "ok", None, {}
 
@@ -147,7 +155,7 @@ def _scheduler_loop():
             try:
                 sched = get_or_create_schedule(db)
                 if sched.enabled and sched.run_time:
-                    now = datetime.now()
+                    now = msk_now()  # московское время
                     try:
                         hh, mm = [int(x) for x in str(sched.run_time).split(":")]
                     except Exception:
